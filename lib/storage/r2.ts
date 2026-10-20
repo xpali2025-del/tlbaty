@@ -1,6 +1,6 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { getR2Env } from '@/lib/env'
 
@@ -51,4 +51,15 @@ export async function createImageUpload(contentType: string, size: number) {
     { expiresIn: 300 },
   )
   return { uploadUrl, objectKey }
+}
+
+const KEY_PATTERN = /^products\/[0-9a-f-]{36}\.(jpg|png|webp|avif)$/
+
+export function isValidImageKey(key: string) {
+  return KEY_PATTERN.test(key)
+}
+
+export async function deleteImageObject(objectKey: string) {
+  if (!isValidImageKey(objectKey)) return
+  await getClient().send(new DeleteObjectCommand({ Bucket: getR2Env().R2_BUCKET, Key: objectKey }))
 }
