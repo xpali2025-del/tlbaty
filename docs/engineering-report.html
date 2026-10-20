@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>التقرير الهندسي – مشروع tlbaty</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1a1d23;--muted:#5b6370;--line:#e2e5ea;--hi:#c62828;--med:#e68900;--lo:#2e7d32;--acc:#1f4fd8}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b21;--text:#e8eaee;--muted:#9aa3b2;--line:#2a2f38;--hi:#ef5350;--med:#ffb74d;--lo:#66bb6a;--acc:#7aa2ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Tahoma,"Segoe UI",system-ui,sans-serif;line-height:1.8}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:1.7rem;margin:0 0 4px}
+h2{font-size:1.25rem;margin:32px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--acc)}
+h3{font-size:1.05rem;margin:18px 0 6px}
+.sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+.note{border-inline-start:4px solid var(--med)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+.kpi b{display:block;font-size:1.5rem}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:.93rem}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+th{background:var(--bg);color:var(--muted);font-weight:600}
+.tw{overflow-x:auto}
+.tag{display:inline-block;padding:1px 9px;border-radius:99px;font-size:.78rem;font-weight:700;color:#fff}
+.p1{background:var(--hi)}.p2{background:var(--med)}.p3{background:var(--lo)}
+.ok{color:var(--lo);font-weight:700}.bad{color:var(--hi);font-weight:700}
+code,pre{direction:ltr;unicode-bidi:plaintext;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem}
+code{background:var(--bg);padding:1px 5px;border-radius:4px}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto;text-align:left}
+ul{padding-inline-start:22px;margin:6px 0}
+.phase{border-inline-start:4px solid var(--acc)}
+footer{color:var(--muted);font-size:.85rem;margin-top:36px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>التقرير الهندسي الشامل – مشروع tlbaty</h1>
+<p class="sub">تقييم الأخطاء والترابط والأداء ونتائج الاختبارات الفعلية، وخطة الانتقال من Sanity إلى PostgreSQL وCloudflare R2 · التاريخ: 2026-10-20 · الفرع: <code>claude/project-performance-review-cihgin</code></p>
+
+<div class="card note">
+<b>تنبيه حول نطاق الفحص:</b> لم يصلني ملف تقرير مرفق، وفحصت المستودع نفسه. حالته الحالية <b>قالب Next.js أساسي من v0</b> (21 ملفًا، منها 9 أصول في <code>public/</code>). لا يوجد فيه Sanity ولا منتجات ولا طلبات ولا إشعارات ولا رفع صور. لذلك تغطي أقسام الفحص الكود الموجود فعليًا، ويغطي قسم الانتقال التصميم المقترح للمرحلة القادمة. إن أرسلت الكود الفعلي لمشروعك الأصلي (مع Sanity) أُحدّث التقرير عليه.
+</div>
+
+<h2>1. الملخص التنفيذي</h2>
+<div class="grid">
+<div class="kpi"><b class="bad">3</b>أولوية عالية</div>
+<div class="kpi"><b style="color:var(--med)">5</b>أولوية متوسطة</div>
+<div class="kpi"><b class="ok">3</b>أولوية منخفضة</div>
+<div class="kpi"><b>66</b>ثغرة في التبعيات</div>
+<div class="kpi"><b>0</b>اختبارات وحدة</div>
+</div>
+<div class="card">
+البناء والأنواع سليمان ظاهريًا، لكن الصورة مضللة لسببين: (1) التحقق من الأنواع مُعطَّل أثناء البناء عبر <code>ignoreBuildErrors</code>، (2) لا توجد اختبارات ولا lint ولا CI. أخطر ما في الأمر ثغرات التبعيات، ومصدرها شبه الكامل حزمة <code>shadcn</code> الموضوعة بين التبعيات التشغيلية. لا توجد مشكلات أداء حالية لأن الصفحة ثابتة والبناء يستغرق نحو 4 ثوانٍ.
+</div>
+
+<h2>2. الاختبارات التي شُغِّلت فعليًا</h2>
+<div class="tw"><table>
+<tr><th>الفحص</th><th>الأمر</th><th>النتيجة</th></tr>
+<tr><td>تثبيت بقفل ثابت</td><td><code>pnpm install --frozen-lockfile</code></td><td><span class="bad">فشل</span> – <code>ERR_PNPM_FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE</code></td></tr>
+<tr><td>تثبيت عادي</td><td><code>pnpm install --no-frozen-lockfile</code></td><td><span class="ok">نجح</span> – عدّل القفل بإضافة 101 سطرًا (ثم أُعيد لحالته الأصلية)</td></tr>
+<tr><td>فحص الأنواع</td><td><code>tsc --noEmit</code></td><td><span class="ok">نجح</span> بلا أخطاء</td></tr>
+<tr><td>البناء</td><td><code>next build</code> (Next 16.4.0 / Turbopack)</td><td><span class="ok">نجح</span> في 4.1 ث، المسارات <code>/</code> و<code>/_not-found</code> ثابتة. ظهر السطر <code>Skipping validation of types</code></td></tr>
+<tr><td>تدقيق الأمان</td><td><code>pnpm audit</code></td><td><span class="bad">66 ثغرة</span>: 1 حرجة، 28 عالية، 31 متوسطة، 6 منخفضة. 60 منها تبقى مع <code>--prod</code></td></tr>
+<tr><td>اختبارات الوحدة / lint</td><td>—</td><td><span class="bad">غير موجودة</span>: لا سكربت <code>test</code> ولا <code>lint</code> في <code>package.json</code></td></tr>
+</table></div>
+
+<h2>3. المشكلات حسب الأولوية</h2>
+<div class="tw"><table>
+<tr><th>#</th><th>الأولوية</th><th>المشكلة</th><th>الملفات المتأثرة</th><th>الحل المقترح</th></tr>
+<tr><td>1</td><td><span class="tag p1">عالية</span></td><td>أخطاء الأنواع لا توقف البناء</td><td><code>next.config.mjs</code> (<code>typescript.ignoreBuildErrors: true</code>)</td><td>حذف الإعداد، وإضافة سكربت <code>typecheck</code> في CI</td></tr>
+<tr><td>2</td><td><span class="tag p1">عالية</span></td><td>أداة CLI ضمن التبعيات التشغيلية، وهي مصدر ثغرات حرجة وعالية (<code>proxy-addr</code> حرجة، و<code>@modelcontextprotocol/sdk</code> و<code>undici</code> و<code>js-yaml</code> و<code>braces</code> وغيرها عالية)</td><td><code>package.json</code> (<code>shadcn</code>)</td><td>نقل <code>shadcn</code> إلى <code>devDependencies</code> أو استعمال <code>npx shadcn@latest</code>، ثم إعادة <code>pnpm audit --prod</code></td></tr>
+<tr><td>3</td><td><span class="tag p1">عالية</span></td><td>ملف القفل غير متزامن مع <code>package.json</code>، فيفشل CI الصارم</td><td><code>pnpm-lock.yaml</code></td><td>تحديث القفل وعمل commit له، واستعمال <code>--frozen-lockfile</code> في CI</td></tr>
+<tr><td>4</td><td><span class="tag p2">متوسطة</span></td><td>لا اختبارات ولا lint ولا CI</td><td><code>package.json</code>، ولا يوجد <code>.github/workflows</code></td><td>إضافة ESLint وVitest وPlaywright، وworkflow يشغّل lint وtypecheck وtest وbuild</td></tr>
+<tr><td>5</td><td><span class="tag p2">متوسطة</span></td><td>اللغة والاتجاه: <code>lang="en"</code> بلا <code>dir</code> لموقع عربي، والعنوان والوصف <code>v0 App</code></td><td><code>app/layout.tsx</code></td><td><code>lang="ar" dir="rtl"</code>، وبيانات meta فعلية، وإزالة <code>generator: 'v0.app'</code></td></tr>
+<tr><td>6</td><td><span class="tag p2">متوسطة</span></td><td>تحسين الصور معطّل</td><td><code>next.config.mjs</code> (<code>images.unoptimized: true</code>)</td><td>حذفه، وضبط <code>remotePatterns</code> لنطاق R2 أو loader مخصص</td></tr>
+<tr><td>7</td><td><span class="tag p2">متوسطة</span></td><td>صفحة placeholder بأنماط inline ورسالة «Your v0 generation…»</td><td><code>app/page.tsx</code></td><td>استبدالها بالصفحة الرئيسية الفعلية، واستعمال Tailwind بدل inline</td></tr>
+<tr><td>8</td><td><span class="tag p2">متوسطة</span></td><td>غياب المتغيرات البيئية وإدارتها (لا <code>.env.example</code> ولا تحقق منها)</td><td>جذر المشروع</td><td>إضافة <code>.env.example</code> وتحقق بمخطط Zod في <code>lib/env.ts</code></td></tr>
+<tr><td>9</td><td><span class="tag p3">منخفضة</span></td><td>بقايا v0 في <code>.gitignore</code> (<code>__v0_*</code> و<code>.v0-trash</code> وغيرها)</td><td><code>.gitignore</code></td><td>تنظيفها (أُضيف مؤخرًا <code>next-env.d.ts</code> و<code>*.tsbuildinfo</code>)</td></tr>
+<tr><td>10</td><td><span class="tag p3">منخفضة</span></td><td>أصول غير مستخدمة (<code>placeholder*.png/svg/jpg</code>)</td><td><code>public/</code></td><td>حذفها عند اعتماد الأصول الفعلية</td></tr>
+<tr><td>11</td><td><span class="tag p3">منخفضة</span></td><td><code>target: ES6</code> قديم، و<code>@vercel/analytics</code> يربطك بمنصة بعينها</td><td><code>tsconfig.json</code>، <code>app/layout.tsx</code></td><td>رفع الهدف إلى ES2022، وتقييم بديل لا يرتبط بـ Vercel إن لم تُستضف عليها</td></tr>
+</table></div>
+
+<h2>4. أنواع الأخطاء المرصودة</h2>
+<div class="card"><ul>
+<li><b>أخطاء إعداد:</b> <code>ignoreBuildErrors</code> و<code>images.unoptimized</code> و<code>lang</code> بلا <code>dir</code>.</li>
+<li><b>أخطاء سلسلة التوريد والأمان:</b> 66 ثغرة في التبعيات، ومعظمها عبر <code>shadcn</code> (مسارات <code>.&gt;shadcn&gt;…</code>) وبعضها عبر <code>next</code> و<code>postcss</code> (<code>browserslist</code> و<code>source-map-js</code> و<code>nanoid</code>).</li>
+<li><b>أخطاء عملية وجودة:</b> قفل غير متزامن، لا اختبارات، لا lint، لا CI.</li>
+<li><b>أخطاء محتوى:</b> نصوص وبيانات meta من القالب.</li>
+<li><b>أخطاء تشغيل أو أنواع أو استيراد:</b> لم يُرصد أي منها (<code>tsc</code> نظيف والبناء ناجح).</li>
+</ul></div>
+
+<h2>5. الترابط بين الملفات</h2>
+<div class="card">
+<pre>app/layout.tsx ──► app/globals.css
+                └─► @vercel/analytics (مشروط بـ NODE_ENV=production)
+app/page.tsx            (مستقل، بلا استيرادات)
+components/ui/button.tsx ──► @base-ui/react/button, class-variance-authority
+                         └─► lib/utils.ts (cn: clsx + tailwind-merge)
+تعريف الـ alias: "@/*" → "./*"  (tsconfig.json، وcomponents.json يوافقه)</pre>
+<ul>
+<li>الاستيرادات كلها صحيحة، ولا توجد استيرادات دائرية أو ملفات يتيمة في الكود.</li>
+<li>مسارات <code>components.json</code> (<code>@/components</code> و<code>@/lib</code> و<code>@/hooks</code>) متسقة مع <code>tsconfig</code>، علمًا أن المجلد <code>hooks/</code> غير موجود بعد.</li>
+<li><code>Button</code> غير مستخدم حاليًا في أي صفحة.</li>
+</ul></div>
+
+<h2>6. الأداء</h2>
+<div class="card"><ul>
+<li><b>الوضع الحالي جيد:</b> مساران ثابتان، وبناء 4.1 ث، ولا JavaScript عميل ثقيل.</li>
+<li><b>مخاطر مستقبلية:</b> <code>images.unoptimized</code> سيضر بـ LCP عند إضافة صور المنتجات. لا طبقة بيانات أو تخزين مؤقت بعد.</li>
+<li><b>توصيات للمرحلة القادمة:</b> Server Components افتراضيًا، و<code>unstable_cache</code>/<code>revalidateTag</code> أو ISR لصفحات المنتجات، وpagination على مستوى SQL، وفهارس مناسبة، وpooling للاتصال (Neon pooler أو PgBouncer)، وتحميل الصور عبر CDN مع <code>next/image</code>.</li>
+</ul></div>
+
+<h2>7. خطة الانتقال من Sanity إلى PostgreSQL + R2</h2>
+
+<div class="card phase"><h3>المرحلة 0 – تثبيت الأساس (يوم 1)</h3>
+<ul><li>إصلاح البنود 1 و2 و3 و4 من جدول المشكلات.</li><li>إضافة CI: <code>lint</code> و<code>typecheck</code> و<code>test</code> و<code>build</code>.</li></ul></div>
+
+<div class="card phase"><h3>المرحلة 1 – قاعدة البيانات (أيام 2–4)</h3>
+<ul>
+<li><b>المزوّد:</b> Neon أو Supabase (PostgreSQL مُدار، يعمل مع Next.js serverless عبر pooler).</li>
+<li><b>ORM:</b> Drizzle ORM مع <code>drizzle-kit</code> للـ migrations (خفيف وآمن الأنواع).</li>
+<li><b>الهيكل:</b> <code>lib/db/schema.ts</code> و<code>lib/db/client.ts</code> و<code>lib/queries/*.ts</code> و<code>drizzle/</code> للـ migrations.</li>
+<li>الوصول إلى البيانات من Server Components وServer Actions فقط، دون كشف سلسلة الاتصال للعميل.</li>
+</ul></div>
+
+<h3>مخطط الجداول المقترح</h3>
+<pre>categories      (id uuid PK, slug text UNIQUE, name text, parent_id uuid FK→categories)
+products        (id uuid PK, slug text UNIQUE, name text, description text,
+                 price_minor int NOT NULL, currency char(3), stock int, status text,
+                 category_id uuid FK, created_at, updated_at)
+product_images  (id uuid PK, product_id FK ON DELETE CASCADE, object_key text,
+                 alt text, sort_order int)
+customers       (id uuid PK, email citext UNIQUE, name text, phone text, created_at)
+orders          (id uuid PK, customer_id FK, status text, total_minor int,
+                 currency char(3), created_at, updated_at)
+order_items     (id uuid PK, order_id FK ON DELETE CASCADE, product_id FK,
+                 qty int CHECK(qty&gt;0), unit_price_minor int)
+notifications   (id uuid PK, user_id/customer_id FK, type text, payload jsonb,
+                 read_at timestamptz NULL, created_at)
+
+الفهارس: products(slug), products(category_id,status), orders(customer_id,created_at DESC),
+         order_items(order_id), notifications(customer_id, read_at) WHERE read_at IS NULL</pre>
+<div class="card">الأسعار تُخزَّن بأعداد صحيحة بالوحدة الصغرى (أو <code>numeric(12,2)</code>) لتفادي أخطاء الفاصلة العائمة. تُنفَّذ عملية إنشاء الطلب داخل معاملة واحدة تخصم المخزون وتُدخل <code>order_items</code> وتنشئ الإشعار.</div>
+
+<div class="card phase"><h3>المرحلة 2 – الصور على Cloudflare R2 (أيام 4–6)</h3>
+<ul>
+<li><b>التوصية:</b> R2 وليس PostgreSQL للصور: لا رسوم egress، وتقديم عبر CDN، ولا تضخّم للقاعدة والنسخ الاحتياطية. تُخزَّن في القاعدة <code>object_key</code> فقط.</li>
+<li>الرفع عبر <b>presigned PUT URLs</b> من Server Action (مكتبة <code>@aws-sdk/client-s3</code> المتوافقة مع R2)، مع تحقق من النوع والحجم.</li>
+<li>العرض عبر <code>next/image</code> مع <code>images.remotePatterns</code> لنطاق R2 العام أو نطاق مخصص.</li>
+<li>إن كانت الصور صغيرة وقليلة جدًا فيمكن البدء بـ <code>bytea</code>، لكن لا أنصح به للمنتجات.</li>
+</ul></div>
+
+<div class="card phase"><h3>المرحلة 3 – ترحيل بيانات Sanity (أيام 6–8)</h3>
+<ul>
+<li>تصدير: <code>sanity dataset export</code> (NDJSON + الأصول).</li>
+<li>سكربت تحويل ينقل المستندات إلى الجداول أعلاه (تحويل slugs، والمراجع إلى مفاتيح أجنبية، وblock content إلى نص أو Markdown).</li>
+<li>رفع الأصول إلى R2 مع الحفاظ على المراجع، ثم تشغيل سكربت تحقق يقارن الأعداد والمجاميع.</li>
+<li>تشغيل متوازٍ لفترة قصيرة ثم فصل Sanity وحذف حزمه ومتغيراته.</li>
+</ul></div>
+
+<div class="card phase"><h3>المرحلة 4 – الإشعارات والتشغيل (أيام 8–10)</h3>
+<ul>
+<li>جدول <code>notifications</code> مع استعلام بفهرس جزئي لغير المقروء. البداية بـ polling خفيف أو SSE، ويمكن الترقية لاحقًا إلى <code>LISTEN/NOTIFY</code> أو Realtime.</li>
+<li>نسخ احتياطي تلقائي (PITR)، ومراقبة الاستعلامات البطيئة (<code>pg_stat_statements</code>)، وحدود للاتصالات.</li>
+<li>أمن: مفاتيح الوصول في متغيرات بيئية فقط، وصلاحيات أدنى لحساب R2، وRLS إن استُعملت Supabase.</li>
+</ul></div>
+
+<h3>معايير القبول</h3>
+<div class="card"><ul>
+<li><code>pnpm audit --prod</code> بلا ثغرات عالية أو حرجة.</li>
+<li><code>tsc</code> وlint والاختبارات تمر في CI، والبناء بلا <code>ignoreBuildErrors</code>.</li>
+<li>تطابق أعداد المنتجات والطلبات بعد الترحيل 100%.</li>
+<li>زمن استعلام قائمة المنتجات أقل من 100 مللي ثانية على بيانات اختبار بحجم الإنتاج.</li>
+</ul></div>
+
+<h2>8. استراتيجية تقليل استهلاك التوكن (Project Indexing)</h2>
+<div class="card"><ul>
+<li>قُرئ المستودع كاملًا مرة واحدة في هذه الجلسة (21 ملفًا)، والخريطة أعلاه (قسم 5) هي الفهرس المعتمد، ولن تُعاد قراءة هذه الملفات في الطلبات القادمة إلا عند تغييرها.</li>
+<li>عند كبر المشروع: بحث انتقائي (Grep وGlob) بدل قراءة الملفات كاملة، وقراءة مقاطع محددة فقط.</li>
+<li>الاحتفاظ بملف <code>CLAUDE.md</code> يلخّص البنية والأوامر والقرارات المعمارية (أستطيع إنشاءه عند الطلب).</li>
+</ul></div>
+
+<h2>9. الخطوات التالية المقترحة</h2>
+<div class="card"><ol>
+<li>تنفيذ إصلاحات المرحلة 0 (دقائق، وبلا مخاطرة).</li>
+<li>اختيار المزوّد (Neon أم Supabase) لأبدأ بهيكل Drizzle.</li>
+<li>إرسال كود المشروع الأصلي وبيانات Sanity لبناء سكربت الترحيل الفعلي.</li>
+</ol></div>
+
+<footer>أُعدّ هذا التقرير من فحص فعلي للمستودع <code>xpali2025-del/tlbaty</code> ونتائج أوامر شُغّلت في بيئة الجلسة. أرقام الثغرات من <code>pnpm audit</code> وقت الفحص وقد تتغير.</footer>
+</div>
+</body>
+</html>
