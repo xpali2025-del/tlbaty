@@ -1,15 +1,23 @@
 import 'server-only'
-import { drizzle } from 'drizzle-orm/postgres-js'
+import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { getServerEnv } from '@/lib/env'
 import * as schema from './schema'
 
-const globalForDb = globalThis as unknown as { pg?: ReturnType<typeof postgres> }
+type Db = PostgresJsDatabase<typeof schema>
+const globalForDb = globalThis as unknown as { pg?: ReturnType<typeof postgres>; db?: Db }
 
-// prepare:false is required for Supabase's transaction-mode pooler (port 6543).
-const client =
-  globalForDb.pg ?? postgres(getServerEnv().DATABASE_URL, { prepare: false, max: 10 })
+function getDb(): Db {
+  if (!globalForDb.db) {
+    // prepare:false is required for Supabase's transaction-mode pooler (port 6543).
+    const client = postgres(getServerEnv().DATABASE_URL, { prepare: false, max: 10 })
+    globalForDb.pg = client
+    globalForDb.db = drizzle(client, { schema })
+  }
+  return globalForDb.db
+}
 
-if (process.env.NODE_ENV !== 'production') globalForDb.pg = client
-
-export const db = drizzle(client, { schema })
+// Created on first use so builds and imports don't require DATABASE_URL.
+export const db = new Proxy({} as Db, {
+  get: (_, prop) => Reflect.get(getDb(), prop),
+})
