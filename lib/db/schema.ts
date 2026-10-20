@@ -75,6 +75,8 @@ export const customers = pgTable(
   'customers',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    // Supabase auth.users.id; null for guest customers.
+    authUserId: uuid('auth_user_id').unique(),
     email: text('email').notNull(),
     name: text('name').notNull(),
     phone: text('phone'),

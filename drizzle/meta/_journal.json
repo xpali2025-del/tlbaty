@@ -8,6 +8,13 @@
       "when": 1792524117205,
       "tag": "0000_luxuriant_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792526147485,
+      "tag": "0001_chief_talkback",
+      "breakpoints": true
     }
   ]
 }

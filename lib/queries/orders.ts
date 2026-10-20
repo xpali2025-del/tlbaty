@@ -65,3 +65,19 @@ export async function listCustomerOrders(customerId: string, limit = 20) {
     .orderBy(desc(orders.createdAt))
     .limit(limit)
 }
+
+export async function getOrderWithItems(id: string) {
+  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1)
+  if (!order) return null
+  const items = await db
+    .select({
+      id: orderItems.id,
+      qty: orderItems.qty,
+      unitPriceMinor: orderItems.unitPriceMinor,
+      name: products.name,
+    })
+    .from(orderItems)
+    .innerJoin(products, eq(products.id, orderItems.productId))
+    .where(eq(orderItems.orderId, id))
+  return { ...order, items }
+}
