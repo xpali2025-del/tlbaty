@@ -1,0 +1,34 @@
+{
+  "ads": [
+    {
+      "id": "ad-perfumes-1",
+      "title": "متجر العطور الفاخرة — أرقى العطور الشرقية والفرنسية",
+      "image": "/ads/perfume-ad.png",
+      "href": "/category/perfumes",
+      "categories": ["perfumes"],
+      "active": true,
+      "frequency": 4,
+      "order": 1
+    },
+    {
+      "id": "ad-bags-1",
+      "title": "تشكيلة الحقائب الفاخرة — خصومات تصل إلى 40%",
+      "image": "/ads/bags-promo.png",
+      "href": "/category/bags",
+      "categories": ["bags"],
+      "active": true,
+      "frequency": 4,
+      "order": 1
+    },
+    {
+      "id": "ad-global-sale",
+      "title": "تخفيضات الموسم على جميع الأقسام — تسوق الآن",
+      "image": "/ads/fashion-sale.png",
+      "href": "/shop",
+      "categories": ["all"],
+      "active": true,
+      "frequency": 4,
+      "order": 2
+    }
+  ]
+}

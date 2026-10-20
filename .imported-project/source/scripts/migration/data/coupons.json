@@ -1,0 +1,25 @@
+{
+  "coupons": [
+    {
+      "code": "WELCOME20",
+      "discount": 20,
+      "type": "fixed",
+      "minOrder": 100,
+      "description": "خصم 20 ريال لأول طلب عند الشراء بـ 100 ريال أو أكثر"
+    },
+    {
+      "code": "TARAF10",
+      "discount": 10,
+      "type": "percent",
+      "minOrder": 0,
+      "description": "خصم 10% على جميع المنتجات"
+    },
+    {
+      "code": "VIP50",
+      "discount": 50,
+      "type": "fixed",
+      "minOrder": 300,
+      "description": "خصم 50 ريال على الطلبات فوق 300 ريال"
+    }
+  ]
+}

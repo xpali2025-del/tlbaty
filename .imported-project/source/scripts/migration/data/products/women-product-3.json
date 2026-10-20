@@ -1,0 +1,43 @@
+{
+  "id": "gp103",
+  "slug": "women-product-3",
+  "name": "بلوزة كاجوال",
+  "description": "بلوزة كاجوال بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 146,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/dress-1.jpg",
+  "images": [
+    "/products/dress-1.jpg",
+    "/products/women-b.png"
+  ],
+  "category": "women",
+  "subcategory": "tops",
+  "rating": 4.2,
+  "reviewsCount": 24,
+  "colors": [
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    },
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 14,
+  "brand": "أناقة",
+  "sku": "gp103",
+  "metaTitle": "بلوزة كاجوال | متجر ترف",
+  "metaDescription": "بلوزة كاجوال بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "بلوزة كاجوال",
+    "women"
+  ]
+}

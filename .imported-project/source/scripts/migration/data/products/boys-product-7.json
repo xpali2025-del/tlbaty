@@ -1,0 +1,43 @@
+{
+  "id": "gp128",
+  "slug": "boys-product-7",
+  "name": "طقم شتوي ولادي",
+  "description": "طقم شتوي ولادي بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 139,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/kids-1.jpg",
+  "images": [
+    "/products/kids-1.jpg",
+    "/products/boys-b.png"
+  ],
+  "category": "boys",
+  "subcategory": "boys-sets",
+  "rating": 4.6,
+  "reviewsCount": 52,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 26,
+  "brand": "أناقة",
+  "sku": "gp128",
+  "metaTitle": "طقم شتوي ولادي | متجر ترف",
+  "metaDescription": "طقم شتوي ولادي بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "طقم شتوي ولادي",
+    "boys"
+  ]
+}

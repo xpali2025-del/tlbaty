@@ -1,0 +1,43 @@
+{
+  "id": "gp129",
+  "slug": "bags-product-1",
+  "name": "حقيبة كتف",
+  "description": "حقيبة كتف بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 99,
+  "tags": [
+    "regular"
+  ],
+  "image": "/products/bag-1.jpg",
+  "images": [
+    "/products/bag-1.jpg",
+    "/products/bag-b.png"
+  ],
+  "category": "bags",
+  "subcategory": "shoulder-bags",
+  "rating": 4,
+  "reviewsCount": 10,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 8,
+  "brand": "ترف",
+  "sku": "gp129",
+  "metaTitle": "حقيبة كتف | متجر ترف",
+  "metaDescription": "حقيبة كتف بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "حقيبة كتف",
+    "bags"
+  ]
+}

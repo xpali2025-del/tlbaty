@@ -1,0 +1,43 @@
+{
+  "id": "gp117",
+  "slug": "girls-product-3",
+  "name": "طقم صيفي للبنات",
+  "description": "طقم صيفي للبنات بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 79,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/kids-1.jpg",
+  "images": [
+    "/products/kids-1.jpg",
+    "/products/girls-b.png"
+  ],
+  "category": "girls",
+  "subcategory": "girls-sets",
+  "rating": 4.2,
+  "reviewsCount": 24,
+  "colors": [
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    },
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 14,
+  "brand": "أناقة",
+  "sku": "gp117",
+  "metaTitle": "طقم صيفي للبنات | متجر ترف",
+  "metaDescription": "طقم صيفي للبنات بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "طقم صيفي للبنات",
+    "girls"
+  ]
+}

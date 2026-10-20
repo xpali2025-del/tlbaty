@@ -1,0 +1,43 @@
+{
+  "id": "gp135",
+  "slug": "bags-product-7",
+  "name": "حقيبة كروس",
+  "description": "حقيبة كروس بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 349,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/bag-1.jpg",
+  "images": [
+    "/products/bag-1.jpg",
+    "/products/bag-b.png"
+  ],
+  "category": "bags",
+  "subcategory": "shoulder-bags",
+  "rating": 4.6,
+  "reviewsCount": 52,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 26,
+  "brand": "أناقة",
+  "sku": "gp135",
+  "metaTitle": "حقيبة كروس | متجر ترف",
+  "metaDescription": "حقيبة كروس بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "حقيبة كروس",
+    "bags"
+  ]
+}

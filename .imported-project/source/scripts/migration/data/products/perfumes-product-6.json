@@ -1,0 +1,43 @@
+{
+  "id": "gp148",
+  "slug": "perfumes-product-6",
+  "name": "برفان منعش",
+  "description": "برفان منعش بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 407,
+  "tags": [
+    "bestseller"
+  ],
+  "image": "/products/perfume-b.png",
+  "images": [
+    "/products/perfume-b.png",
+    "/products/perfume-1.jpg"
+  ],
+  "category": "perfumes",
+  "subcategory": "french-perfumes",
+  "rating": 4.5,
+  "reviewsCount": 45,
+  "colors": [
+    {
+      "name": "كحلي",
+      "hex": "#1F2A44"
+    },
+    {
+      "name": "أبيض",
+      "hex": "#F5F5F5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 23,
+  "brand": "لمسة",
+  "sku": "gp148",
+  "metaTitle": "برفان منعش | متجر ترف",
+  "metaDescription": "برفان منعش بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "برفان منعش",
+    "perfumes"
+  ]
+}

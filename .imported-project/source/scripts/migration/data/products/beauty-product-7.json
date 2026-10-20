@@ -1,0 +1,43 @@
+{
+  "id": "gp163",
+  "slug": "beauty-product-7",
+  "name": "كريم أساس",
+  "description": "كريم أساس بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 159,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/beauty-1.jpg",
+  "images": [
+    "/products/beauty-1.jpg",
+    "/products/beauty-b.png"
+  ],
+  "category": "beauty",
+  "subcategory": "makeup",
+  "rating": 4.6,
+  "reviewsCount": 52,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 26,
+  "brand": "أناقة",
+  "sku": "gp163",
+  "metaTitle": "كريم أساس | متجر ترف",
+  "metaDescription": "كريم أساس بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "كريم أساس",
+    "beauty"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "id": "gp114",
+  "slug": "men-product-7",
+  "name": "قميص كتان",
+  "description": "قميص كتان بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 199,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/shirt-1.jpg",
+  "images": [
+    "/products/shirt-1.jpg",
+    "/products/men-b.png"
+  ],
+  "category": "men",
+  "subcategory": "shirts",
+  "rating": 4.6,
+  "reviewsCount": 52,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 26,
+  "brand": "أناقة",
+  "sku": "gp114",
+  "metaTitle": "قميص كتان | متجر ترف",
+  "metaDescription": "قميص كتان بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "قميص كتان",
+    "men"
+  ]
+}
