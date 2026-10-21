@@ -1,7 +1,7 @@
 import "server-only"
 import { and, eq, gte, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
-import { authEvents, otpCodes } from "@/lib/db/store"
+import { authEvents, loginChallenges, otpCodes } from "@/lib/db/store"
 
 // تحديد المعدل مبني على جداول المصادقة نفسها (بلا Redis): يعمل على Serverless
 // لأن الحالة في قاعدة البيانات لا في ذاكرة العملية.
@@ -39,4 +39,16 @@ export async function consumeVerifyAttempt(phone: string): Promise<boolean> {
     .from(authEvents)
     .where(and(eq(authEvents.phone, phone), eq(authEvents.event, "otp_failed"), gte(authEvents.at, since(VERIFY_WINDOW))))
   return failed < MAX_FAILED_VERIFY_PER_PHONE
+}
+
+const MAX_CHALLENGES_PER_IP = 20
+
+/** حد لعدد طلبات "الدخول بنقرة واتساب" من IP واحد في الساعة. */
+export async function consumeChallengeStart(ip: string): Promise<boolean> {
+  if (!ip || ip === "unknown") return true
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(loginChallenges)
+    .where(and(eq(loginChallenges.ip, ip), gte(loginChallenges.createdAt, since(HOUR))))
+  return n < MAX_CHALLENGES_PER_IP
 }

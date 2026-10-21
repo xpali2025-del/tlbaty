@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto"
 import { OTP_EXPIRE, OTP_LENGTH, OTP_RESEND } from "./config"
 import { createSalt, hashOtp } from "./hash"
 import { getOtpProvider, type OtpPurpose } from "./provider"
+import { buildMessage } from "./providers/whatsapp"
 import { countRecentOtps, createOtp, getLastOtpCreatedAt, invalidatePreviousOtps } from "./store"
 
 /** رمز رقمي عشوائي آمن بالطول المضبوط (randomInt غير متحيّز). */
@@ -19,6 +20,49 @@ export function generateOtpCode(): string {
 export function resendCooldownSeconds(recentCount: number): number {
   const steps = [1, 2, 5, 15]
   return OTP_RESEND * steps[Math.min(Math.max(recentCount, 1), steps.length) - 1]
+}
+
+async function cooldownRemaining(phone: string, purpose: OtpPurpose): Promise<number> {
+  const last = await getLastOtpCreatedAt(phone, purpose)
+  if (!last) return 0
+  const cooldown = resendCooldownSeconds(await countRecentOtps(phone, purpose, 3_600_000))
+  const elapsed = (Date.now() - last.getTime()) / 1000
+  return elapsed < cooldown ? Math.ceil(cooldown - elapsed) : 0
+}
+
+export type IssueResult =
+  | { ok: true; code: string; message: string }
+  | { ok: false; error: "RESEND_TOO_SOON"; retryAfter: number }
+
+/**
+ * Click-to-chat variant: the customer messaged us first, so the worker replies with the text
+ * returned here. Same cooldown and storage rules as createAndSendOtp, but nothing is sent from
+ * this process; the code is only returned to the (authenticated) caller.
+ */
+export async function issueOtpForReply(input: {
+  phone: string
+  purpose: OtpPurpose
+  ip: string
+  userAgent: string
+}): Promise<IssueResult> {
+  const { phone, purpose, ip, userAgent } = input
+  const retryAfter = await cooldownRemaining(phone, purpose)
+  if (retryAfter > 0) return { ok: false, error: "RESEND_TOO_SOON", retryAfter }
+
+  const code = generateOtpCode()
+  const salt = createSalt()
+  await invalidatePreviousOtps(phone, purpose)
+  await createOtp({
+    phone,
+    codeHash: hashOtp(code, salt),
+    salt,
+    purpose,
+    expiresAt: new Date(Date.now() + OTP_EXPIRE * 1000),
+    provider: "whatsapp-reply",
+    ip,
+    userAgent: userAgent.slice(0, 300),
+  })
+  return { ok: true, code, message: buildMessage(code, purpose) }
 }
 
 export type GenerateResult =
@@ -38,14 +82,8 @@ export async function createAndSendOtp(input: {
 }): Promise<GenerateResult> {
   const { phone, purpose, ip, userAgent } = input
 
-  const last = await getLastOtpCreatedAt(phone, purpose)
-  if (last) {
-    const cooldown = resendCooldownSeconds(await countRecentOtps(phone, purpose, 3_600_000))
-    const elapsed = (Date.now() - last.getTime()) / 1000
-    if (elapsed < cooldown) {
-      return { ok: false, error: "RESEND_TOO_SOON", retryAfter: Math.ceil(cooldown - elapsed) }
-    }
-  }
+  const retryAfter = await cooldownRemaining(phone, purpose)
+  if (retryAfter > 0) return { ok: false, error: "RESEND_TOO_SOON", retryAfter }
 
   const code = generateOtpCode()
   const salt = createSalt()

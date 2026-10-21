@@ -3,8 +3,7 @@ import { isAuthConfigured } from "@/lib/otp/config"
 import { logAuthEvent } from "@/lib/otp/audit"
 import { consumeVerifyAttempt } from "@/lib/otp/rate-limit"
 import { getClientContext } from "@/lib/otp/request-context"
-import { createSession } from "@/lib/otp/session"
-import { createCustomer, getCustomerByPhone, touchLastLogin } from "@/lib/otp/store"
+import { completeLogin } from "@/lib/otp/login"
 import { verifyOtp } from "@/lib/otp/verify"
 import { normalizeAndValidateLocalPhone } from "@/lib/phone"
 
@@ -56,18 +55,7 @@ export async function POST(req: Request) {
   }
   await logAuthEvent({ event: "otp_verified", phone, ip, userAgent })
 
-  let customer = await getCustomerByPhone(phone)
-  if (!customer) {
-    customer = await createCustomer(phone)
-    await logAuthEvent({ event: "account_created", phone, customerId: customer.id, ip, userAgent })
-  } else {
-    if (customer.status === "blocked") {
-      return NextResponse.json({ ok: false, error: "ACCOUNT_BLOCKED" }, { status: 403 })
-    }
-    await touchLastLogin(customer.id)
-  }
-
-  await createSession({ customerId: customer.id, ip, userAgent })
-  await logAuthEvent({ event: "login", phone, customerId: customer.id, ip, userAgent })
+  const login = await completeLogin({ phone, ip, userAgent })
+  if (!login.ok) return NextResponse.json({ ok: false, error: login.error }, { status: 403 })
   return NextResponse.json({ ok: true, redirect: safeNext(body.next) })
 }

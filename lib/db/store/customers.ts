@@ -79,3 +79,25 @@ export const authEvents = store.table('auth_events', {
   index('auth_events_ip_idx').on(t.ip, t.at.desc()).where(sql`${t.ip} is not null`),
 ])
 
+
+/**
+ * Click-to-chat login. The browser starts a challenge (short token shown in a wa.me link);
+ * the WhatsApp worker claims it with the sender's verified number and replies with an OTP;
+ * the same browser (bound by a secret cookie, stored hashed) then verifies the code.
+ */
+export const loginChallenges = store.table('login_challenges', {
+  id: pk(),
+  token: text('token').notNull().unique(),
+  browserSecretHash: text('browser_secret_hash').notNull().unique(),
+  phone: text('phone'),
+  claimedAt: at('claimed_at'),
+  consumedAt: at('consumed_at'),
+  expiresAt: at('expires_at').notNull(),
+  ip: text('ip'),
+  userAgent: text('user_agent'),
+  createdAt: at('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('login_challenges_expiry_idx').on(t.expiresAt),
+  index('login_challenges_ip_idx').on(t.ip, t.createdAt.desc()).where(sql`${t.ip} is not null`),
+  check('login_challenges_claim_consistent', sql`(${t.claimedAt} is null) = (${t.phone} is null)`),
+])

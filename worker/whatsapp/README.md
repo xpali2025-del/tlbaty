@@ -16,6 +16,14 @@ process because it needs a persistent browser session; it cannot run on Vercel/s
 4. Run it under a supervisor (pm2/systemd/Docker `restart: always`); the process exits on disconnect so it restarts.
 5. Expose it to the app over HTTPS only (reverse proxy or a Cloudflare Tunnel), then set in the app: `WHATSAPP_WORKER_URL`, `WHATSAPP_WORKER_TOKEN`, `OTP_PROVIDER=whatsapp`, `SESSION_SECRET`.
 
+## Click-to-chat login (recommended)
+The customer taps a button in the app, WhatsApp opens a chat with this number with a prefilled
+message (`رمز الدخول: K7M2QX`), and the bot replies with the login code in that chat. The number is
+read from WhatsApp itself, so it cannot be spoofed, and the bot only answers people who wrote first.
+- App: set `WHATSAPP_BOT_NUMBER` (international digits, e.g. `967777000000`) and `WHATSAPP_WORKER_TOKEN`.
+- Worker: set `APP_CLAIM_URL=https://<app>/api/auth/chat-login/claim` (uses the same `WHATSAPP_WORKER_TOKEN` as a Bearer token).
+- Only Yemeni (`967`) senders are accepted; groups, status updates, messages without a token and repeat senders inside 30s are ignored silently.
+
 ## API
 - `POST /send` with `Authorization: Bearer <token>` and JSON `{ "phone": "781234567", "text": "..." }` (9-digit Yemeni local number; `967` is added).
   Responses: `200 ok`, `400` invalid input, `401` bad token, `422 NOT_ON_WHATSAPP`, `502 SEND_FAILED`, `503 NOT_READY`.
