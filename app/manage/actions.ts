@@ -565,23 +565,64 @@ export async function deleteAd(id: string) {
 
 // ---------- إعدادات المتجر (صف واحد) ----------
 
+/** رابط تواصل اجتماعي: رابط http(s) كامل أو اسم حساب فقط. أي بروتوكول آخر (javascript: وغيره) مرفوض. */
+function socialField(form: FormData, key: string, label: string): string | null {
+  const value = str(form, key)
+  if (!value) return null
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value)
+      if (url.protocol === "http:" || url.protocol === "https:") return url.toString().slice(0, 300)
+    } catch {
+      // يسقط إلى رسالة الخطأ
+    }
+    throw new Error(`رابط ${label} غير صالح`)
+  }
+  if (/^@?[A-Za-z0-9._-]{1,60}$/.test(value)) return value
+  throw new Error(`${label}: أدخل رابطاً كاملاً (https://…) أو اسم الحساب فقط`)
+}
+
 export async function saveSettings(_id: string | null, form: FormData) {
   await assertManagePermission("settings")
 
   const logoKey = newImageKey(form, "logoKey")
+  const phone = str(form, "phone") ?? null
+  if (phone && !/^[+0-9][0-9 ()-]{4,24}$/.test(phone)) throw new Error("رقم الهاتف غير صالح")
+  const secondaryPhone = str(form, "secondaryPhone") ?? null
+  if (secondaryPhone && !/^[+0-9][0-9 ()-]{4,24}$/.test(secondaryPhone)) throw new Error("رقم الهاتف الثاني غير صالح")
+  const whatsapp = str(form, "whatsapp") ?? null
+  if (whatsapp) {
+    const digits = whatsapp.replace(/\D/g, "")
+    if (digits.length < 8 || digits.length > 15) throw new Error("رقم واتساب غير صالح (بالصيغة الدولية، مثل 967771234567)")
+  }
+  const email = str(form, "email") ?? null
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("البريد الإلكتروني غير صالح")
+
+  const codEnabled = bool(form, "codEnabled")
+  const transferEnabled = bool(form, "transferEnabled")
+  if (!codEnabled && !transferEnabled) throw new Error("فعّل طريقة دفع واحدة على الأقل، وإلا لن يستطيع العملاء إتمام الطلب")
+
   const values = {
     name: str(form, "name") ?? null,
+    nameEn: str(form, "nameEn") ?? null,
     tagline: str(form, "tagline") ?? null,
     description: str(form, "description") ?? null,
-    phone: str(form, "phone") ?? null,
-    whatsapp: str(form, "whatsapp") ?? null,
-    email: str(form, "email") ?? null,
+    phone,
+    secondaryPhone,
+    whatsapp,
+    email,
     address: str(form, "address") ?? null,
     workingHours: str(form, "workingHours") ?? null,
     copyright: str(form, "copyright") ?? null,
-    instagram: str(form, "instagram") ?? null,
-    facebook: str(form, "facebook") ?? null,
-    tiktok: str(form, "tiktok") ?? null,
+    instagram: socialField(form, "instagram", "إنستغرام"),
+    facebook: socialField(form, "facebook", "فيسبوك"),
+    tiktok: socialField(form, "tiktok", "تيك توك"),
+    x: socialField(form, "x", "إكس"),
+    youtube: socialField(form, "youtube", "يوتيوب"),
+    snapchat: socialField(form, "snapchat", "سناب شات"),
+    telegram: socialField(form, "telegram", "تيليجرام"),
+    codEnabled,
+    transferEnabled,
     updatedAt: new Date(),
   }
 

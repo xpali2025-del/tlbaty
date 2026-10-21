@@ -271,11 +271,11 @@ describe('ads and settings', () => {
   })
 
   it('upserts the single settings row and removes a replaced logo', async () => {
-    await A.saveSettings(null, form({ name: 'متجر', whatsapp: '967700000000', instagram: 'https://instagram.com/x', logoKey: KEY('site', 'l1') }))
-    await A.saveSettings('anything', form({ name: 'متجر 2', logoKey: KEY('site', 'l2') }))
+    await A.saveSettings(null, form({ name: 'متجر', whatsapp: '967700000000', instagram: 'https://instagram.com/x', logoKey: KEY('site', 'l1'), codEnabled: 'true' }))
+    await A.saveSettings('anything', form({ name: 'متجر 2', logoKey: KEY('site', 'l2'), transferEnabled: 'true' }))
     const all = await rows(s.siteSettings)
     expect(all).toHaveLength(1)
-    expect(all[0]).toMatchObject({ id: 1, name: 'متجر 2', logoKey: KEY('site', 'l2'), whatsapp: null, instagram: null })
+    expect(all[0]).toMatchObject({ id: 1, name: 'متجر 2', logoKey: KEY('site', 'l2'), whatsapp: null, instagram: null, codEnabled: false, transferEnabled: true })
     expect(deleted()).toEqual([KEY('site', 'l1')])
   })
 })

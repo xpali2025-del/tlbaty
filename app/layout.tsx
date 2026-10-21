@@ -7,7 +7,8 @@ import { CurrencyProvider } from "@/components/currency-provider"
 import { NotificationsProvider } from "@/components/notifications-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { getCurrencySettings } from "@/lib/data"
-import { SITE_CONFIG } from "@/lib/site"
+import { getSiteConfig, toPublicSiteConfig, type SiteConfig } from "@/lib/site-config"
+import { SiteConfigProvider } from "@/components/site-config-provider"
 import "./globals.css"
 
 const tajawal = Tajawal({
@@ -27,7 +28,9 @@ const amiri = Amiri({
 // ============================================
 // SEO ثابت في HTML - يقرأه جوجل أثناء الزحف
 // ============================================
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  const SITE_CONFIG = await getSiteConfig()
+  return {
   metadataBase: new URL(SITE_CONFIG.url),
   title: {
     default: `${SITE_CONFIG.name} | متجر ملابس وأزياء رجالية ونسائية وأطفال`,
@@ -84,6 +87,7 @@ export const metadata: Metadata = {
     address: true,
   },
 }
+}
 
 export const viewport: Viewport = {
   themeColor: "#DC2626",
@@ -97,7 +101,9 @@ export const viewport: Viewport = {
 // نوع ClothingStore (وهو LocalBusiness) مع إحداثيات
 // جغرافية وساعات عمل ومناطق الخدمة داخل اليمن
 // ============================================
-const localBusinessJsonLd = {
+function buildLocalBusinessJsonLd(SITE_CONFIG: SiteConfig) {
+  return {
+
   "@context": "https://schema.org",
   "@type": "ClothingStore",
   "@id": SITE_CONFIG.ids.store,
@@ -110,7 +116,7 @@ const localBusinessJsonLd = {
   logo: {
     "@type": "ImageObject",
     "@id": SITE_CONFIG.ids.logo,
-    url: `${SITE_CONFIG.url}/logo.png`,
+    url: SITE_CONFIG.logoUrl ?? `${SITE_CONFIG.url}/logo.png`,
   },
   image: `${SITE_CONFIG.url}/og-image.png`,
   telephone: SITE_CONFIG.contact.phone,
@@ -148,10 +154,13 @@ const localBusinessJsonLd = {
     availableLanguage: ["Arabic"],
   },
   sameAs: Object.values(SITE_CONFIG.social).filter(Boolean),
+  }
 }
 
 // JSON-LD للموقع مع مربع البحث (يفعّل Sitelinks Search Box في جوجل)
-const webSiteJsonLd = {
+function buildWebSiteJsonLd(SITE_CONFIG: SiteConfig) {
+  return {
+
   "@context": "https://schema.org",
   "@type": "WebSite",
   "@id": SITE_CONFIG.ids.website,
@@ -168,12 +177,15 @@ const webSiteJsonLd = {
     },
     "query-input": "required name=search_term_string",
   },
+  }
 }
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const { currencies, defaultCode } = await getCurrencySettings()
+  const [{ currencies, defaultCode }, siteConfig] = await Promise.all([getCurrencySettings(), getSiteConfig()])
+  const localBusinessJsonLd = buildLocalBusinessJsonLd(siteConfig)
+  const webSiteJsonLd = buildWebSiteJsonLd(siteConfig)
 
   return (
     <html
@@ -192,6 +204,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
+        <SiteConfigProvider config={toPublicSiteConfig(siteConfig)}>
         <CurrencyProvider currencies={currencies} defaultCode={defaultCode}>
           <CartProvider>
             <WishlistProvider>
@@ -202,6 +215,7 @@ export default async function RootLayout({
             </WishlistProvider>
           </CartProvider>
         </CurrencyProvider>
+        </SiteConfigProvider>
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>

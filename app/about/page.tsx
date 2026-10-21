@@ -3,17 +3,21 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
 import { Award, Heart, Shield, Truck, Users, Sparkles } from "lucide-react"
-import { SITE_CONFIG } from "@/lib/site"
+import { getSiteConfig } from "@/lib/site-config"
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  const SITE_CONFIG = await getSiteConfig()
+  return {
   title: "من نحن",
   description: `تعرف على متجر ${SITE_CONFIG.name} للأزياء والملابس. قصتنا، رؤيتنا، ولماذا نحن الخيار الأول للأزياء في المنطقة.`,
+  }
 }
 
 // ============================================
 // صفحة "من نحن" - ثابتة بالكامل في HTML للـ SEO
 // ============================================
-export default function AboutPage() {
+export default async function AboutPage() {
+  const SITE_CONFIG = await getSiteConfig()
   return (
     <>
       <Header />

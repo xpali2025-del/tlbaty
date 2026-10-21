@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { SITE_CONFIG } from "@/lib/site"
+import { getSiteConfig, type SiteConfig } from "@/lib/site-config"
 
 // ============================================
 // ميتاتاجز صفحة التواصل — صفحة التواصل مكتوبة بـ "use client"
@@ -7,10 +7,13 @@ import { SITE_CONFIG } from "@/lib/site"
 // هذه أهم صفحة للسيو المحلي (Local SEO).
 // ============================================
 const title = "تواصل معنا"
-const description = `تواصل مع متجر تاج لاين في ${SITE_CONFIG.geo.city} - ${SITE_CONFIG.geo.country}. اتصل بنا على ${SITE_CONFIG.contact.phoneDisplay} أو راسلنا عبر واتساب. العنوان: ${SITE_CONFIG.contact.addressFull}. توصيل لجميع محافظات اليمن.`
-const url = `${SITE_CONFIG.url}/contact`
+const buildDescription = (SITE_CONFIG: SiteConfig) => `تواصل مع متجر تاج لاين في ${SITE_CONFIG.geo.city} - ${SITE_CONFIG.geo.country}. اتصل بنا على ${SITE_CONFIG.contact.phoneDisplay} أو راسلنا عبر واتساب. العنوان: ${SITE_CONFIG.contact.addressFull}. توصيل لجميع محافظات اليمن.`
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  const SITE_CONFIG = await getSiteConfig()
+  const description = buildDescription(SITE_CONFIG)
+  const url = `${SITE_CONFIG.url}/contact`
+  return {
   title,
   description,
   keywords: [
@@ -28,10 +31,12 @@ export const metadata: Metadata = {
     url,
   },
 }
+}
 
 // مخطط LocalBusiness كامل لصفحة التواصل — يقوّي ظهور المتجر
 // في خرائط جوجل والبحث المحلي داخل اليمن
-const contactJsonLd = {
+function buildContactJsonLd(SITE_CONFIG: SiteConfig, url: string, description: string) {
+  return {
   "@context": "https://schema.org",
   "@type": "ClothingStore",
   name: SITE_CONFIG.name,
@@ -65,9 +70,13 @@ const contactJsonLd = {
     },
   ],
   sameAs: Object.values(SITE_CONFIG.social).filter(Boolean),
+  }
 }
 
-export default function ContactLayout({ children }: { children: React.ReactNode }) {
+export default async function ContactLayout({ children }: { children: React.ReactNode }) {
+  const SITE_CONFIG = await getSiteConfig()
+  const url = `${SITE_CONFIG.url}/contact`
+  const contactJsonLd = buildContactJsonLd(SITE_CONFIG, url, buildDescription(SITE_CONFIG))
   return (
     <>
       <script

@@ -3,17 +3,21 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
 import { CheckCircle2, XCircle } from "lucide-react"
-import { SITE_CONFIG } from "@/lib/site"
+import { getSiteConfig } from "@/lib/site-config"
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  const SITE_CONFIG = await getSiteConfig()
+  return {
   title: "سياسة الاسترجاع والاستبدال",
   description: `تعرف على شروط وإجراءات استرجاع واستبدال المنتجات في متجر ${SITE_CONFIG.name}.`,
+  }
 }
 
 // ============================================
 // سياسة الاسترجاع - ثابتة في HTML للـ SEO والمتطلبات القانونية
 // ============================================
-export default function ReturnsPage() {
+export default async function ReturnsPage() {
+  const SITE_CONFIG = await getSiteConfig()
   return (
     <>
       <Header />

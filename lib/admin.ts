@@ -151,8 +151,12 @@ export type AdminSettings = {
   email?: string
   address?: string
   workingHours?: string
-  social?: { instagram?: string; facebook?: string; tiktok?: string }
+  nameEn?: string
+  secondaryPhone?: string
+  social?: { instagram?: string; facebook?: string; tiktok?: string; x?: string; youtube?: string; snapchat?: string; telegram?: string }
   copyright?: string
+  /** طرق الدفع المفعّلة في صفحة الدفع. */
+  payments: { cashOnDelivery: boolean; manualTransfer: boolean }
 } | null
 
 /** حساب دفع كما يُعرض في لوحة الإدارة (يشمل المعطّل). */
@@ -354,8 +358,19 @@ export const getAdminSettings = () =>
       email: opt(x.email),
       address: opt(x.address),
       workingHours: opt(x.workingHours),
-      social: { instagram: opt(x.instagram), facebook: opt(x.facebook), tiktok: opt(x.tiktok) },
+      nameEn: opt(x.nameEn),
+      secondaryPhone: opt(x.secondaryPhone),
+      social: {
+        instagram: opt(x.instagram),
+        facebook: opt(x.facebook),
+        tiktok: opt(x.tiktok),
+        x: opt(x.x),
+        youtube: opt(x.youtube),
+        snapchat: opt(x.snapchat),
+        telegram: opt(x.telegram),
+      },
       copyright: opt(x.copyright),
+      payments: { cashOnDelivery: x.codEnabled, manualTransfer: x.transferEnabled },
     }
   })
 

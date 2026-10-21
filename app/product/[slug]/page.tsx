@@ -7,6 +7,7 @@ import { ProductDetail } from "@/components/product-detail"
 import { ProductSection } from "@/components/product-section"
 import { getBrands, getCategoryBySlug, getProductBySlug, getProductSlugs, getProductsByCategory } from "@/lib/data"
 import { SITE_CONFIG } from "@/lib/site"
+import { getSiteConfig } from "@/lib/site-config"
 import { decodeSlug } from "@/lib/utils"
 
 // On-Demand Revalidation: الصفحة ثابتة وتُحدَّث فوراً
@@ -98,7 +99,7 @@ export default async function ProductPage({
     sku: product.sku ?? product.id,
     brand: {
       "@type": "Brand",
-      name: product.brand ?? SITE_CONFIG.name,
+      name: product.brand ?? (await getSiteConfig()).name,
     },
     category: category?.name,
     offers: {

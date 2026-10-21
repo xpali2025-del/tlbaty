@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { AdminSettings } from "@/lib/admin"
+import { SITE_CONFIG } from "@/lib/site"
 import { saveSettings } from "../actions"
 import { ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
@@ -47,10 +48,13 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
             <ImageField name="logo" current={settings?.logo} label="شعار المتجر" />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="اسم المتجر">
-                <Input name="name" defaultValue={settings?.name ?? ""} />
+                <Input name="name" defaultValue={settings?.name ?? ""} placeholder={SITE_CONFIG.name} />
               </Field>
-              <Field label="الشعار النصي">
-                <Input name="tagline" defaultValue={settings?.tagline ?? ""} />
+              <Field label="اسم المتجر بالإنجليزية">
+                <Input name="nameEn" defaultValue={settings?.nameEn ?? ""} placeholder={SITE_CONFIG.nameEn} dir="ltr" />
+              </Field>
+              <Field label="الشعار النصي (Slogan)">
+                <Input name="tagline" defaultValue={settings?.tagline ?? ""} placeholder={SITE_CONFIG.tagline} />
               </Field>
             </div>
             <Field label="وصف المتجر">
@@ -64,11 +68,14 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
             <CardTitle className="text-base">بيانات التواصل</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field label="الهاتف">
-              <Input name="phone" defaultValue={settings?.phone ?? ""} dir="ltr" />
+            <Field label="رقم الهاتف الرئيسي">
+              <Input name="phone" defaultValue={settings?.phone ?? ""} placeholder={SITE_CONFIG.contact.phone} dir="ltr" />
             </Field>
-            <Field label="واتساب">
-              <Input name="whatsapp" defaultValue={settings?.whatsapp ?? ""} dir="ltr" />
+            <Field label="رقم هاتف ثانٍ (اختياري)">
+              <Input name="secondaryPhone" defaultValue={settings?.secondaryPhone ?? ""} dir="ltr" />
+            </Field>
+            <Field label="رقم واتساب (بالصيغة الدولية)">
+              <Input name="whatsapp" defaultValue={settings?.whatsapp ?? ""} placeholder={SITE_CONFIG.contact.whatsapp} dir="ltr" />
             </Field>
             <Field label="البريد الإلكتروني">
               <Input name="email" type="email" defaultValue={settings?.email ?? ""} dir="ltr" />
@@ -96,6 +103,40 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
             <Field label="تيك توك">
               <Input name="tiktok" defaultValue={settings?.social?.tiktok ?? ""} dir="ltr" />
             </Field>
+            <Field label="إكس (تويتر)">
+              <Input name="x" defaultValue={settings?.social?.x ?? ""} dir="ltr" />
+            </Field>
+            <Field label="يوتيوب">
+              <Input name="youtube" defaultValue={settings?.social?.youtube ?? ""} dir="ltr" />
+            </Field>
+            <Field label="سناب شات">
+              <Input name="snapchat" defaultValue={settings?.social?.snapchat ?? ""} dir="ltr" />
+            </Field>
+            <Field label="تيليجرام">
+              <Input name="telegram" defaultValue={settings?.social?.telegram ?? ""} dir="ltr" />
+            </Field>
+            <p className="text-xs text-muted-foreground sm:col-span-3">
+              أدخل رابطاً كاملاً (https://…) أو اسم الحساب فقط. الحقل الفارغ لا يظهر في الموقع.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">طرق الدفع المتاحة للعملاء</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="codEnabled" value="true" defaultChecked={settings?.payments?.cashOnDelivery ?? true} />
+              الدفع عند الاستلام
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="transferEnabled" value="true" defaultChecked={settings?.payments?.manualTransfer ?? true} />
+              الحوالة / التحويل البنكي (حسابات الدفع تُدار من شاشة «حسابات الدفع»)
+            </label>
+            <p className="text-xs text-muted-foreground">
+              تُفرض طرق الدفع على الخادم أيضاً: الطريقة المعطّلة تُرفض حتى لو أُرسلت من متصفح معدَّل. يجب تفعيل طريقة واحدة على الأقل.
+            </p>
           </CardContent>
         </Card>
 

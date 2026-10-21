@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getCoupons, getCurrencySettings, getPaymentAccountById, getShippingZones } from "@/lib/data"
 import { isDbConfigured } from "@/lib/db-cache"
+import { getSiteConfig } from "@/lib/site-config"
 import { isProofStorageConfigured } from "@/lib/env"
 import { insertOrder, loadPricingProducts, OutOfStockError, ProofStorageError } from "@/lib/orders/create"
 import { computeOrderPricing, priceChanged } from "@/lib/orders/pricing"
@@ -169,6 +170,12 @@ export async function POST(req: Request) {
   const paymentMethod: PaymentMethod = isPaymentMethod(requestedMethod)
     ? requestedMethod
     : "cash_on_delivery"
+
+  // طرق الدفع المفعّلة من لوحة الإدارة تُفرض هنا أيضاً (لا يكفي إخفاؤها في الواجهة).
+  const { payments } = await getSiteConfig()
+  if ((paymentMethod === "cash_on_delivery" && !payments.cashOnDelivery) || (paymentMethod === "manual_transfer" && !payments.manualTransfer)) {
+    return fail("PAYMENT_METHOD_DISABLED", 400, "طريقة الدفع هذه غير متاحة حالياً. اختر طريقة دفع أخرى.")
+  }
 
   let paymentAccountSnapshot: PaymentAccountSnapshot | null = null
   let transferSenderName = ""

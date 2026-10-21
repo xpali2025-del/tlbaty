@@ -8,9 +8,10 @@ import { FooterClient } from "@/components/footer-client"
 import { MobileNav } from "@/components/mobile-nav"
 import { useCart } from "@/components/cart-provider"
 import { useCurrency } from "@/components/currency-provider"
-import { SITE_CONFIG } from "@/lib/site"
+import { useSiteConfig } from "@/components/site-config-provider"
 
 export default function CartPage() {
+  const SITE_CONFIG = useSiteConfig()
   const { items, removeItem, updateQuantity, subtotal } = useCart()
   const { format } = useCurrency()
   const discount = 30

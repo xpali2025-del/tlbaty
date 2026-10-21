@@ -9,7 +9,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { MessageCircle, Headphones } from "lucide-react"
-import { SITE_CONFIG } from "@/lib/site"
+import { getSiteConfig } from "@/lib/site-config"
 
 export const metadata: Metadata = {
   title: "الأسئلة الشائعة",
@@ -61,7 +61,8 @@ const faqJsonLd = {
   })),
 }
 
-export default function FAQPage() {
+export default async function FAQPage() {
+  const SITE_CONFIG = await getSiteConfig()
   return (
     <>
       <script

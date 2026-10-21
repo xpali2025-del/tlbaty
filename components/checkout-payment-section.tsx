@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { SafeImage } from "@/components/safe-image"
+import { useSiteConfig } from "@/components/site-config-provider"
 import { useToast } from "@/hooks/use-toast"
 import type { PaymentAccount, PaymentMethod } from "@/lib/payment"
 
@@ -144,6 +145,7 @@ export function PaymentSection({
   errors: { account?: string; senderName?: string; reference?: string; proof?: string }
 }) {
   const { toast } = useToast()
+  const { payments } = useSiteConfig()
   const [sheetOpen, setSheetOpen] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
@@ -167,6 +169,16 @@ export function PaymentSection({
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [value.proofFile])
+
+  // إن عُطّلت طريقة من لوحة الإدارة وكانت هي المحددة، ننتقل للطريقة المتاحة تلقائياً.
+  useEffect(() => {
+    if (!payments.cashOnDelivery && value.method === "cash_on_delivery" && payments.manualTransfer) {
+      onChange({ ...value, method: "manual_transfer" })
+    } else if (!payments.manualTransfer && value.method === "manual_transfer" && payments.cashOnDelivery) {
+      onChange({ ...EMPTY_PAYMENT_SELECTION, method: "cash_on_delivery" })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payments.cashOnDelivery, payments.manualTransfer])
 
   const chooseCashOnDelivery = () => {
     // العودة إلى الدفع عند الاستلام تمسح كل بيانات التحويل من حالة الصفحة.
@@ -233,7 +245,14 @@ export function PaymentSection({
         طريقة الدفع
       </h2>
 
+      {!payments.cashOnDelivery && !payments.manualTransfer && (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          لا توجد طريقة دفع متاحة حالياً. تواصل معنا لإتمام طلبك.
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="طريقة الدفع">
+        {payments.cashOnDelivery && (
         <button
           type="button"
           role="radio"
@@ -252,7 +271,9 @@ export function PaymentSection({
             ادفع قيمة طلبك عند الاستلام.
           </span>
         </button>
+        )}
 
+        {payments.manualTransfer && (
         <button
           type="button"
           role="radio"
@@ -271,6 +292,7 @@ export function PaymentSection({
             حوّل قيمة الطلب إلى أحد الحسابات المتاحة، ثم أرسل بيانات الحوالة للتحقق منها.
           </span>
         </button>
+        )}
       </div>
 
       {transfer && sorted.length === 0 && (

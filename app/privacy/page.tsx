@@ -2,17 +2,21 @@ import type { Metadata } from "next"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
-import { SITE_CONFIG } from "@/lib/site"
+import { getSiteConfig } from "@/lib/site-config"
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  const SITE_CONFIG = await getSiteConfig()
+  return {
   title: "سياسة الخصوصية",
   description: `سياسة الخصوصية وحماية البيانات في متجر ${SITE_CONFIG.name}.`,
+  }
 }
 
 // ============================================
 // سياسة الخصوصية - ثابتة في HTML للـ SEO والمتطلبات القانونية
 // ============================================
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  const SITE_CONFIG = await getSiteConfig()
   return (
     <>
       <Header />

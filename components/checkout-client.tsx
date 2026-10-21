@@ -46,7 +46,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { SITE_CONFIG } from "@/lib/site"
+import { useSiteConfig } from "@/components/site-config-provider"
 import { GovernorateCombobox } from "@/components/governorate-combobox"
 import { buildProductNumber } from "@/lib/product-number"
 import { FALLBACK_SHIPPING_METHODS, resolveShippingMethods } from "@/lib/shipping"
@@ -103,6 +103,7 @@ export function CheckoutClient({
   paymentAccounts: PaymentAccount[]
   paymentProofReady: boolean
 }) {
+  const SITE_CONFIG = useSiteConfig()
   const { items, subtotal, clearCart } = useCart()
   const { currency, format, convert } = useCurrency()
   const router = useRouter()

@@ -102,6 +102,17 @@ describe('authentication and validation', () => {
   })
 })
 
+describe('payment methods enabled from the panel', () => {
+  it('refuses a disabled method on the server even if the browser sends it', async () => {
+    await db.update(s.siteSettings).set({ codEnabled: false })
+    const res = await post(order())
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('PAYMENT_METHOD_DISABLED')
+    await db.update(s.siteSettings).set({ codEnabled: true })
+    expect((await post(order())).status).toBe(200)
+  })
+})
+
 describe('stock', () => {
   it('answers 409 OUT_OF_STOCK and stores nothing when the quantity is not available', async () => {
     await db.update(s.products).set({ stock: 1 }).where(eq(s.products.productNumber, product.id))
