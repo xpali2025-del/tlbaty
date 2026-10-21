@@ -1,28 +1,25 @@
 import { NextResponse } from "next/server"
-import { ordersClient } from "@/sanity/orders/client"
-import { isOrdersConfigured } from "@/sanity/orders/env"
-import { getPaymentAccountById, getProducts } from "@/lib/data"
-import { buildProductNumber } from "@/lib/product-number"
-import { normalizeAndValidateLocalPhone } from "@/lib/phone"
+import { getCoupons, getCurrencySettings, getPaymentAccountById, getShippingZones } from "@/lib/data"
+import { isDbConfigured } from "@/lib/db-cache"
+import { isProofStorageConfigured } from "@/lib/env"
+import { insertOrder, loadPricingProducts, ProofStorageError } from "@/lib/orders/create"
+import { computeOrderPricing, priceChanged } from "@/lib/orders/pricing"
+import { normalizeInternationalPhone } from "@/lib/phone"
 import { getCurrentCustomer } from "@/lib/otp/session"
-import { randomBytes } from "node:crypto"
 import {
-  initialPaymentStatus,
   isPaymentMethod,
   type PaymentAccountSnapshot,
   type PaymentMethod,
-  type PaymentStatus,
 } from "@/lib/payment"
 import {
   PaymentProofConfigError,
   PaymentProofValidationError,
   prepareEncryptedPaymentProof,
+  type PaymentProofPayload,
 } from "@/lib/payment-proof"
 
-// POST Route Handler يُنفَّذ عند كل طلب بطبيعته ولا يدخل في كاش صفحات المتجر.
 export const runtime = "nodejs"
 
-// حدود بسيطة لمنع البيانات الضخمة/المشوّهة
 const MAX_ITEMS = 100
 const MAX_STR = 500
 const MAX_CUSTOMER_NOTE = 1000
@@ -34,13 +31,9 @@ const MAX_CUSTOMER_NOTE = 1000
 function sanitizeCustomerNote(value: unknown): string {
   if (typeof value !== "string") return ""
   return value
-    // إزالة أي وسم HTML كي تُحفظ كنص عادي فقط
     .replace(/<[^>]*>/g, " ")
-    // توحيد نهايات الأسطر مع الحفاظ على فواصل الأسطر التي كتبها العميل
     .replace(/\r\n?/g, "\n")
-    // منع أكثر من سطرين فارغين متتاليين
     .replace(/\n{3,}/g, "\n\n")
-    // حذف محارف التحكم الخفية (ما عدا السطر الجديد والتاب)
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .trim()
     .slice(0, MAX_CUSTOMER_NOTE)
@@ -87,23 +80,21 @@ function isValidSenderName(value: string): boolean {
 /** تحقّق رقم الحوالة — يبقى نصاً ولا يُحوَّل إلى Number. */
 function isValidTransferReference(value: string): boolean {
   if (value.length < 4 || value.length > 40) return false
-  const digits = value.replace(/[^\d\u0660-\u0669\u06f0-\u06f9]/g, "")
+  const digits = value.replace(/[^\d٠-٩۰-۹]/g, "")
   if (digits.length < 4) return false
-  return /^[\d\u0660-\u0669\u06f0-\u06f9A-Za-z\-/ ]+$/.test(value)
+  return /^[\d٠-٩۰-۹A-Za-z\-/ ]+$/.test(value)
 }
 
 export async function POST(req: Request) {
-  // المصادقة إلزامية: لا يُنشأ أي طلب دون جلسة تسجيل دخول صالحة.
-  // معرّف العميل يُقرأ من الجلسة على الخادم وحده، ولا يُقبل إطلاقاً من الواجهة.
+  // الطلب يتطلب تسجيل دخول؛ هوية العميل تأتي من الجلسة على الخادم وحدها.
   const sessionCustomer = await getCurrentCustomer()
   if (!sessionCustomer) {
     return fail("AUTH_REQUIRED", 401, "يجب تسجيل الدخول لإتمام الطلب.")
   }
 
-  // يدعم multipart/form-data (بيانات + صورة) وJSON للتوافق مع أي استدعاء قديم.
+  // ---- قراءة الجسم: JSON أو multipart (الطلب + صورة إثبات الحوالة) ----
   let body: UnknownRecord
   let proofFile: File | null = null
-
   const contentType = req.headers.get("content-type") ?? ""
 
   if (contentType.includes("multipart/form-data")) {
@@ -128,13 +119,11 @@ export async function POST(req: Request) {
     }
   }
 
-  // تحقق أساسي: يجب وجود منتجات
   const rawItems: unknown[] = Array.isArray(body.items) ? body.items.slice(0, MAX_ITEMS) : []
   if (rawItems.length === 0) {
     return fail("EMPTY_ORDER", 400)
   }
 
-  // العنوان اليدوي مطلوب (الاسم/الهاتف/المدينة/العنوان التفصيلي)
   const customerName = str(body.customerName, 200)
   const phone = str(body.phone, 30)
   const city = str(body.city, 120)
@@ -143,32 +132,23 @@ export async function POST(req: Request) {
     return fail("ADDRESS_REQUIRED", 400)
   }
 
-  // توحيد هاتف العميل إلى الصيغة المحلية (9 أرقام بلا كود دولة) والتحقق منه.
-  // الخادم وحده يُنشئ هذه القيم — لا نثق بأي customerId أو رقم موحّد من الواجهة.
-  const localPhone = normalizeAndValidateLocalPhone(phone)
-  if (!localPhone) {
+  const phoneNormalized = normalizeInternationalPhone(phone)
+  if (!phoneNormalized) {
     return fail("INVALID_PHONE", 400)
   }
 
-  // معرّف العميل الثابت (CUS_XXXX) يأتي من جلسة الخادم وحدها.
-  // لا يعتمد على رقم الهاتف، فيبقى ثابتاً حتى بعد تغيير الرقم، وتُربط به كل الطلبات.
-  const customerId = sessionCustomer.publicId
-
-  // نوع مصدر العنوان: saved أو new فقط
   const addressSource = str(body.addressSource, 10)
   if (addressSource !== "saved" && addressSource !== "new") {
     return fail("INVALID_ADDRESS_SOURCE", 400)
   }
 
-  // الإحداثيات مطلوبة — لا نحوّل المفقود إلى 0,0
+  // ---- الموقع الجغرافي إلزامي وصالح ----
   const lat = finiteNum(body.latitude)
   const lng = finiteNum(body.longitude)
   const capturedAt = str(body.locationCapturedAt, 60)
   if (lat === null || lng === null || !capturedAt) {
     return fail("LOCATION_REQUIRED", 400)
   }
-
-  // صحة الإحداثيات ضمن النطاق الجغرافي
   const accuracy = finiteNum(body.locationAccuracy)
   const capturedTime = Date.parse(capturedAt)
   if (
@@ -184,13 +164,8 @@ export async function POST(req: Request) {
     return fail("INVALID_LOCATION", 400)
   }
 
-  // ============================================
-  // الدفع — الخادم وحده يحدّد paymentStatus ويبني Snapshot الحساب.
-  // كل ما يرسله العميل: طريقة الدفع، معرّف الحساب، اسم المرسل، رقم الحوالة، الصورة.
-  // أي حالة دفع أو رقم حساب أو اسم مزوّد مرسل من العميل يُتجاهل تماماً.
-  // ============================================
+  // ---- طريقة الدفع (افتراضياً الدفع عند الاستلام) ----
   const requestedMethod = str(body.paymentMethod, 40)
-  // الطلبات القديمة/الاستدعاءات بلا طريقة دفع تُعالج كدفع عند الاستلام.
   const paymentMethod: PaymentMethod = isPaymentMethod(requestedMethod)
     ? requestedMethod
     : "cash_on_delivery"
@@ -204,8 +179,6 @@ export async function POST(req: Request) {
     if (!accountId) {
       return fail("PAYMENT_ACCOUNT_REQUIRED", 400, "اختر حساب دفع لإكمال التحويل.")
     }
-
-    // نعيد جلب الحساب من مشروع المحتوى — لا نثق باسم الحساب أو رقمه المرسل من العميل.
     const account = await getPaymentAccountById(accountId)
     if (!account || !account.isActive || !account.accountNumber) {
       return fail(
@@ -219,16 +192,15 @@ export async function POST(req: Request) {
     if (!isValidSenderName(transferSenderName)) {
       return fail("INVALID_TRANSFER_SENDER", 400, "اسم مرسل الحوالة غير صالح.")
     }
-
     transferReference = str(body.transferReference, 40)
     if (!isValidTransferReference(transferReference)) {
       return fail("INVALID_TRANSFER_REFERENCE", 400, "رقم الحوالة غير صالح.")
     }
-
     if (!proofFile) {
       return fail("PAYMENT_PROOF_REQUIRED", 400, "صورة إثبات الحوالة مطلوبة.")
     }
 
+    // Snapshot موثوق من الخادم: لا نقبل أي بيانات حساب من العميل.
     paymentAccountSnapshot = {
       sourceDocumentId: account.id,
       providerName: account.providerName,
@@ -239,13 +211,12 @@ export async function POST(req: Request) {
     }
   }
 
-  // رابط الخريطة يُبنى في الخادم — لا نثق برابط مرسل من الواجهة
   const locationLink = mapsUrl(lat, lng)
 
-  // إن لم يُضبط مشروع الطلبات بعد: نسمح فقط بالدفع عند الاستلام دون حفظ،
-  // ولا نسمح إطلاقاً بإرسال حوالة دون حفظ إثباتها مشفّرة.
-  if (!isOrdersConfigured || !ordersClient) {
+  // ---- قاعدة البيانات غير مضبوطة (تطوير محلي) ----
+  if (!isDbConfigured()) {
     if (paymentMethod === "manual_transfer") {
+      // لا نقبل حوالة بلا قدرة على حفظ إثباتها.
       return fail(
         "ORDERS_NOT_CONFIGURED",
         503,
@@ -255,190 +226,122 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skipped: true, locationLink })
   }
 
-  const client = ordersClient
+  // ---- التسعير من قاعدة البيانات: لا نثق بأي سعر أو مجموع أرسله المتصفح ----
+  const requestedItems = rawItems.map((raw) => {
+    const i: UnknownRecord = isRecord(raw) ? raw : {}
+    return {
+      productId: str(i.productId, 60),
+      size: str(i.size, 60),
+      color: str(i.color, 60),
+      quantity: Math.max(1, Math.round(num(i.quantity))),
+    }
+  })
+  const [products, zones, coupons, currencySettings] = await Promise.all([
+    loadPricingProducts([...new Set(requestedItems.map((i) => i.productId).filter(Boolean))]),
+    getShippingZones(),
+    getCoupons(),
+    getCurrencySettings(),
+  ])
+  const pricing = computeOrderPricing({
+    items: requestedItems,
+    products,
+    zones,
+    city,
+    shippingMethodName: str(body.shippingMethod, 120),
+    coupons,
+    couponCode: str(body.couponCode, 60),
+    currencies: currencySettings.currencies,
+    defaultCurrencyCode: currencySettings.defaultCode,
+    currencyCode: str(body.currencyCode, 20),
+  })
+  if (!pricing.ok) {
+    if (pricing.error === "UNKNOWN_PRODUCT") {
+      return fail("PRODUCT_UNAVAILABLE", 400, "أحد المنتجات في سلتك لم يعد متوفراً. حدّث السلة وحاول مجدداً.")
+    }
+    if (pricing.error === "INVALID_QUANTITY") {
+      return fail("INVALID_QUANTITY", 400, "كمية أحد المنتجات غير صالحة.")
+    }
+    return fail("INVALID_SHIPPING_METHOD", 400, "طريقة التوصيل المختارة غير متاحة لهذه المدينة. اختر طريقة أخرى.")
+  }
 
-  // تشفير إثبات الحوالة ورفعه كملف مبهم قبل إنشاء الطلب.
-  let proofAssetId: string | null = null
-  let paymentProofField: UnknownRecord | null = null
-
+  // ---- إثبات الحوالة: فحص + تشفير على الخادم ثم رفعه إلى الـ bucket الخاص ----
+  let proof: PaymentProofPayload | null = null
   if (paymentMethod === "manual_transfer" && proofFile) {
+    if (!isProofStorageConfigured()) {
+      return fail(
+        "PAYMENT_PROOF_NOT_CONFIGURED",
+        503,
+        "خطأ في إعداد الموقع: تخزين إثبات الحوالة غير مضبوط. لا يمكن استقبال الحوالات حالياً، ويمكنك استخدام الدفع عند الاستلام.",
+      )
+    }
     try {
-      const prepared = await prepareEncryptedPaymentProof(proofFile)
-      const asset = await client.assets.upload("file", prepared.ciphertext, {
-        filename: `payment-proof-${Date.now()}.enc`,
-        contentType: "application/octet-stream",
-      })
-      proofAssetId = asset._id
-      paymentProofField = {
-        asset: { _type: "file", asset: { _type: "reference", _ref: asset._id } },
-        iv: prepared.iv,
-        authTag: prepared.authTag,
-        keyVersion: prepared.keyVersion,
-        originalMimeType: prepared.originalMimeType,
-        processedMimeType: prepared.processedMimeType,
-        byteSize: prepared.byteSize,
-        uploadedAt: new Date().toISOString(),
-      }
+      proof = await prepareEncryptedPaymentProof(proofFile)
     } catch (error) {
       if (error instanceof PaymentProofConfigError) {
-        // لا نطبع المفتاح ولا محتوى الصورة — فقط رسالة إعداد.
         return fail("PAYMENT_PROOF_NOT_CONFIGURED", 503, error.message)
       }
       if (error instanceof PaymentProofValidationError) {
         return fail("INVALID_PAYMENT_PROOF", 400, error.message)
       }
-      console.error("[v0] payment proof processing failed")
-      return fail(
-        "PAYMENT_PROOF_FAILED",
-        500,
-        "تعذّر حفظ إثبات الحوالة. الرجاء المحاولة مرة أخرى.",
-      )
+      console.error("payment proof processing failed")
+      return fail("PAYMENT_PROOF_FAILED", 500, "تعذّر حفظ إثبات الحوالة. الرجاء المحاولة مرة أخرى.")
     }
   }
 
-  // فحص تكرار رقم الحوالة — تنبيه للإدارة وليس إثباتاً للدفع.
-  let duplicateTransferReference = false
-  if (paymentMethod === "manual_transfer" && transferReference) {
-    try {
-      const existing = await client.fetch<number>(
-        `count(*[_type == "order" && transferReference == $ref])`,
-        { ref: transferReference },
-      )
-      duplicateTransferReference = typeof existing === "number" && existing > 0
-    } catch {
-      // فشل الفحص لا يمنع الطلب — التحقق النهائي يدوي من الإدارة.
-      duplicateTransferReference = false
-    }
-  }
-
-  // لقطة بيانات المنتجات: استعلام واحد مُخزَّن مؤقتاً لكل المنتجات،
-  // ثم بحث في الذاكرة — بلا استعلام منفصل لكل عنصر في السلة.
-  // نستخدمه لحفظ رقم SKU وصورة المنتج داخل الطلب. لا نلمس الأسعار إطلاقاً.
-  const productSnapshots = new Map<string, { sku?: string; image?: string }>()
-  try {
-    const products = await getProducts()
-    for (const product of products) {
-      productSnapshots.set(product.id, { sku: product.sku, image: product.image })
-    }
-  } catch {
-    // فشل جلب المنتجات لا يمنع الطلب — يُحفظ العنصر بلقطة رقم المنتج فقط.
-  }
-
-  const items = rawItems.map((raw) => {
-    const i: UnknownRecord = isRecord(raw) ? raw : {}
-    const quantity = Math.max(1, Math.round(num(i.quantity)))
-    const price = num(i.price)
-    const productId = str(i.productId, 60)
-    const snapshot = productSnapshots.get(productId)
-    return {
-      _type: "orderItem",
-      _key: `${productId || "item"}-${str(i.size, 30)}-${str(i.color, 30)}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`,
-      productId,
-      // رقم المنتج يُشتق على الخادم ويُحفظ كلقطة ثابتة داخل الطلب،
-      // فلا يتغير إذا عُدّل المنتج أو حُذف لاحقاً.
-      productNumber: buildProductNumber(productId),
-      sku: snapshot?.sku ?? "",
-      image: snapshot?.image ?? "",
-      name: str(i.name, 200),
-      size: str(i.size, 60),
-      color: str(i.color, 60),
-      quantity,
-      price,
-      lineTotal: price * quantity,
-    }
-  })
-
-  const now = new Date()
-  // رقم الطلب مستقل تماماً عن رقم الهاتف: التاريخ + لاحقة عشوائية مشفّرة.
-  // لا يحتوي أي جزء من الهاتف ولا من customerId.
-  const orderNumber = `ORD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
-    now.getDate(),
-  ).padStart(2, "0")}-${randomBytes(4).toString("hex").toUpperCase()}`
-
-  // الحالة الابتدائية يحدّدها الخادم وحده حسب طريقة الدفع.
-  const paymentStatus: PaymentStatus = initialPaymentStatus(paymentMethod)
-
-  const doc: { _type: "order" } & UnknownRecord = {
-    _type: "order",
-    orderNumber,
-    // حالة الطلب مستقلة تماماً عن حالة الدفع.
-    status: "new",
-    customerName,
-    phone,
-    // حقول التتبع — كلها من إنشاء الخادم:
-    // customerId يربط طلبات الهاتف نفسه، والرقم الموحّد يُستخدم في المطابقة.
-    customerId,
-    customerPhoneNormalized: localPhone,
-    city,
-    address,
-    customerLocation: { _type: "geopoint", lat, lng },
-    locationAccuracy: accuracy,
-    locationCapturedAt: new Date(capturedTime).toISOString(),
-    addressSource: addressSource === "saved" ? "عنوان محفوظ" : "عنوان جديد",
-    items,
-    shippingMethod: str(body.shippingMethod, 120),
-    shippingPrice: num(body.shippingPrice),
-    couponCode: str(body.couponCode, 60),
-    discount: num(body.discount),
-    subtotal: num(body.subtotal),
+  const clientTotals = {
     total: num(body.total),
-    currency: str(body.currency, 20),
-    currencyCode: str(body.currencyCode, 20),
-    createdAt: now.toISOString(),
-    paymentMethod,
-    paymentStatus,
-    paymentStatusHistory: [
-      {
-        _type: "paymentStatusChange",
-        _key: `init-${Math.random().toString(36).slice(2, 8)}`,
-        status: paymentStatus,
-        changedAt: now.toISOString(),
-        changedBy: "النظام",
-        note: "الحالة الابتدائية عند إنشاء الطلب",
-      },
-    ],
-  }
-
-  // ملاحظة العميل اختيارية — لا نضيف الحقل إطلاقاً عند غيابها.
-  const customerNote = sanitizeCustomerNote(body.customerNote)
-  if (customerNote) doc.customerNote = customerNote
-
-  if (paymentMethod === "manual_transfer") {
-    doc.paymentAccountSnapshot = paymentAccountSnapshot
-    doc.transferSenderName = transferSenderName
-    doc.transferReference = transferReference
-    doc.transferSubmittedAt = now.toISOString()
-    doc.duplicateTransferReference = duplicateTransferReference
-    if (paymentProofField) doc.paymentProof = paymentProofField
+    subtotal: num(body.subtotal),
+    shippingPrice: num(body.shippingPrice),
+    discount: num(body.discount),
   }
 
   try {
-    const created = await client.create(doc)
-    return NextResponse.json({
-      ok: true,
-      id: created._id,
-      orderNumber,
-      locationLink,
-      // نرجع الدفع كنص للعرض فقط — بلا أي رابط أو بيانات فك تشفير.
+    const created = await insertOrder({
+      customer: { id: sessionCustomer.id },
+      contact: {
+        customerName,
+        phone,
+        phoneNormalized,
+        city,
+        address,
+        addressSource,
+        latitude: lat,
+        longitude: lng,
+        accuracy,
+        capturedAt: new Date(capturedTime),
+        note: sanitizeCustomerNote(body.customerNote),
+      },
+      pricing,
       payment: {
         method: paymentMethod,
-        status: paymentStatus,
+        account: paymentAccountSnapshot,
+        senderName: transferSenderName,
+        reference: transferReference,
+        proof,
+      },
+    })
+
+    return NextResponse.json({
+      ok: true,
+      id: created.id,
+      orderNumber: created.orderNumber,
+      locationLink,
+      // الإجمالي المعتمد من الخادم؛ priceChanged تعني أنه يختلف عمّا رآه العميل.
+      total: pricing.total,
+      currencyCode: pricing.currency.code,
+      priceChanged: priceChanged(pricing, clientTotals),
+      payment: {
+        method: paymentMethod,
+        status: created.paymentStatus,
         providerName: paymentAccountSnapshot?.providerName ?? null,
         transferSenderName: transferSenderName || null,
         transferReference: transferReference || null,
       },
     })
   } catch (error) {
-    console.error("[v0] orders save failed:", error)
-    // تنظيف الملف المشفّر غير المرتبط بأي طلب قدر الإمكان.
-    if (proofAssetId) {
-      try {
-        await client.delete(proofAssetId)
-      } catch {
-        // نتجاهل فشل التنظيف — لا نكشف تفاصيل في السجلات.
-      }
+    console.error("orders save failed:", error instanceof Error ? error.message : "unknown")
+    if (error instanceof ProofStorageError) {
+      return fail("PAYMENT_PROOF_FAILED", 500, "تعذّر حفظ إثبات الحوالة. الرجاء المحاولة مرة أخرى.")
     }
     return fail("SAVE_FAILED", 500, "تعذّر حفظ الطلب. الرجاء المحاولة مرة أخرى.")
   }

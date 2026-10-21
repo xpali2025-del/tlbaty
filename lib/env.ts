@@ -36,3 +36,20 @@ export function getR2Env() {
 export function isR2Configured(): boolean {
   return r2Schema.safeParse(process.env).success
 }
+
+// bucket خاص منفصل لإثباتات الدفع المشفَّرة. لا يُفعَّل له وصول عام ولا نطاق عام أبداً،
+// ويُرفض الدفع بالتحويل إن لم يُضبط (فشل مغلق) بدل الرجوع إلى bucket الصور العام.
+const proofsSchema = z.object({
+  R2_ACCOUNT_ID: z.string().min(1),
+  R2_ACCESS_KEY_ID: z.string().min(1),
+  R2_SECRET_ACCESS_KEY: z.string().min(1),
+  R2_PROOFS_BUCKET: z.string().min(1),
+})
+
+export function getProofsEnv() {
+  return proofsSchema.parse(process.env)
+}
+
+export function isProofStorageConfigured(): boolean {
+  return proofsSchema.safeParse(process.env).success
+}

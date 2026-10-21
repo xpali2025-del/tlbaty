@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { getCurrentCustomer } from "@/lib/otp/session"
-import { countOrdersByCustomerId } from "@/lib/otp/store"
+import { countOrdersForCustomer } from "@/lib/otp/customer-orders"
 import { AccountActions } from "@/components/auth/account-actions"
 import { Phone, Hash, CalendarClock, LogIn, Package } from "lucide-react"
 
@@ -30,7 +30,7 @@ export default async function AccountPage() {
     redirect("/login?next=/account")
   }
 
-  const orderCount = await countOrdersByCustomerId(customer.publicId)
+  const orderCount = await countOrdersForCustomer(customer)
 
   const rows = [
     { icon: Phone, label: "رقم الهاتف", value: customer.phone, ltr: true },

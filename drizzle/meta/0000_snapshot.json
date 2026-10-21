@@ -1,5 +1,5 @@
 {
-  "id": "ed6ce890-2617-4d04-853f-abc97ef60659",
+  "id": "299bf82e-0301-4659-b77a-d35a4a865bf0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2874,6 +2874,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "product_ref": {
+          "name": "product_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "sku": {
           "name": "sku",
           "type": "text",
@@ -2915,6 +2921,13 @@
           "type": "numeric(14, 2)",
           "primaryKey": false,
           "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -2923,6 +2936,12 @@
           "columns": [
             {
               "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3134,6 +3153,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3221,6 +3246,12 @@
         },
         "changed_by": {
           "name": "changed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
           "type": "text",
           "primaryKey": false,
           "notNull": false

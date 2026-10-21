@@ -8,7 +8,7 @@ import { FooterClient } from "@/components/footer-client"
 import { MobileNav } from "@/components/mobile-nav"
 import { SafeImage } from "@/components/safe-image"
 import { getCurrentCustomer } from "@/lib/otp/session"
-import { listOrdersByCustomerId } from "@/lib/otp/customer-orders"
+import { listOrdersForCustomer } from "@/lib/otp/customer-orders"
 import { ORDER_STATUS_BADGE, ORDER_STATUS_LABELS, normalizeOrderStatus } from "@/lib/order-status"
 
 /**
@@ -55,7 +55,7 @@ export default async function OrdersPage() {
     redirect("/login?next=/orders")
   }
 
-  const orders = await listOrdersByCustomerId(customer.publicId, customer.phone ?? "")
+  const orders = await listOrdersForCustomer(customer)
 
   return (
     <>

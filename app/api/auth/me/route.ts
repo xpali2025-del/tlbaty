@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveSession, touchSession } from "@/lib/otp/session"
-import { countOrdersByCustomerId } from "@/lib/otp/store"
+import { countOrdersForCustomer } from "@/lib/otp/customer-orders"
 import { maskPhone } from "@/lib/phone"
 
 export const runtime = "nodejs"
@@ -12,7 +12,7 @@ export async function GET() {
 
   const { customer, sessionId } = resolved
   void touchSession(sessionId)
-  const ordersCount = await countOrdersByCustomerId(customer.id).catch(() => 0)
+  const ordersCount = await countOrdersForCustomer(customer).catch(() => 0)
 
   return NextResponse.json({
     authenticated: true,

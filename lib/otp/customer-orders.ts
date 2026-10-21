@@ -1,77 +1,12 @@
 import "server-only"
+import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm"
+import { db } from "@/lib/db/client"
+import { isDbConfigured } from "@/lib/db-cache"
+import { orderItems, orderStatusHistory, orders } from "@/lib/db/store"
 
-import { ordersClient } from "@/sanity/orders/client"
+// طلبات العميل المسجَّل. الملكية: الطلب المرتبط بحسابه، أو الطلب القديم بلا حساب
+// المطابق لهاتفه (طلبات سابقة لإنشاء الحسابات). لا يُعاد أي طلب لا يخص صاحب الجلسة.
 
-// ============================================
-// طلبات العميل — تُجلب بمعرّف العميل من الجلسة على الخادم وحده.
-//
-// قاعدة أمنية صارمة: لا يُقبل أي معرّف يرسله العميل. كل الاستعلامات
-// تُقيّد بـ customerId (ورقم الهاتف المحلي) المشتقّين من جلسة الخادم،
-// فلا يستطيع عميل رؤية طلبات غيره حتى لو خمّن رقم طلب آخر.
-//
-// دعم الطلبات القديمة: الطلبات التي أُنشئت قبل وجود customerId تُطابَق
-// عبر customerPhoneNormalized مقابل رقم هاتف العميل المخزّن في جلسته —
-// وهو أيضاً قيمة خادمية لا تأتي من الواجهة.
-// ============================================
-
-/** الحقول المسموح عرضها في قائمة الطلبات — ملخّص خفيف بلا تفاصيل حساسة. */
-const SUMMARY_PROJECTION = `{
-  orderNumber,
-  status,
-  createdAt,
-  "lastUpdatedAt": coalesce(_updatedAt, createdAt),
-  total,
-  currency,
-  currencyCode,
-  paymentStatus,
-  paymentMethod,
-  "itemsCount": count(items),
-  "firstItemImage": items[0].image,
-  "firstItemName": items[0].name
-}`
-
-/**
- * تفاصيل الطلب الكاملة المسموح عرضها للعميل صاحب الجلسة.
- * الحقول الحساسة مستثناة: الإحداثيات، دقة الموقع، إثبات الحوالة،
- * الملاحظات الإدارية، سجل الموظفين، هاتف المندوب، وأي رموز أو مفاتيح.
- */
-const DETAIL_PROJECTION = `{
-  orderNumber,
-  status,
-  createdAt,
-  "lastUpdatedAt": coalesce(_updatedAt, createdAt),
-  paymentStatus,
-  paymentMethod,
-  customerName,
-  phone,
-  city,
-  address,
-  customerNote,
-  shippingMethod,
-  shippingPrice,
-  discount,
-  subtotal,
-  total,
-  currency,
-  currencyCode,
-  deliveredAt,
-  courierAssignedAt,
-  "courierName": courierSnapshot.name,
-  "items": items[]{
-    productNumber,
-    sku,
-    image,
-    name,
-    size,
-    color,
-    quantity,
-    price,
-    lineTotal
-  },
-  "statusTimeline": statusHistory[]{ "status": to, changedAt }
-}`
-
-/** عنصر واحد في قائمة "طلباتي". */
 export type CustomerOrderSummary = {
   orderNumber: string
   status: string
@@ -87,7 +22,6 @@ export type CustomerOrderSummary = {
   firstItemName: string | null
 }
 
-/** تفاصيل طلب واحد كما تُعرض لصاحبه. */
 export type CustomerOrderDetail = {
   orderNumber: string
   status: string
@@ -124,73 +58,106 @@ export type CustomerOrderDetail = {
   statusTimeline: Array<{ status: string; changedAt: string }>
 }
 
+export type OrderOwner = { id: string; phone: string }
+
 const MAX_ORDER_NUMBER_LENGTH = 40
 
-/**
- * شرط الملكية المشترك: الطلب يخص العميل إن طابق customerId جلسته،
- * أو (للطلبات القديمة بلا customerId) طابق رقمه المحلي رقم هاتف العميل.
- * كل من $customerId و$phone مشتقّان من الجلسة على الخادم.
- */
-const OWNERSHIP_FILTER = `(
-  customerId == $customerId ||
-  (!defined(customerId) && defined(customerPhoneNormalized) && customerPhoneNormalized == $phone)
-)`
+const owns = (owner: OrderOwner) =>
+  or(eq(orders.customerId, owner.id), and(isNull(orders.customerId), eq(orders.customerPhoneNormalized, owner.phone)))
 
-/** يجلب كل طلبات العميل من الأحدث إلى الأقدم. */
-export async function listOrdersByCustomerId(
-  customerId: string,
-  phone: string,
-): Promise<CustomerOrderSummary[]> {
-  if (!ordersClient) return []
+const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null)
 
+export async function countOrdersForCustomer(owner: OrderOwner): Promise<number> {
+  if (!isDbConfigured()) return 0
+  const [row] = await db.select({ n: count() }).from(orders).where(owns(owner))
+  return row?.n ?? 0
+}
+
+export async function listOrdersForCustomer(owner: OrderOwner): Promise<CustomerOrderSummary[]> {
+  if (!isDbConfigured()) return []
   try {
-    const orders = await ordersClient.fetch<CustomerOrderSummary[] | null>(
-      `*[_type == "order" && ${OWNERSHIP_FILTER}] | order(createdAt desc) ${SUMMARY_PROJECTION}`,
-      { customerId, phone },
-      { cache: "no-store" },
-    )
-    return Array.isArray(orders) ? orders : []
+    const rows = await db.select().from(orders).where(owns(owner)).orderBy(desc(orders.createdAt))
+    if (rows.length === 0) return []
+    const items = await db
+      .select()
+      .from(orderItems)
+      .where(inArray(orderItems.orderId, rows.map((r) => r.id)))
+      .orderBy(asc(orderItems.orderId), asc(orderItems.position))
+    return rows.map((o) => {
+      const mine = items.filter((i) => i.orderId === o.id)
+      return {
+        orderNumber: o.orderNumber,
+        status: o.status,
+        createdAt: iso(o.createdAt),
+        lastUpdatedAt: iso(o.updatedAt),
+        total: o.total,
+        currency: o.currencySymbol,
+        currencyCode: o.currencyCode,
+        paymentStatus: o.paymentStatus,
+        paymentMethod: o.paymentMethod,
+        itemsCount: mine.length,
+        firstItemImage: mine[0]?.imageUrl ?? null,
+        firstItemName: mine[0]?.name ?? null,
+      }
+    })
   } catch {
-    console.log("[v0] listOrdersByCustomerId query failed")
+    console.log("listOrdersForCustomer query failed")
     return []
   }
 }
 
-/**
- * يجلب طلباً واحداً برقمه، لكن فقط إن كان مملوكاً لصاحب الجلسة.
- * رقم الطلب يأتي من الرابط (مدخل عميل) لكنه لا يكفي وحده: الاستعلام
- * يشترط الملكية عبر معرّف الجلسة، فلا يُعاد أي طلب لا يخص العميل.
- */
-export async function getOrderForCustomer(
-  customerId: string,
-  phone: string,
-  orderNumber: string,
-): Promise<CustomerOrderDetail | null> {
-  if (!ordersClient) return null
-
+export async function getOrderForCustomer(owner: OrderOwner, orderNumber: string): Promise<CustomerOrderDetail | null> {
+  if (!isDbConfigured()) return null
   const normalized = orderNumber.trim().slice(0, MAX_ORDER_NUMBER_LENGTH).toUpperCase()
   if (!normalized) return null
-
   try {
-    const order = await ordersClient.fetch<CustomerOrderDetail | null>(
-      `*[_type == "order" && upper(orderNumber) == $orderNumber && ${OWNERSHIP_FILTER}][0] ${DETAIL_PROJECTION}`,
-      { orderNumber: normalized, customerId, phone },
-      { cache: "no-store" },
-    )
-    if (!order) return null
-
-    // تنظيف الخط الزمني إلى مدخلات صالحة فقط.
-    const statusTimeline = (order.statusTimeline ?? []).filter(
-      (entry): entry is { status: string; changedAt: string } =>
-        typeof entry?.status === "string" &&
-        entry.status.length > 0 &&
-        typeof entry?.changedAt === "string" &&
-        entry.changedAt.length > 0,
-    )
-
-    return { ...order, statusTimeline }
+    const [o] = await db
+      .select()
+      .from(orders)
+      .where(and(sql`upper(${orders.orderNumber}) = ${normalized}`, owns(owner)))
+      .limit(1)
+    if (!o) return null
+    const [items, history] = await Promise.all([
+      db.select().from(orderItems).where(eq(orderItems.orderId, o.id)).orderBy(asc(orderItems.position)),
+      db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, o.id)).orderBy(asc(orderStatusHistory.changedAt)),
+    ])
+    return {
+      orderNumber: o.orderNumber,
+      status: o.status,
+      createdAt: iso(o.createdAt),
+      lastUpdatedAt: iso(o.updatedAt),
+      paymentStatus: o.paymentStatus,
+      paymentMethod: o.paymentMethod,
+      customerName: o.customerName,
+      phone: o.phone,
+      city: o.city,
+      address: o.address,
+      customerNote: o.customerNote,
+      shippingMethod: o.shippingMethod,
+      shippingPrice: o.shippingPrice,
+      discount: o.discount,
+      subtotal: o.subtotal,
+      total: o.total,
+      currency: o.currencySymbol,
+      currencyCode: o.currencyCode,
+      deliveredAt: iso(o.deliveredAt),
+      courierAssignedAt: iso(o.courierAssignedAt),
+      courierName: o.courierSnapshot?.name ?? null,
+      items: items.map((i) => ({
+        productNumber: i.productNumber,
+        sku: i.sku,
+        image: i.imageUrl,
+        name: i.name,
+        size: i.size,
+        color: i.color,
+        quantity: i.quantity,
+        price: i.price,
+        lineTotal: i.price * i.quantity,
+      })),
+      statusTimeline: history.map((h) => ({ status: h.toStatus, changedAt: h.changedAt.toISOString() })),
+    }
   } catch {
-    console.log("[v0] getOrderForCustomer query failed")
+    console.log("getOrderForCustomer query failed")
     return null
   }
 }

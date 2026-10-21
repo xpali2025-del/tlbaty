@@ -1,6 +1,15 @@
 import "server-only"
-
-import { ordersClient } from "@/sanity/orders/client"
+import { and, asc, count, desc, eq, exists, gte, inArray, lte, or, sql, type SQL } from "drizzle-orm"
+import { db } from "@/lib/db/client"
+import { isDbConfigured } from "@/lib/db-cache"
+import {
+  customers,
+  orderItems,
+  orderPaymentProofs,
+  orderPaymentStatusHistory,
+  orderStatusHistory,
+  orders,
+} from "@/lib/db/store"
 import type {
   PaymentAccountSnapshot,
   PaymentMethod,
@@ -17,12 +26,8 @@ import type { CourierSnapshot } from "@/lib/courier"
 import { customerKey } from "@/lib/phone"
 
 // ============================================
-// طبقة قراءة الطلبات للوحة الإدارة (/manage)
-// تجلب الطلبات من مشروع Sanity المستقل الخاص بالطلبات.
-//
-// الأداء: كل الاستعلامات محددة الحقول، والطلبات تُجلب على دفعات مرقّمة
-// (لا نحمّل كل الطلبات دفعة واحدة)، والعدّادات وتقسيم المدن يُحسبان
-// من استعلام واحد خفيف — بلا استعلام لكل طلب.
+// طبقة قراءة الطلبات للوحة الإدارة على PostgreSQL. بلا كاش (بيانات حيّة).
+// _id هو UUID الطلب. بلا DATABASE_URL تعيد صفحة/إحصاءات فارغة آمنة.
 // ============================================
 
 export type { OrderStatus }
@@ -98,49 +103,6 @@ export type AdminOrder = {
 }
 
 /** حقول الطلب الكاملة — تُستخدم في صفحة واحدة فقط من الطلبات. */
-const ORDER_FIELDS = /* groq */ `
-  _id, orderNumber, "rawStatus": status, customerId, customerName, phone, city, address,
-  "customerLocation": { "lat": customerLocation.lat, "lng": customerLocation.lng },
-  locationAccuracy, locationCapturedAt, addressSource,
-  "items": coalesce(items[]{ productId, productNumber, sku, image, name, size, color, quantity, price, lineTotal }, []),
-  customerNote,
-  shippingMethod, shippingPrice, couponCode, discount, subtotal, total, currency, createdAt,
-  "courierSnapshot": {
-    "courierId": coalesce(courierSnapshot.courierId, courier._ref),
-    "name": coalesce(courierSnapshot.name, courier->name),
-    "phone": coalesce(courierSnapshot.phone, courier->phone)
-  },
-  courierAssignedAt, deliveredAt,
-  "statusHistory": coalesce(statusHistory[]{ from, to, changedAt, changedBy, note }, []),
-  paymentMethod, paymentStatus,
-  "paymentAccountSnapshot": paymentAccountSnapshot{
-    sourceDocumentId, providerName, accountDisplayName, accountHolderName, accountNumber, imageUrl
-  },
-  transferSenderName, transferReference, transferSubmittedAt,
-  "hasPaymentProof": defined(paymentProof.asset.asset._ref),
-  "paymentProofUploadedAt": paymentProof.uploadedAt,
-  paymentVerifiedAt, paymentRejectedAt, paymentRejectionReason, paymentAdminNote,
-  "duplicateTransferReference": coalesce(duplicateTransferReference, false),
-  "paymentStatusHistory": coalesce(paymentStatusHistory[]{ status, changedAt, changedBy, note }, [])
-`
-
-/**
- * القيم الخام المقبولة لكل حالة — تشمل الأسماء القديمة
- * حتى تظهر الطلبات السابقة عند التصفية بالحالة الجديدة.
- */
-const STATUS_RAW_VALUES: Record<OrderStatus, string[]> = {
-  new: ["new"],
-  confirmed: ["confirmed"],
-  processing: ["processing"],
-  ready: ["ready"],
-  assigned: ["assigned"],
-  on_the_way: ["on_the_way", "shipped"],
-  delivered: ["delivered", "completed"],
-  failed: ["failed"],
-  cancelled: ["cancelled"],
-  returned: ["returned"],
-}
-
 export type OrderSortKey = "newest" | "oldest" | "total-desc" | "total-asc"
 
 export type OrderFilters = {
@@ -161,158 +123,12 @@ export type OrderFilters = {
   sort?: OrderSortKey
 }
 
-const HAS_COURIER = `(defined(courierSnapshot.courierId) || defined(courier._ref))`
-
-const SORT_CLAUSES: Record<OrderSortKey, string> = {
-  newest: "createdAt desc",
-  oldest: "createdAt asc",
-  "total-desc": "total desc",
-  "total-asc": "total asc",
-}
-
-/** يبني شروط GROQ ومعاملاتها من الفلاتر — بلا أي دمج نصوص من المستخدم. */
-function buildFilter(filters: OrderFilters): {
-  clause: string
-  params: Record<string, unknown>
-} {
-  const conditions: string[] = [`_type == "order"`]
-  const params: Record<string, unknown> = {}
-
-  const status = filters.status
-  if (status && status !== "all") {
-    params.statusValues = STATUS_RAW_VALUES[status]
-    // "new" تشمل الطلبات القديمة التي لا تحمل حقل حالة إطلاقاً.
-    conditions.push(
-      status === "new"
-        ? `(!defined(status) || status in $statusValues)`
-        : `status in $statusValues`,
-    )
-  }
-
-  if (filters.paymentStatus && filters.paymentStatus !== "all") {
-    params.paymentStatus = filters.paymentStatus
-    conditions.push(`paymentStatus == $paymentStatus`)
-  }
-
-  if (filters.paymentMethod && filters.paymentMethod !== "all") {
-    params.paymentMethod = filters.paymentMethod
-    conditions.push(`paymentMethod == $paymentMethod`)
-  }
-
-  const city = (filters.city ?? "").trim()
-  if (city) {
-    params.city = city
-    conditions.push(`city == $city`)
-  }
-
-  if (filters.unassignedOnly) {
-    conditions.push(`!${HAS_COURIER}`)
-  } else {
-    const courierId = (filters.courierId ?? "").trim()
-    if (courierId) {
-      params.courierId = courierId
-      conditions.push(`coalesce(courierSnapshot.courierId, courier._ref) == $courierId`)
-    }
-  }
-
-  if (filters.dateFrom) {
-    params.dateFrom = `${filters.dateFrom}T00:00:00Z`
-    conditions.push(`createdAt >= $dateFrom`)
-  }
-  if (filters.dateTo) {
-    params.dateTo = `${filters.dateTo}T23:59:59Z`
-    conditions.push(`createdAt <= $dateTo`)
-  }
-  if (filters.deliveredFrom) {
-    params.deliveredFrom = `${filters.deliveredFrom}T00:00:00Z`
-    conditions.push(`deliveredAt >= $deliveredFrom`)
-  }
-  if (filters.deliveredTo) {
-    params.deliveredTo = `${filters.deliveredTo}T23:59:59Z`
-    conditions.push(`deliveredAt <= $deliveredTo`)
-  }
-
-  const search = (filters.search ?? "").trim().slice(0, 120)
-  if (search) {
-    params.q = `*${search}*`
-    // البحث برقم المنتج يعمل أيضاً على الطلبات القديمة بلا لقطة رقم:
-    // نطابق الجزء المشتق من معرّف المنتج بعد إزالة البادئة.
-    params.qBare = `*${search.replace(/^tj-/i, "")}*`
-    conditions.push(
-      `(orderNumber match $q || customerName match $q || phone match $q ||
-        transferReference match $q || courierSnapshot.name match $q ||
-        count(items[productNumber match $q]) > 0 ||
-        count(items[sku match $q]) > 0 ||
-        count(items[name match $q]) > 0 ||
-        count(items[productId match $qBare]) > 0)`,
-    )
-  }
-
-  return { clause: conditions.join(" && "), params }
-}
-
 export type OrdersPage = {
   orders: AdminOrder[]
   total: number
   /** هل يوجد المزيد بعد هذه الدفعة؟ */
   hasMore: boolean
 }
-
-const EMPTY_PAGE: OrdersPage = { orders: [], total: 0, hasMore: false }
-
-type RawOrder = Omit<AdminOrder, "status"> & { rawStatus?: string }
-
-function hydrate(raw: RawOrder): AdminOrder {
-  const courier = raw.courierSnapshot
-  const hasCourier = Boolean((courier?.courierId ?? "").trim())
-  return {
-    ...raw,
-    status: normalizeOrderStatus(raw.rawStatus),
-    courierSnapshot: hasCourier ? courier : undefined,
-    items: Array.isArray(raw.items) ? raw.items : [],
-  }
-}
-
-/**
- * يجلب دفعة واحدة من الطلبات مع العدد الكلي المطابق للفلاتر،
- * في استعلام واحد. يعيد دفعة فارغة إن لم يُضبط مشروع الطلبات.
- */
-export async function getAdminOrdersPage(
-  filters: OrderFilters = {},
-  page = 0,
-  pageSize = ORDERS_PAGE_SIZE,
-): Promise<OrdersPage> {
-  if (!ordersClient) return EMPTY_PAGE
-
-  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 0
-  const safeSize = Math.min(Math.max(Math.floor(pageSize) || ORDERS_PAGE_SIZE, 1), 100)
-  const { clause, params } = buildFilter(filters)
-  const sort = SORT_CLAUSES[filters.sort ?? "newest"]
-  const offset = safePage * safeSize
-
-  const query = /* groq */ `{
-    "orders": *[${clause}] | order(${sort}) [$offset...$end]{ ${ORDER_FIELDS} },
-    "total": count(*[${clause}])
-  }`
-
-  try {
-    const result = await ordersClient.fetch<{ orders: RawOrder[]; total: number }>(
-      query,
-      { ...params, offset, end: offset + safeSize },
-      { cache: "no-store" },
-    )
-    const orders = (result?.orders ?? []).map(hydrate)
-    const total = typeof result?.total === "number" ? result.total : orders.length
-    return { orders, total, hasMore: offset + orders.length < total }
-  } catch (error) {
-    console.error("[v0] getAdminOrdersPage failed:", error)
-    return EMPTY_PAGE
-  }
-}
-
-// ============================================
-// الإحصائيات وتقسيم المدن — استعلام واحد خفيف الحقول
-// ============================================
 
 export type OrderStatusCounts = Record<OrderStatus, number> & { all: number }
 
@@ -353,53 +169,228 @@ export const EMPTY_ORDER_STATS: OrderStats = {
   total: 0,
 }
 
-type StatsRow = {
-  status?: string
-  paymentStatus?: string
-  city?: string
-  customerId?: string
-  phone?: string
-  hasCourier?: boolean
+
+/** للطلب مندوب إن وُجد ربط حيّ أو لقطة محفوظة (تبقى اللقطة إن حُذف المندوب لاحقاً). */
+const hasCourierSql = sql`(${orders.courierId} is not null or ${orders.courierSnapshot}->>'courierId' is not null)`
+const courierIdSql = sql`coalesce(${orders.courierSnapshot}->>'courierId', ${orders.courierId}::text)`
+
+const SORTS: Record<OrderSortKey, SQL> = {
+  newest: desc(orders.createdAt),
+  oldest: asc(orders.createdAt),
+  "total-desc": desc(orders.total),
+  "total-asc": asc(orders.total),
 }
 
-const STATS_QUERY = /* groq */ `*[_type == "order"]{
-  status, paymentStatus, city, customerId, phone,
-  "hasCourier": ${HAS_COURIER}
-}`
+/** يهرب محارف LIKE الخاصة حتى يُبحث عنها كنص عادي. */
+const likePattern = (value: string) => `%${value.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
 
-/**
- * يحسب كل عدّادات الملخص وتقسيم المدن من استعلام واحد يعيد
- * ستة حقول صغيرة لكل طلب — لا يجلب المنتجات ولا بيانات الدفع.
- */
-export async function getAdminOrderStats(): Promise<OrderStats> {
-  if (!ordersClient) return EMPTY_ORDER_STATS
+function buildWhere(filters: OrderFilters): SQL | undefined {
+  const conditions: (SQL | undefined)[] = []
 
-  let rows: StatsRow[] = []
+  if (filters.status && filters.status !== "all") conditions.push(eq(orders.status, filters.status))
+  if (filters.paymentStatus && filters.paymentStatus !== "all") conditions.push(eq(orders.paymentStatus, filters.paymentStatus))
+  if (filters.paymentMethod && filters.paymentMethod !== "all") conditions.push(eq(orders.paymentMethod, filters.paymentMethod))
+
+  const city = (filters.city ?? "").trim()
+  if (city) conditions.push(eq(orders.city, city))
+
+  if (filters.unassignedOnly) {
+    conditions.push(sql`not ${hasCourierSql}`)
+  } else {
+    const courierId = (filters.courierId ?? "").trim()
+    if (courierId) conditions.push(sql`${courierIdSql} = ${courierId}`)
+  }
+
+  if (filters.dateFrom) conditions.push(gte(orders.createdAt, new Date(`${filters.dateFrom}T00:00:00Z`)))
+  if (filters.dateTo) conditions.push(lte(orders.createdAt, new Date(`${filters.dateTo}T23:59:59Z`)))
+  if (filters.deliveredFrom) conditions.push(gte(orders.deliveredAt, new Date(`${filters.deliveredFrom}T00:00:00Z`)))
+  if (filters.deliveredTo) conditions.push(lte(orders.deliveredAt, new Date(`${filters.deliveredTo}T23:59:59Z`)))
+
+  const search = (filters.search ?? "").trim().slice(0, 120)
+  if (search) {
+    const q = likePattern(search)
+    const bare = likePattern(search.replace(/^tj-/i, ""))
+    conditions.push(
+      or(
+        sql`${orders.orderNumber} ilike ${q}`,
+        sql`${orders.customerName} ilike ${q}`,
+        sql`${orders.phone} ilike ${q}`,
+        sql`${orders.transferReference} ilike ${q}`,
+        sql`${orders.courierSnapshot}->>'name' ilike ${q}`,
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(orderItems)
+            .where(
+              and(
+                eq(orderItems.orderId, orders.id),
+                or(
+                  sql`${orderItems.productNumber} ilike ${q}`,
+                  sql`${orderItems.sku} ilike ${q}`,
+                  sql`${orderItems.name} ilike ${q}`,
+                  sql`${orderItems.productRef} ilike ${bare}`,
+                ),
+              ),
+            ),
+        ),
+      ),
+    )
+  }
+
+  return and(...conditions)
+}
+
+const EMPTY_PAGE: OrdersPage = { orders: [], total: 0, hasMore: false }
+
+const iso = (d: Date | null | undefined) => (d ? d.toISOString() : undefined)
+const opt = <T,>(v: T | null | undefined): T | undefined => v ?? undefined
+
+export async function getAdminOrdersPage(
+  filters: OrderFilters = {},
+  page = 0,
+  pageSize = ORDERS_PAGE_SIZE,
+): Promise<OrdersPage> {
+  if (!isDbConfigured()) return EMPTY_PAGE
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 0
+  const safeSize = Math.min(Math.max(Math.floor(pageSize) || ORDERS_PAGE_SIZE, 1), 100)
+  const where = buildWhere(filters)
+  const offset = safePage * safeSize
+
   try {
-    rows = await ordersClient.fetch<StatsRow[]>(STATS_QUERY, {}, { cache: "no-store" })
+    const [rows, [{ n }]] = await Promise.all([
+      db
+        .select({ o: orders, customerPublicId: customers.publicId })
+        .from(orders)
+        .leftJoin(customers, eq(customers.id, orders.customerId))
+        .where(where)
+        .orderBy(SORTS[filters.sort ?? "newest"], desc(orders.id))
+        .limit(safeSize)
+        .offset(offset),
+      db.select({ n: count() }).from(orders).where(where),
+    ])
+    if (rows.length === 0) return { orders: [], total: n, hasMore: false }
+
+    const ids = rows.map((r) => r.o.id)
+    const [items, statusHistory, paymentHistory, proofs] = await Promise.all([
+      db.select().from(orderItems).where(inArray(orderItems.orderId, ids)).orderBy(asc(orderItems.orderId), asc(orderItems.position)),
+      db.select().from(orderStatusHistory).where(inArray(orderStatusHistory.orderId, ids)).orderBy(asc(orderStatusHistory.changedAt)),
+      db.select().from(orderPaymentStatusHistory).where(inArray(orderPaymentStatusHistory.orderId, ids)).orderBy(asc(orderPaymentStatusHistory.changedAt)),
+      db.select({ orderId: orderPaymentProofs.orderId, uploadedAt: orderPaymentProofs.uploadedAt }).from(orderPaymentProofs).where(inArray(orderPaymentProofs.orderId, ids)),
+    ])
+
+    const result = rows.map(({ o, customerPublicId }): AdminOrder => {
+      const proof = proofs.find((p) => p.orderId === o.id)
+      const snap = o.courierSnapshot
+      const hasCourier = Boolean((snap?.courierId ?? o.courierId ?? "").trim())
+      return {
+        _id: o.id,
+        orderNumber: o.orderNumber,
+        status: normalizeOrderStatus(o.status),
+        rawStatus: o.status,
+        customerId: opt(customerPublicId),
+        customerName: o.customerName,
+        phone: o.phone,
+        city: opt(o.city),
+        address: opt(o.address),
+        customerLocation:
+          o.latitude !== null && o.longitude !== null ? { lat: o.latitude, lng: o.longitude } : undefined,
+        locationAccuracy: opt(o.locationAccuracy),
+        locationCapturedAt: iso(o.locationCapturedAt),
+        addressSource: opt(o.addressSource),
+        items: items
+          .filter((i) => i.orderId === o.id)
+          .map((i) => ({
+            productId: opt(i.productRef),
+            productNumber: opt(i.productNumber),
+            sku: opt(i.sku),
+            image: opt(i.imageUrl),
+            name: i.name,
+            size: opt(i.size),
+            color: opt(i.color),
+            quantity: i.quantity,
+            price: i.price,
+            lineTotal: i.price * i.quantity,
+          })),
+        customerNote: opt(o.customerNote),
+        shippingMethod: opt(o.shippingMethod),
+        shippingPrice: o.shippingPrice,
+        couponCode: opt(o.couponCode),
+        discount: o.discount,
+        subtotal: o.subtotal,
+        total: o.total,
+        currency: opt(o.currencySymbol),
+        createdAt: iso(o.createdAt),
+        courierSnapshot: hasCourier
+          ? { courierId: snap?.courierId ?? o.courierId ?? undefined, name: snap?.name, phone: snap?.phone }
+          : undefined,
+        courierAssignedAt: iso(o.courierAssignedAt),
+        deliveredAt: iso(o.deliveredAt),
+        statusHistory: statusHistory
+          .filter((h) => h.orderId === o.id)
+          .map((h) => ({ from: opt(h.fromStatus), to: h.toStatus, changedAt: iso(h.changedAt), changedBy: opt(h.changedBy), note: opt(h.note) })),
+        paymentMethod: o.paymentMethod,
+        paymentStatus: o.paymentStatus,
+        paymentAccountSnapshot: opt(o.paymentAccountSnapshot) as PaymentAccountSnapshot | undefined,
+        transferSenderName: opt(o.transferSenderName),
+        transferReference: opt(o.transferReference),
+        transferSubmittedAt: iso(o.transferSubmittedAt),
+        hasPaymentProof: Boolean(proof),
+        paymentProofUploadedAt: iso(proof?.uploadedAt),
+        paymentVerifiedAt: iso(o.paymentVerifiedAt),
+        paymentRejectedAt: iso(o.paymentRejectedAt),
+        paymentRejectionReason: opt(o.paymentRejectionReason),
+        paymentAdminNote: opt(o.paymentAdminNote),
+        duplicateTransferReference: o.duplicateTransferReference,
+        paymentStatusHistory: paymentHistory
+          .filter((h) => h.orderId === o.id)
+          .map((h) => ({ status: h.status, changedAt: iso(h.changedAt), changedBy: opt(h.changedBy), note: opt(h.note) })),
+      }
+    })
+    return { orders: result, total: n, hasMore: offset + result.length < n }
   } catch (error) {
-    console.error("[v0] getAdminOrderStats failed:", error)
+    console.error("getAdminOrdersPage failed:", error instanceof Error ? error.message : "unknown")
+    return EMPTY_PAGE
+  }
+}
+
+/** لوحة الأرقام: عدّ حسب الحالة والدفع والمدينة، مع عدد العملاء المميّزين في كل مدينة. */
+export async function getAdminOrderStats(): Promise<OrderStats> {
+  if (!isDbConfigured()) return EMPTY_ORDER_STATS
+  let rows: {
+    status: string
+    paymentStatus: string
+    city: string | null
+    customerPublicId: string | null
+    phone: string
+    hasCourier: boolean
+  }[] = []
+  try {
+    rows = await db
+      .select({
+        status: orders.status,
+        paymentStatus: orders.paymentStatus,
+        city: orders.city,
+        customerPublicId: customers.publicId,
+        phone: orders.phone,
+        hasCourier: sql<boolean>`${hasCourierSql}`,
+      })
+      .from(orders)
+      .leftJoin(customers, eq(customers.id, orders.customerId))
+  } catch (error) {
+    console.error("getAdminOrderStats failed:", error instanceof Error ? error.message : "unknown")
     return EMPTY_ORDER_STATS
   }
 
   const statusCounts = emptyStatusCounts()
   const paymentCounts: Record<string, number> = {}
   let unassigned = 0
+  const cityMap = new Map<string, { counts: Omit<CityStats, "city" | "customers">; customers: Set<string> }>()
 
-  // نجمع لكل مدينة عدّاداتها ومجموعة مفاتيح عملائها الفريدة.
-  const cityMap = new Map<
-    string,
-    { counts: Omit<CityStats, "city" | "customers">; customers: Set<string> }
-  >()
-
-  for (const row of rows ?? []) {
+  for (const row of rows) {
     const status = normalizeOrderStatus(row.status)
     statusCounts.all += 1
     statusCounts[status] += 1
-
-    if (row.paymentStatus) {
-      paymentCounts[row.paymentStatus] = (paymentCounts[row.paymentStatus] ?? 0) + 1
-    }
+    paymentCounts[row.paymentStatus] = (paymentCounts[row.paymentStatus] ?? 0) + 1
 
     const isUnassigned = !row.hasCourier
     if (isUnassigned) unassigned += 1
@@ -407,10 +398,7 @@ export async function getAdminOrderStats(): Promise<OrderStats> {
     const city = (row.city ?? "").trim() || "بلا مدينة"
     let entry = cityMap.get(city)
     if (!entry) {
-      entry = {
-        counts: { total: 0, newOrders: 0, unassigned: 0, onTheWay: 0, delivered: 0 },
-        customers: new Set<string>(),
-      }
+      entry = { counts: { total: 0, newOrders: 0, unassigned: 0, onTheWay: 0, delivered: 0 }, customers: new Set<string>() }
       cityMap.set(city, entry)
     }
     entry.counts.total += 1
@@ -419,8 +407,7 @@ export async function getAdminOrderStats(): Promise<OrderStats> {
     if (status === "on_the_way") entry.counts.onTheWay += 1
     if (status === "delivered") entry.counts.delivered += 1
 
-    // العميل يُعرف بـ customerId إن وُجد، وإلا بالهاتف الموحّد.
-    const key = customerKey({ customerId: row.customerId, phone: row.phone })
+    const key = customerKey({ customerId: row.customerPublicId ?? undefined, phone: row.phone })
     if (key) entry.customers.add(key)
   }
 

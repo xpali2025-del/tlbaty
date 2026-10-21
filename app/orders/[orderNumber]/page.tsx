@@ -86,11 +86,7 @@ export default async function OrderDetailPage({
 
   // رقم الطلب يأتي من الرابط لكنه لا يكفي: الاستعلام يشترط ملكية العميل
   // عبر معرّف الجلسة، فلا يُعاد أي طلب لا يخص صاحب الجلسة.
-  const order = await getOrderForCustomer(
-    customer.publicId,
-    customer.phone ?? "",
-    decodeURIComponent(orderNumber),
-  )
+  const order = await getOrderForCustomer(customer, decodeURIComponent(orderNumber))
   if (!order) {
     notFound()
   }

@@ -90,7 +90,10 @@ export const orderItems = store.table('order_items', {
   orderId: uuid('order_id').notNull().references(() => orders.id, { onDelete: 'cascade' }),
   /** Nullable so deleting a product keeps the order history (the snapshot columns remain). */
   productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+  /** Display number (TJ-XXXXXXXX), derived from the product id at order time. */
   productNumber: text('product_number'),
+  /** The product id (products.product_number) at order time; survives deleting the product. */
+  productRef: text('product_ref'),
   sku: text('sku'),
   imageUrl: text('image_url'),
   name: text('name').notNull(),
@@ -98,8 +101,10 @@ export const orderItems = store.table('order_items', {
   color: text('color'),
   quantity: integer('quantity').notNull(),
   price: money('price').notNull(),
+  /** Order of the line as the customer placed it (the first line is shown in summaries). */
+  position: integer('position').notNull().default(0),
 }, (t) => [
-  index('order_items_order_idx').on(t.orderId),
+  index('order_items_order_idx').on(t.orderId, t.position),
   index('order_items_product_idx').on(t.productId).where(sql`${t.productId} is not null`),
   check('order_items_quantity_positive', sql`${t.quantity} > 0`),
   check('order_items_price_nonneg', sql`${t.price} >= 0`),
@@ -126,6 +131,7 @@ export const orderStatusHistory = store.table('order_status_history', {
   toStatus: orderStatus('to_status').notNull(),
   changedAt: at('changed_at').notNull().defaultNow(),
   changedBy: text('changed_by'),
+  note: text('note'),
 }, (t) => [index('order_status_history_order_idx').on(t.orderId, t.changedAt)])
 
 export const orderPaymentStatusHistory = store.table('order_payment_status_history', {
@@ -134,4 +140,5 @@ export const orderPaymentStatusHistory = store.table('order_payment_status_histo
   status: paymentStatus('status').notNull(),
   changedAt: at('changed_at').notNull().defaultNow(),
   changedBy: text('changed_by'),
+  note: text('note'),
 }, (t) => [index('order_payment_status_history_order_idx').on(t.orderId, t.changedAt)])

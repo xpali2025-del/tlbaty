@@ -1,20 +1,18 @@
+import { eq } from "drizzle-orm"
 import { NextResponse } from "next/server"
-import { ordersClient } from "@/sanity/orders/client"
+import { db } from "@/lib/db/client"
+import { isDbConfigured } from "@/lib/db-cache"
+import { orderPaymentProofs } from "@/lib/db/store"
 import { isManageAuthenticated } from "@/lib/manage-auth"
 import { decryptPaymentProof } from "@/lib/payment-proof"
-
-// ============================================
-// مسار محمي لعرض إثبات الحوالة داخل لوحة الإدارة فقط.
-//
-// - يتحقق من جلسة مدير /manage قبل أي شيء.
-// - يجلب الملف المشفّر من مشروع الطلبات باستخدام توكن الخادم.
-// - يفكّ التشفير في الخادم ويعيد الصورة فقط.
-// - لا يعيد رابط Sanity الخام ولا المفتاح ولا IV/AuthTag.
-// ============================================
+import { getPaymentProof } from "@/lib/storage/proofs"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// ترويسات أمنية صارمة: لا كاش أبداً، ومنع المسح التلقائي للنوع، وعزل المحتوى.
 const SECURITY_HEADERS: Record<string, string> = {
   "Cache-Control": "private, no-store, max-age=0, must-revalidate",
   "X-Content-Type-Options": "nosniff",
@@ -23,98 +21,48 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; sandbox",
 }
 
-type ProofDoc = {
-  paymentProof?: {
-    iv?: string
-    authTag?: string
-    keyVersion?: string
-    originalMimeType?: string
-    processedMimeType?: string
-    assetUrl?: string
-  } | null
-}
+const json = (body: Record<string, unknown>, status: number) =>
+  NextResponse.json(body, { status, headers: SECURITY_HEADERS })
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ orderId: string }> },
-) {
+/**
+ * تنزيل/عرض إثبات الدفع لطلب معيّن — لمديري اللوحة فقط.
+ * يقرأ الملف المشفَّر من التخزين الخاص ويفك تشفيره على الخادم؛ لا يوجد أي رابط عام للملف.
+ */
+export async function GET(req: Request, { params }: { params: Promise<{ orderId: string }> }) {
   if (!(await isManageAuthenticated())) {
-    return NextResponse.json(
-      { ok: false, error: "UNAUTHORIZED", message: "غير مصرّح." },
-      { status: 401, headers: SECURITY_HEADERS },
-    )
+    return json({ ok: false, error: "UNAUTHORIZED", message: "غير مصرّح." }, 401)
   }
 
   const { orderId } = await params
-  if (!orderId || !ordersClient) {
-    return NextResponse.json(
-      { ok: false, error: "NOT_FOUND", message: "الطلب غير موجود." },
-      { status: 404, headers: SECURITY_HEADERS },
-    )
+  if (!orderId || !UUID.test(orderId) || !isDbConfigured()) {
+    return json({ ok: false, error: "NOT_FOUND", message: "الطلب غير موجود." }, 404)
   }
 
-  let doc: ProofDoc | null = null
+  let proof: typeof orderPaymentProofs.$inferSelect | undefined
   try {
-    doc = await ordersClient.fetch<ProofDoc | null>(
-      `*[_type == "order" && _id == $id][0]{
-        "paymentProof": paymentProof{
-          iv, authTag, keyVersion, originalMimeType, processedMimeType,
-          "assetUrl": asset.asset->url
-        }
-      }`,
-      { id: orderId },
-      { cache: "no-store" },
-    )
+    ;[proof] = await db.select().from(orderPaymentProofs).where(eq(orderPaymentProofs.orderId, orderId)).limit(1)
   } catch {
-    return NextResponse.json(
-      { ok: false, error: "FETCH_FAILED", message: "تعذّر جلب إثبات الحوالة." },
-      { status: 500, headers: SECURITY_HEADERS },
-    )
+    return json({ ok: false, error: "FETCH_FAILED", message: "تعذّر جلب إثبات الحوالة." }, 500)
+  }
+  if (!proof) {
+    return json({ ok: false, error: "NO_PROOF", message: "لا يوجد إثبات حوالة لهذا الطلب." }, 404)
   }
 
-  const proof = doc?.paymentProof
-  if (!proof?.assetUrl || !proof.iv || !proof.authTag) {
-    return NextResponse.json(
-      { ok: false, error: "NO_PROOF", message: "لا يوجد إثبات حوالة لهذا الطلب." },
-      { status: 404, headers: SECURITY_HEADERS },
-    )
-  }
-
-  // الملف مخزّن على Sanity كملف مبهم — نجلبه بتوكن الخادم ثم نفكّ تشفيره.
-  const token = process.env.SANITY_ORDERS_TOKEN?.trim()
   let ciphertext: Buffer
   try {
-    const res = await fetch(proof.assetUrl, {
-      cache: "no-store",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-    if (!res.ok) throw new Error("asset-fetch-failed")
-    ciphertext = Buffer.from(await res.arrayBuffer())
+    ciphertext = await getPaymentProof(proof.objectKey)
   } catch {
-    return NextResponse.json(
-      { ok: false, error: "ASSET_FETCH_FAILED", message: "تعذّر تحميل ملف الإثبات." },
-      { status: 502, headers: SECURITY_HEADERS },
-    )
+    return json({ ok: false, error: "ASSET_FETCH_FAILED", message: "تعذّر تحميل ملف الإثبات." }, 502)
   }
 
   let image: Buffer
   try {
-    image = decryptPaymentProof({
-      ciphertext,
-      iv: proof.iv,
-      authTag: proof.authTag,
-      keyVersion: proof.keyVersion,
-    })
+    image = decryptPaymentProof({ ciphertext, iv: proof.iv, authTag: proof.authTag, keyVersion: proof.keyVersion })
   } catch {
-    // لا نطبع المفتاح ولا تفاصيل التشفير في السجلات.
-    return NextResponse.json(
-      { ok: false, error: "DECRYPT_FAILED", message: "تعذّر فك تشفير إثبات الحوالة." },
-      { status: 500, headers: SECURITY_HEADERS },
-    )
+    return json({ ok: false, error: "DECRYPT_FAILED", message: "تعذّر فك تشفير إثبات الحوالة." }, 500)
   }
 
   const download = new URL(req.url).searchParams.get("download") === "1"
-  // النوع الفعلي للصورة بعد المعالجة (WebP عادة، أو النوع الأصلي إن لم تُعالَج).
   const allowed = new Set(["image/webp", "image/jpeg", "image/png"])
   const candidate = proof.processedMimeType || proof.originalMimeType || "image/webp"
   const mimeType = allowed.has(candidate) ? candidate : "image/webp"
@@ -126,9 +74,7 @@ export async function GET(
       ...SECURITY_HEADERS,
       "Content-Type": mimeType,
       "Content-Length": String(image.byteLength),
-      "Content-Disposition": download
-        ? `attachment; filename="payment-proof-${orderId}.${extension}"`
-        : "inline",
+      "Content-Disposition": download ? `attachment; filename="payment-proof-${orderId}.${extension}"` : "inline",
     },
   })
 }

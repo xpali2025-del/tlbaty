@@ -38,6 +38,7 @@ import {
   updatePaymentAccountOrder,
 } from "../payment-accounts-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 function formatDate(iso?: string): string {
   if (!iso) return "-"
@@ -293,6 +294,7 @@ function PaymentAccountDialog({
     form.set("isActive", isActive ? "true" : "false")
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [{ name: "image", folder: "payment-accounts", keyName: "imageKey" }])
         await savePaymentAccount(account?._id ?? null, form)
         toast.success(account ? "تم تحديث الحساب" : "تمت إضافة الحساب")
         onOpenChange(false)

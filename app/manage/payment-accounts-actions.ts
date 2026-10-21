@@ -1,22 +1,12 @@
 "use server"
 
 import { revalidatePath, revalidateTag } from "next/cache"
-import { requireWriteClient } from "@/sanity/write-client"
-import { SANITY_TAGS } from "@/sanity/cache-tags"
+import { eq } from "drizzle-orm"
+import { CACHE_TAGS } from "@/lib/cache-tags"
+import { db } from "@/lib/db/client"
+import { paymentAccounts } from "@/lib/db/store"
 import { assertManageAuthenticated } from "@/lib/manage-auth"
-
-// ============================================
-// إجراءات حسابات الدفع في لوحة /manage
-// - كل الكتابة والرفع تتم على الخادم بتوكن مشروع المحتوى (SANITY_API_TOKEN).
-// - التوكن لا يُرسل إلى المتصفح إطلاقاً.
-// - كل إجراء يتحقق من جلسة مدير اللوحة أولاً (وليس على مستوى الواجهة فقط).
-// ============================================
-
-/** أنواع الصور المسموحة لشعار الحساب — لا SVG ولا ملفات تنفيذية. */
-const ALLOWED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
-const MAX_LOGO_BYTES = 3 * 1024 * 1024
-
-type ImageRef = { _type: "image"; asset: { _type: "reference"; _ref: string } }
+import { newImageKey, removeObjects, uuidParam } from "@/lib/manage-helpers"
 
 function str(form: FormData, key: string, max = 300): string | undefined {
   const value = form.get(key)
@@ -33,116 +23,82 @@ function intOrZero(form: FormData, key: string): number {
   return Math.min(9999, Math.max(0, Math.round(n)))
 }
 
-/** يرفع شعار الحساب إلى مشروع المحتوى بعد التحقق من نوعه وحجمه. */
-async function uploadLogo(form: FormData): Promise<ImageRef | undefined> {
-  const file = form.get("image")
-  if (!(file instanceof File) || file.size === 0) return undefined
-  if (!ALLOWED_LOGO_TYPES.has(file.type)) {
-    throw new Error("صيغة الصورة غير مدعومة. استخدم JPEG أو PNG أو WebP.")
-  }
-  if (file.size > MAX_LOGO_BYTES) {
-    throw new Error("حجم الصورة كبير. اختر صورة أصغر من 3 ميجابايت.")
-  }
-  const client = requireWriteClient()
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const asset = await client.assets.upload("image", buffer, { filename: file.name })
-  return { _type: "image", asset: { _type: "reference", _ref: asset._id } }
-}
-
-/** إبطال كاش صفحة الدفع فوراً بعد أي تعديل على الحسابات. */
 function revalidatePaymentAccounts() {
-  revalidateTag(SANITY_TAGS.paymentAccounts, { expire: 0 })
+  revalidateTag(CACHE_TAGS.paymentAccounts, { expire: 0 })
   revalidatePath("/checkout")
   revalidatePath("/manage")
   revalidatePath("/manage/payment-accounts")
 }
 
-/** إضافة حساب دفع جديد أو تعديل حساب قائم. */
 export async function savePaymentAccount(id: string | null, form: FormData) {
   await assertManageAuthenticated()
-  const client = requireWriteClient()
 
   const providerName = str(form, "providerName", 80)
   const accountHolderName = str(form, "accountHolderName", 120)
   const accountNumber = str(form, "accountNumber", 60)
-
   if (!providerName) throw new Error("اسم مزوّد الدفع مطلوب.")
   if (!accountHolderName) throw new Error("اسم صاحب الحساب مطلوب.")
   if (!accountNumber) throw new Error("رقم الحساب مطلوب.")
 
-  const image = await uploadLogo(form)
-  const now = new Date().toISOString()
+  const imageKey = newImageKey(form, "imageKey")
+  const accountId = id ? uuidParam(id, "معرّف الحساب غير صالح.") : null
 
-  const base = {
+  const values = {
     providerName,
-    accountDisplayName: str(form, "accountDisplayName", 120) ?? "",
+    accountDisplayName: str(form, "accountDisplayName", 120) ?? null,
     accountHolderName,
-    // نص دائماً للحفاظ على الأصفار في بداية الرقم.
     accountNumber,
-    instructions: str(form, "instructions", 600) ?? "",
+    instructions: str(form, "instructions", 600) ?? null,
     isActive: form.get("isActive") !== "false",
     sortOrder: intOrZero(form, "sortOrder"),
-    updatedAt: now,
+    updatedAt: new Date(),
   }
 
-  if (id) {
-    const patch = client.patch(id).set(image ? { ...base, image } : base)
-    await patch.commit()
+  let oldImage: string | null = null
+  if (accountId) {
+    const [existing] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, accountId)).limit(1)
+    if (!existing) throw new Error("الحساب غير موجود.")
+    await db.update(paymentAccounts).set({ ...values, ...(imageKey ? { imageKey } : {}) }).where(eq(paymentAccounts.id, accountId))
+    if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
   } else {
-    await client.create({
-      _type: "paymentAccount",
-      ...base,
-      ...(image ? { image } : {}),
-      createdAt: now,
-    })
+    await db.insert(paymentAccounts).values({ ...values, imageKey: imageKey ?? null })
   }
 
   revalidatePaymentAccounts()
+  await removeObjects([oldImage])
 }
 
-/** تفعيل أو تعطيل حساب دفع. الحساب المعطّل يختفي من خيارات العملاء فقط. */
 export async function togglePaymentAccount(id: string, isActive: boolean) {
   await assertManageAuthenticated()
-  const client = requireWriteClient()
-  if (!id) throw new Error("معرّف الحساب مطلوب.")
-
-  await client
-    .patch(id)
-    .set({ isActive: Boolean(isActive), updatedAt: new Date().toISOString() })
-    .commit()
+  const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
+  await db.update(paymentAccounts).set({ isActive: Boolean(isActive), updatedAt: new Date() }).where(eq(paymentAccounts.id, accountId))
   revalidatePaymentAccounts()
 }
 
-/** تغيير ترتيب ظهور حساب دفع. */
 export async function updatePaymentAccountOrder(id: string, sortOrder: number) {
   await assertManageAuthenticated()
-  const client = requireWriteClient()
-  if (!id) throw new Error("معرّف الحساب مطلوب.")
-
+  const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   const value = Number.isFinite(sortOrder) ? Math.min(9999, Math.max(0, Math.round(sortOrder))) : 0
-  await client.patch(id).set({ sortOrder: value, updatedAt: new Date().toISOString() }).commit()
+  await db.update(paymentAccounts).set({ sortOrder: value, updatedAt: new Date() }).where(eq(paymentAccounts.id, accountId))
   revalidatePaymentAccounts()
 }
 
-/**
- * حذف حساب دفع نهائياً.
- * لا يؤثر على الطلبات السابقة لأنها تحفظ Snapshot ثابتاً من بيانات الحساب.
- */
 export async function deletePaymentAccount(id: string) {
   await assertManageAuthenticated()
-  const client = requireWriteClient()
-  if (!id) throw new Error("معرّف الحساب مطلوب.")
-
-  await client.delete(id)
+  const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
+  const [existing] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, accountId)).limit(1)
+  if (!existing) return
+  await db.delete(paymentAccounts).where(eq(paymentAccounts.id, accountId))
   revalidatePaymentAccounts()
+  await removeObjects([existing.imageKey])
 }
 
-/** إزالة صورة الحساب دون حذف الحساب. */
 export async function removePaymentAccountImage(id: string) {
   await assertManageAuthenticated()
-  const client = requireWriteClient()
-  if (!id) throw new Error("معرّف الحساب مطلوب.")
-
-  await client.patch(id).unset(["image"]).set({ updatedAt: new Date().toISOString() }).commit()
+  const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
+  const [existing] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, accountId)).limit(1)
+  if (!existing) return
+  await db.update(paymentAccounts).set({ imageKey: null, updatedAt: new Date() }).where(eq(paymentAccounts.id, accountId))
   revalidatePaymentAccounts()
+  await removeObjects([existing.imageKey])
 }

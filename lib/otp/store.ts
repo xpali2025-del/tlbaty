@@ -2,7 +2,7 @@ import "server-only"
 import { randomBytes } from "node:crypto"
 import { and, desc, eq, gte, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
-import { customerPhoneHistory, customers, orders, otpCodes } from "@/lib/db/store"
+import { customerPhoneHistory, customers, otpCodes } from "@/lib/db/store"
 import type { OtpPurpose } from "./provider"
 
 export type Customer = typeof customers.$inferSelect
@@ -106,14 +106,6 @@ export async function createCustomer(phone: string): Promise<Customer> {
 
 export async function touchLastLogin(id: string): Promise<void> {
   await db.update(customers).set({ lastLoginAt: new Date() }).where(eq(customers.id, id))
-}
-
-export async function countOrdersByCustomerId(customerId: string): Promise<number> {
-  const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(orders)
-    .where(eq(orders.customerId, customerId))
-  return row?.n ?? 0
 }
 
 /** عدد الرموز التي أُنشئت لهذا الرقم/الغرض خلال نافذة زمنية — لحساب الانتظار المتصاعد. */

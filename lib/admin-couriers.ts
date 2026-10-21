@@ -1,63 +1,30 @@
 import "server-only"
-
-import { ordersClient } from "@/sanity/orders/client"
+import { asc, sql } from "drizzle-orm"
+import { db } from "@/lib/db/client"
+import { isDbConfigured } from "@/lib/db-cache"
+import { couriers, orders } from "@/lib/db/store"
+import { resolveOptionalImageUrl } from "@/lib/images"
 import { normalizeOrderStatus } from "@/lib/order-status"
-import {
-  EMPTY_COURIER_STATS,
-  normalizeCourierStatus,
-  type Courier,
-  type CourierStats,
-} from "@/lib/courier"
+import { EMPTY_COURIER_STATS, normalizeCourierStatus, type Courier, type CourierStats } from "@/lib/courier"
 
-// ============================================
-// طبقة قراءة المناديب للوحة الإدارة (/manage)
-//
-// الأداء: استعلام واحد يجلب المناديب مع فهرس خفيف لإسنادات الطلبات
-// (معرّف المندوب + الحالة فقط)، ثم تُحسب الإحصائيات في الذاكرة.
-// لا يوجد استعلام منفصل لكل مندوب.
-// ============================================
-
-type CourierRow = {
-  _id: string
-  name?: string
-  phone?: string
-  imageUrl?: string
-  cities?: string[]
-  status?: string
-  adminNote?: string
-  createdAt?: string
-}
-
-type AssignmentRow = {
-  courierId?: string
-  status?: string
-}
-
-const COURIERS_QUERY = /* groq */ `{
-  "couriers": *[_type == "courier"] | order(name asc){
-    _id, name, phone,
-    "imageUrl": image.asset->url,
-    "cities": coalesce(cities, []),
-    status, adminNote, createdAt
-  },
-  "assignments": *[_type == "order" && (defined(courierSnapshot.courierId) || defined(courier._ref))]{
-    "courierId": coalesce(courierSnapshot.courierId, courier._ref),
-    status
-  }
-}`
-
-/** يجلب كل المناديب مع عدد الطلبات المسندة والمنفذة وفي الطريق لكل واحد. */
+/** مندوبو اللوحة مع إحصاءات الطلبات المعيَّنة لكل واحد. بلا قاعدة بيانات تُرجع قائمة فارغة. */
 export async function getAdminCouriers(): Promise<Courier[]> {
-  if (!ordersClient) return []
-
+  if (!isDbConfigured()) return []
   try {
-    const result = await ordersClient.fetch<{
-      couriers: CourierRow[]
-      assignments: AssignmentRow[]
-    }>(COURIERS_QUERY, {}, { cache: "no-store" })
+    const [rows, assignments] = await Promise.all([
+      db.select().from(couriers).orderBy(asc(couriers.name)),
+      db
+        .select({
+          // الربط الحي أو اللقطة المحفوظة (تبقى اللقطة إن حُذف المندوب)
+          courierId: sql<string | null>`coalesce(${orders.courierSnapshot}->>'courierId', ${orders.courierId}::text)`,
+          status: orders.status,
+        })
+        .from(orders)
+        .where(sql`(${orders.courierId} is not null or ${orders.courierSnapshot}->>'courierId' is not null)`),
+    ])
 
     const statsByCourier = new Map<string, CourierStats>()
-    for (const row of result?.assignments ?? []) {
+    for (const row of assignments) {
       const id = (row.courierId ?? "").trim()
       if (!id) continue
       const stats = statsByCourier.get(id) ?? { ...EMPTY_COURIER_STATS }
@@ -69,19 +36,19 @@ export async function getAdminCouriers(): Promise<Courier[]> {
       statsByCourier.set(id, stats)
     }
 
-    return (result?.couriers ?? []).map((row) => ({
-      _id: row._id,
-      name: (row.name ?? "").trim() || "مندوب بلا اسم",
+    return rows.map((row) => ({
+      _id: row.id,
+      name: row.name.trim() || "مندوب بلا اسم",
       phone: (row.phone ?? "").trim() || undefined,
-      imageUrl: row.imageUrl,
-      cities: Array.isArray(row.cities) ? row.cities.filter(Boolean) : [],
+      imageUrl: resolveOptionalImageUrl(row.imageKey),
+      cities: row.cities.filter(Boolean),
       status: normalizeCourierStatus(row.status),
-      adminNote: row.adminNote,
-      createdAt: row.createdAt,
-      stats: statsByCourier.get(row._id) ?? { ...EMPTY_COURIER_STATS },
+      adminNote: row.adminNote ?? undefined,
+      createdAt: row.createdAt.toISOString(),
+      stats: statsByCourier.get(row.id) ?? { ...EMPTY_COURIER_STATS },
     }))
   } catch (error) {
-    console.error("[v0] getAdminCouriers failed:", error)
+    console.error("getAdminCouriers failed:", error instanceof Error ? error.message : "unknown")
     return []
   }
 }

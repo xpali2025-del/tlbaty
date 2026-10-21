@@ -48,8 +48,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { SITE_CONFIG } from "@/lib/site"
 import { GovernorateCombobox } from "@/components/governorate-combobox"
-import { normalizeArabic } from "@/lib/yemen-governorates"
 import { buildProductNumber } from "@/lib/product-number"
+import { FALLBACK_SHIPPING_METHODS, resolveShippingMethods } from "@/lib/shipping"
 import type { Coupon, ShippingMethod, ShippingZone } from "@/lib/types"
 import type { PaymentAccount } from "@/lib/payment"
 import { CustomerNoteSection, MAX_CUSTOMER_NOTE } from "@/components/checkout-customer-note"
@@ -67,13 +67,6 @@ const SHIPPING_ICONS = {
   standard: Truck,
   pickup: Store,
 } as const
-
-// يُستخدم فقط عند عدم إعداد أي طرق توصيل في الاستوديو (قيمة آمنة احتياطية)
-const FALLBACK_SHIPPING_METHODS: ShippingMethod[] = [
-  { id: "express", icon: "express", name: "شحن سريع", desc: "1 - 6 ساعات", price: 1000 },
-  { id: "standard", icon: "standard", name: "شحن عادي", desc: "1 - 2 أيام", price: 500 },
-  { id: "pickup", icon: "pickup", name: "استلام من المتجر", desc: "صنعاء شارع الرقاص", price: 0 },
-]
 
 type LocationStatus = "idle" | "loading" | "success" | "error"
 type CheckoutView = "choose" | "form" | "selected"
@@ -193,16 +186,10 @@ export function CheckoutClient({
   // - إن وُجد إعداد خاص بالمحافظة استُخدم.
   // - وإلا فالإعداد الافتراضي (باقي المحافظات).
   // - وإلا القيمة الاحتياطية الآمنة.
-  const availableMethods = useMemo<ShippingMethod[]>(() => {
-    const cityKey = normalizeArabic(city)
-    const defaultZone = shippingZones.find((z) => z.isDefault)
-    const cityZone = cityKey
-      ? shippingZones.find((z) => !z.isDefault && normalizeArabic(z.governorate) === cityKey)
-      : undefined
-    const zone = cityZone ?? defaultZone
-    const methods = zone?.methods?.filter((m) => m && m.name)
-    return methods && methods.length > 0 ? methods : FALLBACK_SHIPPING_METHODS
-  }, [city, shippingZones])
+  const availableMethods = useMemo<ShippingMethod[]>(
+    () => resolveShippingMethods(shippingZones, city),
+    [city, shippingZones],
+  )
 
   // إبقاء الطريقة المختارة صالحة عند تغيّر المحافظة/الطرق المتاحة
   useEffect(() => {

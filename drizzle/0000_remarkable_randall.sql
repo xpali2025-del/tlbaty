@@ -365,6 +365,7 @@ CREATE TABLE "store"."order_items" (
 	"order_id" uuid NOT NULL,
 	"product_id" uuid,
 	"product_number" text,
+	"product_ref" text,
 	"sku" text,
 	"image_url" text,
 	"name" text NOT NULL,
@@ -372,6 +373,7 @@ CREATE TABLE "store"."order_items" (
 	"color" text,
 	"quantity" integer NOT NULL,
 	"price" numeric(14, 2) NOT NULL,
+	"position" integer DEFAULT 0 NOT NULL,
 	CONSTRAINT "order_items_quantity_positive" CHECK ("store"."order_items"."quantity" > 0),
 	CONSTRAINT "order_items_price_nonneg" CHECK ("store"."order_items"."price" >= 0)
 );
@@ -396,7 +398,8 @@ CREATE TABLE "store"."order_payment_status_history" (
 	"order_id" uuid NOT NULL,
 	"status" "store"."payment_status" NOT NULL,
 	"changed_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"changed_by" text
+	"changed_by" text,
+	"note" text
 );
 --> statement-breakpoint
 CREATE TABLE "store"."order_status_history" (
@@ -405,7 +408,8 @@ CREATE TABLE "store"."order_status_history" (
 	"from_status" "store"."order_status",
 	"to_status" "store"."order_status" NOT NULL,
 	"changed_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"changed_by" text
+	"changed_by" text,
+	"note" text
 );
 --> statement-breakpoint
 CREATE TABLE "store"."orders" (
@@ -536,7 +540,7 @@ CREATE INDEX "login_challenges_ip_idx" ON "store"."login_challenges" USING btree
 CREATE INDEX "otp_codes_phone_purpose_idx" ON "store"."otp_codes" USING btree ("phone","purpose","created_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "otp_codes_expiry_idx" ON "store"."otp_codes" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "couriers_status_idx" ON "store"."couriers" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "order_items_order_idx" ON "store"."order_items" USING btree ("order_id");--> statement-breakpoint
+CREATE INDEX "order_items_order_idx" ON "store"."order_items" USING btree ("order_id","position");--> statement-breakpoint
 CREATE INDEX "order_items_product_idx" ON "store"."order_items" USING btree ("product_id") WHERE "store"."order_items"."product_id" is not null;--> statement-breakpoint
 CREATE INDEX "order_payment_status_history_order_idx" ON "store"."order_payment_status_history" USING btree ("order_id","changed_at");--> statement-breakpoint
 CREATE INDEX "order_status_history_order_idx" ON "store"."order_status_history" USING btree ("order_id","changed_at");--> statement-breakpoint

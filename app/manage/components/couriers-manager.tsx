@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { SectionHeader, ImageField, DeleteButton } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 import {
   COURIER_STATUS_BADGE,
   COURIER_STATUS_LABELS,
@@ -309,6 +310,13 @@ function CourierForm({ courier, onClose }: { courier: Courier | null; onClose: (
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     setSaving(true)
+    try {
+      await uploadFormImages(form, [{ name: "image", folder: "couriers", keyName: "imageKey" }])
+    } catch (err) {
+      setSaving(false)
+      toast.error(err instanceof Error ? err.message : "تعذّر رفع الصورة")
+      return
+    }
     const result = courier ? await updateCourier(courier._id, form) : await createCourier(form)
     setSaving(false)
     if (result.ok) {
