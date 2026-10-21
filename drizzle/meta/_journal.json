@@ -15,6 +15,13 @@
       "when": 1792526147485,
       "tag": "0001_chief_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792551019318,
+      "tag": "0002_plain_scalphunter",
+      "breakpoints": true
     }
   ]
 }
