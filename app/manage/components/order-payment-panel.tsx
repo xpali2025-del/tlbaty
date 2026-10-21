@@ -172,6 +172,7 @@ export function OrderPaymentPanel({ order }: { order: AdminOrder }) {
               </dd>
             </div>
             <Row label="اسم مرسل الحوالة" value={order.transferSenderName ?? "-"} />
+            <Row label="رقم هاتف المرسل" value={order.transferSenderPhone ?? "-"} />
             <div className="flex items-center justify-between gap-2">
               <dt className="text-muted-foreground">رقم الحوالة</dt>
               <dd className="flex items-center gap-1.5">

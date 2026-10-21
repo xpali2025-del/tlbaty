@@ -89,6 +89,7 @@ export type AdminOrder = {
   paymentStatus?: PaymentStatus
   paymentAccountSnapshot?: PaymentAccountSnapshot
   transferSenderName?: string
+  transferSenderPhone?: string
   transferReference?: string
   transferSubmittedAt?: string
   /** هل يوجد إثبات حوالة محفوظ؟ لا نعيد الملف أو رابطه إطلاقاً. */
@@ -216,6 +217,7 @@ function buildWhere(filters: OrderFilters): SQL | undefined {
         sql`${orders.customerName} ilike ${q}`,
         sql`${orders.phone} ilike ${q}`,
         sql`${orders.transferReference} ilike ${q}`,
+        sql`${orders.transferSenderPhone} ilike ${q}`,
         sql`${orders.courierSnapshot}->>'name' ilike ${q}`,
         exists(
           db
@@ -332,6 +334,7 @@ export async function getAdminOrdersPage(
         paymentStatus: o.paymentStatus,
         paymentAccountSnapshot: opt(o.paymentAccountSnapshot) as PaymentAccountSnapshot | undefined,
         transferSenderName: opt(o.transferSenderName),
+        transferSenderPhone: opt(o.transferSenderPhone),
         transferReference: opt(o.transferReference),
         transferSubmittedAt: iso(o.transferSubmittedAt),
         hasPaymentProof: Boolean(proof),

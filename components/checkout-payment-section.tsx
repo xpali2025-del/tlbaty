@@ -47,6 +47,7 @@ export type PaymentSelection = {
   method: PaymentMethod
   accountId: string
   senderName: string
+  senderPhone: string
   reference: string
   proofFile: File | null
 }
@@ -55,6 +56,7 @@ export const EMPTY_PAYMENT_SELECTION: PaymentSelection = {
   method: "cash_on_delivery",
   accountId: "",
   senderName: "",
+  senderPhone: "",
   reference: "",
   proofFile: null,
 }
@@ -72,6 +74,15 @@ export function validateSenderName(value: string): string {
   const words = trimmed.split(" ").filter((w) => w.length >= 2)
   if (words.length < 2) return "اكتب اسم المرسل من كلمتين على الأقل."
   if (!/^[\p{L}\s'.\-]+$/u.test(trimmed)) return "اسم المرسل يجب أن يحتوي حروفاً فقط."
+  return ""
+}
+
+/** تحقق رقم هاتف المرسل: أرقام (يمني/سعودي أو محفظة أخرى)، 8 إلى 15 رقماً. */
+export function validateSenderPhone(value: string): string {
+  const digits = digitsOnly(value)
+  if (value.trim().length === 0) return "أدخل رقم هاتف مرسل الحوالة."
+  if (digits.length < 8 || digits.length > 15) return "رقم هاتف المرسل غير صالح (8 إلى 15 رقماً)."
+  if (!/^\+?[\d\u0660-\u0669\u06f0-\u06f9\s().-]+$/.test(value.trim())) return "رقم هاتف المرسل يحتوي رموزاً غير مسموحة."
   return ""
 }
 
@@ -142,7 +153,7 @@ export function PaymentSection({
   onChange: (next: PaymentSelection) => void
   formattedTotal: string
   encryptionReady: boolean
-  errors: { account?: string; senderName?: string; reference?: string; proof?: string }
+  errors: { account?: string; senderName?: string; senderPhone?: string; reference?: string; proof?: string }
 }) {
   const { toast } = useToast()
   const { payments } = useSiteConfig()
@@ -383,6 +394,25 @@ export function PaymentSection({
                   className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary"
                 />
                 {errors.senderName && <p className="mt-1 text-xs text-destructive">{errors.senderName}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="transfer-sender-phone" className="mb-1.5 block text-sm font-bold">
+                  رقم هاتف المرسل
+                </label>
+                <input
+                  id="transfer-sender-phone"
+                  type="tel"
+                  inputMode="tel"
+                  dir="ltr"
+                  value={value.senderPhone}
+                  onChange={(e) => onChange({ ...value, senderPhone: e.target.value })}
+                  maxLength={25}
+                  autoComplete="off"
+                  placeholder="الرقم الذي حُوّل منه، مثل 771234567"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary"
+                />
+                {errors.senderPhone && <p className="mt-1 text-xs text-destructive">{errors.senderPhone}</p>}
               </div>
 
               <div>
