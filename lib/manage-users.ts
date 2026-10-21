@@ -1,7 +1,10 @@
 import "server-only"
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
-import { client } from "@/sanity/client"
+import { asc, sql } from "drizzle-orm"
+import { db } from "@/lib/db/client"
+import { isDbConfigured } from "@/lib/db-cache"
+import { manageUsers } from "@/lib/db/store"
 
 // ============================================
 // إدارة مستخدمي لوحة التحكم (/manage)
@@ -19,14 +22,6 @@ export type AdminUser = {
 
 // السجل الداخلي يتضمن التجزئة — لا يُرسل للعميل مطلقاً.
 type StoredUser = AdminUser & { passwordHash?: string }
-
-const USERS_QUERY = /* groq */ `*[_type == "manageUser"] | order(username asc){
-  _id, username, name, "role": coalesce(role, "editor"), "active": coalesce(active, true)
-}`
-
-const USER_BY_NAME_QUERY = /* groq */ `*[_type == "manageUser" && lower(username) == $username][0]{
-  _id, username, name, "role": coalesce(role, "editor"), "active": coalesce(active, true), passwordHash
-}`
 
 /** يُجزّئ كلمة المرور بـ scrypt مع ملح عشوائي. الصيغة: "salt:hash" (hex). */
 export function hashPassword(password: string): string {
@@ -48,21 +43,30 @@ export function verifyPasswordHash(password: string, stored?: string): boolean {
   }
 }
 
+const toAdminUser = (u: typeof manageUsers.$inferSelect): AdminUser => ({
+  _id: u.id,
+  username: u.username,
+  name: u.name ?? undefined,
+  role: u.role,
+  active: u.active,
+})
+
 /** يعيد قائمة المستخدمين (بدون كلمات المرور) لعرضها في اللوحة. */
 export async function getAdminUsers(): Promise<AdminUser[]> {
-  if (!client) return []
-  const rows = await client.fetch<StoredUser[]>(USERS_QUERY, {}, { cache: "no-store" })
-  return rows.map(({ passwordHash: _hash, ...rest }) => rest)
+  if (!isDbConfigured()) return []
+  const rows = await db.select().from(manageUsers).orderBy(asc(manageUsers.username))
+  return rows.map(toAdminUser)
 }
 
-/** يبحث عن مستخدم بالاسم (يشمل التجزئة) للتحقق عند تسجيل الدخول. */
+/** يبحث عن مستخدم بالاسم (يشمل التجزئة) للتحقق عند تسجيل الدخول. المقارنة غير حساسة لحالة الأحرف. */
 export async function findUserByUsername(username: string): Promise<StoredUser | null> {
-  if (!client) return null
-  return client.fetch<StoredUser | null>(
-    USER_BY_NAME_QUERY,
-    { username: username.trim().toLowerCase() },
-    { cache: "no-store" },
-  )
+  if (!isDbConfigured()) return null
+  const [row] = await db
+    .select()
+    .from(manageUsers)
+    .where(sql`lower(${manageUsers.username}) = ${username.trim().toLowerCase()}`)
+    .limit(1)
+  return row ? { ...toAdminUser(row), passwordHash: row.passwordHash } : null
 }
 
 /** يتحقّق من بيانات مستخدم مُخزّن ويعيد اسمه عند النجاح، أو null. */

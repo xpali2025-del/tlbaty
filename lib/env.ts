@@ -31,3 +31,8 @@ export function getServerEnv() {
 export function getR2Env() {
   return r2Schema.parse(process.env)
 }
+
+/** هل متغيرات R2 كلها مضبوطة؟ (بلا رمي أخطاء — للتحقق قبل عرض/تنفيذ الرفع) */
+export function isR2Configured(): boolean {
+  return r2Schema.safeParse(process.env).success
+}

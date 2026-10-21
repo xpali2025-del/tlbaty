@@ -10,7 +10,7 @@ import { SITE_CONFIG } from "@/lib/site"
 import { decodeSlug } from "@/lib/utils"
 
 // On-Demand Revalidation: الصفحة ثابتة وتُحدَّث فوراً
-// عبر Sanity Webhook -> /api/revalidate (revalidateTag)
+// عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
 
 export async function generateStaticParams() {
   const slugs = await getProductSlugs()

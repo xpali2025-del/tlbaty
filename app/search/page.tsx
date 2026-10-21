@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 }
 
 // On-Demand Revalidation: الصفحة ثابتة وتُحدَّث فوراً
-// عبر Sanity Webhook -> /api/revalidate (revalidateTag)
+// عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
 
 export default async function SearchPage() {
   const [products, brands] = await Promise.all([getProducts(), getBrands()])

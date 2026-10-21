@@ -29,6 +29,7 @@ import {
 import type { AdminBrand, AdminCategory, AdminColor, AdminProduct } from "@/lib/admin"
 import { saveProduct, deleteProduct, generateProductSlug } from "../actions"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 export function ProductsManager({
   products,
@@ -217,6 +218,10 @@ function ProductDialog({
 
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [
+          { name: "image", folder: "products", keyName: "imageKey" },
+          { name: "newImages", folder: "products", keyName: "newImageKeys", multiple: true },
+        ])
         await saveProduct(product?._id ?? null, form)
         toast.success(product ? "تم تحديث المنتج" : "تمت إضافة المنتج")
         onOpenChange(false)

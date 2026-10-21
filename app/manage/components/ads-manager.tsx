@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import type { AdminAd, AdminCategory } from "@/lib/admin"
 import { saveAd, deleteAd, toggleAdActive } from "../actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: AdminCategory[] }) {
   const [editing, setEditing] = useState<AdminAd | null>(null)
@@ -160,6 +161,9 @@ function AdDialog({
 
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [
+          { name: "image", folder: "ads", keyName: "imageKey" },
+        ])
         await saveAd(ad?._id ?? null, form)
         toast.success(ad ? "تم تحديث الإعلان" : "تمت إضافة الإعلان")
         onOpenChange(false)

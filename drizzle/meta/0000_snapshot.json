@@ -1,5 +1,5 @@
 {
-  "id": "8d926357-4f8a-450a-a208-edbb677fa53f",
+  "id": "ed6ce890-2617-4d04-853f-abc97ef60659",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -528,6 +528,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "tags": {
+          "name": "tags",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
         },
         "sort_order": {
           "name": "sort_order",
@@ -1799,6 +1806,12 @@
         },
         "tagline": {
           "name": "tagline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_key": {
+          "name": "logo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false

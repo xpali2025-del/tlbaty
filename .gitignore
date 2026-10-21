@@ -23,3 +23,7 @@ next-env.d.ts
 .snowflake/
 .v0-trash/
 __v0_*
+
+# catalog migration artifacts
+scripts/migration/.r2-upload-cache.json
+scripts/migration/missing-images.txt

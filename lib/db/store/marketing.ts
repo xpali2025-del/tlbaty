@@ -104,6 +104,7 @@ export const siteSettings = store.table('site_settings', {
   id: smallint('id').primaryKey().default(1),
   name: text('name'),
   tagline: text('tagline'),
+  logoKey: text('logo_key'),
   description: text('description'),
   defaultCurrency: text('default_currency').notNull().default('YER'),
   phone: text('phone'),

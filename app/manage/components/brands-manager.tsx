@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch"
 import type { AdminBrand } from "@/lib/admin"
 import { saveBrand, deleteBrand } from "../actions"
 import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 export function BrandsManager({ brands }: { brands: AdminBrand[] }) {
   const [editing, setEditing] = useState<AdminBrand | null>(null)
@@ -101,6 +102,9 @@ function BrandDialog({
     form.set("keywords", JSON.stringify(keywords))
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [
+          { name: "image", folder: "brands", keyName: "imageKey" },
+        ])
         await saveBrand(brand?._id ?? null, form)
         toast.success(brand ? "تم تحديث البراند" : "تمت إضافة البراند")
         onOpenChange(false)

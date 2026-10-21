@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic"
 
 // On-Demand Revalidation: أكواد الخصم وحسابات الدفع تُحدَّث فوراً
-// عبر Sanity Webhook -> /api/revalidate (revalidateTag "coupon" / "paymentAccount")
+// عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
 
 export default async function CheckoutPage() {
   const customer = await getCurrentCustomer()

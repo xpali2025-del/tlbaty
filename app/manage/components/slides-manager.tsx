@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import type { AdminSlide } from "@/lib/admin"
 import { saveSlide, deleteSlide } from "../actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 export function SlidesManager({ slides }: { slides: AdminSlide[] }) {
   const [editing, setEditing] = useState<AdminSlide | null>(null)
@@ -92,6 +93,9 @@ function SlideDialog({
     const form = new FormData(e.currentTarget)
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [
+          { name: "image", folder: "slides", keyName: "imageKey" },
+        ])
         await saveSlide(slide?._id ?? null, form)
         toast.success(slide ? "تم تحديث السلايد" : "تمت إضافة السلايد")
         onOpenChange(false)

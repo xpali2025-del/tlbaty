@@ -65,6 +65,8 @@ export const products = store.table('products', {
   sizes: text('sizes').array().notNull().default(sql`'{}'::text[]`),
   sku: text('sku'),
   badge: text('badge'),
+  /** Legacy merchandising tags (new / bestseller / offer / regular); the storefront lists use them. */
+  tags: text('tags').array().notNull().default(sql`'{}'::text[]`),
   sortOrder: integer('sort_order').notNull().default(0),
   rating: real('rating').notNull().default(5),
   reviewsCount: integer('reviews_count').notNull().default(0),

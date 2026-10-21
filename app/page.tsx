@@ -22,7 +22,7 @@ import {
 } from "@/lib/data"
 
 // On-Demand Revalidation: الصفحة ثابتة (Static) وتُحدَّث فوراً
-// عبر Sanity Webhook -> /api/revalidate (revalidateTag)
+// عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
 // دون أي انتظار زمني — سرعة تعادل الملفات المحلية
 
 export default async function HomePage() {

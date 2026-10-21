@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils"
 import type { AdminReview } from "@/lib/admin"
 import { saveReview, deleteReview } from "../actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
   const [editing, setEditing] = useState<AdminReview | null>(null)
@@ -118,6 +119,9 @@ function ReviewDialog({
     form.set("rating", rating)
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [
+          { name: "avatar", folder: "reviews", keyName: "avatarKey" },
+        ])
         await saveReview(review?._id ?? null, form)
         toast.success(review ? "تم تحديث التقييم" : "تمت إضافة التقييم")
         onOpenChange(false)

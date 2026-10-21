@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 }
 
 // On-Demand Revalidation: الصفحة ثابتة وتُحدَّث فوراً
-// عبر Sanity Webhook -> /api/revalidate (revalidateTag)
+// عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
 
 export default async function CategoriesPage() {
   const [products, categories, ads] = await Promise.all([getProducts(), getCategories(), getAds()])

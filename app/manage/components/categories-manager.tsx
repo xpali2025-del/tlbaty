@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { AdminCategory, AdminSubcategory } from "@/lib/admin"
 import { saveCategory, deleteCategory } from "../actions"
 import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput, sanitizeSlug } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 export function CategoriesManager({ categories }: { categories: AdminCategory[] }) {
   const [editing, setEditing] = useState<AdminCategory | null>(null)
@@ -109,6 +110,9 @@ function CategoryDialog({
     form.set("keywords", JSON.stringify(keywords))
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [
+          { name: "image", folder: "categories", keyName: "imageKey" },
+        ])
         await saveCategory(category?._id ?? null, form)
         toast.success(category ? "تم تحديث القسم" : "تمت إضافة القسم")
         onOpenChange(false)

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { AdminSettings } from "@/lib/admin"
 import { saveSettings } from "../actions"
 import { ImageField, SectionHeader } from "./shared"
+import { uploadFormImages } from "@/lib/storage/upload-client"
 
 export function SettingsManager({ settings }: { settings: AdminSettings }) {
   const [isPending, startTransition] = useTransition()
@@ -19,6 +20,9 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
     const form = new FormData(e.currentTarget)
     startTransition(async () => {
       try {
+        await uploadFormImages(form, [
+          { name: "logo", folder: "site", keyName: "logoKey" },
+        ])
         await saveSettings(settings?._id ?? null, form)
         toast.success("تم حفظ إعدادات الموقع")
       } catch (err) {
