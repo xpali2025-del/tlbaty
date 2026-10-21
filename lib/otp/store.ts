@@ -1,0 +1,117 @@
+import "server-only"
+import { randomBytes } from "node:crypto"
+import { and, desc, eq, sql } from "drizzle-orm"
+import { db } from "@/lib/db/client"
+import { customers, orders, otpCodes } from "@/lib/db/store"
+import type { OtpPurpose } from "./provider"
+
+export type Customer = typeof customers.$inferSelect
+export type Otp = typeof otpCodes.$inferSelect
+
+const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+/** معرّف عميل عام عشوائي ثابت: CUS_XXXXXXXXXXXX (12 خانة). */
+export function generateCustomerId(): string {
+  const bytes = randomBytes(12)
+  let out = ""
+  for (let i = 0; i < 12; i++) out += ALPHABET[bytes[i] % ALPHABET.length]
+  return `CUS_${out}`
+}
+
+/** يبطل كل رموز OTP السابقة غير المستهلكة لرقم/غرض معيّن. */
+export async function invalidatePreviousOtps(phone: string, purpose: OtpPurpose): Promise<void> {
+  await db
+    .update(otpCodes)
+    .set({ consumed: true })
+    .where(and(eq(otpCodes.phone, phone), eq(otpCodes.purpose, purpose), eq(otpCodes.consumed, false)))
+}
+
+export async function createOtp(input: {
+  phone: string
+  codeHash: string
+  salt: string
+  purpose: OtpPurpose
+  expiresAt: Date
+  provider: string
+  ip: string
+  userAgent: string
+}): Promise<void> {
+  await db.insert(otpCodes).values(input)
+}
+
+/** آخر رمز صالح (غير مستهلك) لرقم/غرض معيّن. */
+export async function getActiveOtp(phone: string, purpose: OtpPurpose): Promise<Otp | null> {
+  const [row] = await db
+    .select()
+    .from(otpCodes)
+    .where(and(eq(otpCodes.phone, phone), eq(otpCodes.purpose, purpose), eq(otpCodes.consumed, false)))
+    .orderBy(desc(otpCodes.createdAt))
+    .limit(1)
+  return row ?? null
+}
+
+/** آخر وقت إنشاء رمز لهذا الرقم/الغرض — لفرض مؤقت إعادة الإرسال. */
+export async function getLastOtpCreatedAt(phone: string, purpose: OtpPurpose): Promise<Date | null> {
+  const [row] = await db
+    .select({ createdAt: otpCodes.createdAt })
+    .from(otpCodes)
+    .where(and(eq(otpCodes.phone, phone), eq(otpCodes.purpose, purpose)))
+    .orderBy(desc(otpCodes.createdAt))
+    .limit(1)
+  return row?.createdAt ?? null
+}
+
+/** زيادة ذرّية للمحاولات (لا سباق بين طلبات متزامنة). تعيد العدد الجديد. */
+export async function incrementOtpAttempts(id: string): Promise<number> {
+  const [row] = await db
+    .update(otpCodes)
+    .set({ attempts: sql`${otpCodes.attempts} + 1` })
+    .where(eq(otpCodes.id, id))
+    .returning({ attempts: otpCodes.attempts })
+  return row?.attempts ?? 0
+}
+
+/** يستهلك الرمز مرة واحدة فقط: تعيد true لأول مستهلك وfalse لأي طلب متزامن آخر. */
+export async function consumeOtp(id: string, verified: boolean): Promise<boolean> {
+  const rows = await db
+    .update(otpCodes)
+    .set({ verified, consumed: true })
+    .where(and(eq(otpCodes.id, id), eq(otpCodes.consumed, false)))
+    .returning({ id: otpCodes.id })
+  return rows.length > 0
+}
+
+export async function getCustomerByPhone(phone: string): Promise<Customer | null> {
+  const [row] = await db.select().from(customers).where(eq(customers.phone, phone)).limit(1)
+  return row ?? null
+}
+
+export async function getCustomerById(id: string): Promise<Customer | null> {
+  const [row] = await db.select().from(customers).where(eq(customers.id, id)).limit(1)
+  return row ?? null
+}
+
+/** ينشئ العميل؛ عند سباق على الرقم نفسه يعيد الصف الذي أنشأه الطلب الآخر. */
+export async function createCustomer(phone: string): Promise<Customer> {
+  const [created] = await db
+    .insert(customers)
+    .values({ publicId: generateCustomerId(), phone, verified: true, status: "active", lastLoginAt: new Date() })
+    .onConflictDoNothing({ target: customers.phone })
+    .returning()
+  if (created) return created
+  const existing = await getCustomerByPhone(phone)
+  if (!existing) throw new Error("CUSTOMER_CREATE_FAILED")
+  return existing
+}
+
+export async function touchLastLogin(id: string): Promise<void> {
+  await db.update(customers).set({ lastLoginAt: new Date() }).where(eq(customers.id, id))
+}
+
+export async function countOrdersByCustomerId(customerId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(orders)
+    .where(eq(orders.customerId, customerId))
+  return row?.n ?? 0
+}

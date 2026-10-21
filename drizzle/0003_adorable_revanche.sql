@@ -1,0 +1,1 @@
+CREATE INDEX "auth_events_ip_idx" ON "store"."auth_events" USING btree ("ip","at" DESC NULLS LAST) WHERE "store"."auth_events"."ip" is not null;

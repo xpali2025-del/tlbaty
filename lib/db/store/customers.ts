@@ -76,5 +76,6 @@ export const authEvents = store.table('auth_events', {
   index('auth_events_customer_idx').on(t.customerId, t.at.desc()),
   index('auth_events_phone_idx').on(t.phone, t.at.desc()),
   index('auth_events_event_idx').on(t.event, t.at.desc()),
+  index('auth_events_ip_idx').on(t.ip, t.at.desc()).where(sql`${t.ip} is not null`),
 ])
 

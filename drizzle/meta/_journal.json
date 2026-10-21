@@ -22,6 +22,13 @@
       "when": 1792551019318,
       "tag": "0002_plain_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792551624324,
+      "tag": "0003_adorable_revanche",
+      "breakpoints": true
     }
   ]
 }
