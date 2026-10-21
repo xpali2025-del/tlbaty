@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
 import { couriers, orders } from "@/lib/db/store"
 import { resolveOptionalImageUrl } from "@/lib/images"
-import { normalizeOrderStatus } from "@/lib/order-status"
+import { isOpenOrderStatus, normalizeOrderStatus } from "@/lib/order-status"
 import { EMPTY_COURIER_STATS, normalizeCourierStatus, type Courier, type CourierStats } from "@/lib/courier"
 
 /** مندوبو اللوحة مع إحصاءات الطلبات المعيَّنة لكل واحد. بلا قاعدة بيانات تُرجع قائمة فارغة. */
@@ -33,6 +33,7 @@ export async function getAdminCouriers(): Promise<Courier[]> {
       if (status === "on_the_way") stats.onTheWay += 1
       if (status === "delivered") stats.delivered += 1
       if (status === "failed") stats.failed += 1
+      if (isOpenOrderStatus(status)) stats.openLoad += 1
       statsByCourier.set(id, stats)
     }
 

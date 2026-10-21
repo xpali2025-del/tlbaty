@@ -131,3 +131,8 @@ export type OrderStatusHistoryEntry = {
 export function describeOrderStatus(value: unknown): string {
   return ORDER_STATUS_LABELS[normalizeOrderStatus(value)]
 }
+
+/** طلب «مفتوح»: ما زال يحتاج عملاً من المندوب (لم يُسلَّم ولم يُلغَ ولم يُرجَع ولم يفشل تسليمه). */
+export function isOpenOrderStatus(status: OrderStatus): boolean {
+  return !["delivered", "cancelled", "returned", "failed"].includes(status)
+}

@@ -32,6 +32,7 @@ import { fetchOrdersPage } from "../orders-actions"
 import { OrderCard } from "./orders/order-card"
 import { OrdersByCity } from "./orders/orders-by-city"
 import { AssignCourierDialog } from "./orders/assign-courier-dialog"
+import { AutoDistributeButton } from "./auto-distribute-button"
 
 // ============================================
 // شاشة إدارة الطلبات المتكاملة.
@@ -452,6 +453,15 @@ export function OrdersManager({
                 <Bike className="h-3.5 w-3.5" aria-hidden="true" />
                 تعيين مندوب للمحدد
               </Button>
+              <AutoDistributeButton
+                orderIds={selected}
+                label="توزيع تلقائي للمحدد"
+                variant="outline"
+                onDone={() => {
+                  setSelected([])
+                  void load(filters)
+                }}
+              />
               <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
                 إلغاء التحديد
               </Button>

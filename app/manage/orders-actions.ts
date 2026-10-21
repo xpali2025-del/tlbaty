@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
 import { couriers, orderItems, orderPaymentProofs, orderPaymentStatusHistory, orderStatusHistory, orders, products } from "@/lib/db/store"
@@ -13,6 +13,7 @@ import {
   ORDER_STATUS_LABELS,
   type OrderStatus,
 } from "@/lib/order-status"
+import { planDistribution, type DistributionPlan } from "@/lib/distribution"
 import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZE } from "@/lib/admin-orders"
 import { canTransitionPayment, initialPaymentStatus, isPaymentStatus, type PaymentStatus } from "@/lib/payment"
 import { deletePaymentProof } from "@/lib/storage/proofs"
@@ -132,6 +133,98 @@ export async function assignCourier(orderIds: string[], courierId: string): Prom
       ? `تم تعيين ${courier.name || "المندوب"} للطلب`
       : `تم تعيين ${courier.name || "المندوب"} لـ ${ids.length} طلب`
   })
+}
+
+export type DistributionResult =
+  | {
+      ok: true
+      message: string
+      assigned: number
+      skipped: number
+      perCourier: { courierId: string; name: string; count: number }[]
+    }
+  | { ok: false; error: string }
+
+/** أقصى عدد طلبات تُوزَّع في عملية واحدة (حماية للخادم والمعاملة). */
+const MAX_DISTRIBUTION = 300
+
+/**
+ * توزيع تلقائي عادل: يعيّن الطلبات المفتوحة التي بلا مندوب على المناديب النشطين بحسب المدينة
+ * والحمل الحالي (انظر lib/distribution.ts). إن مُرّرت معرّفات يوزّع المحدد منها فقط.
+ * الطلبات المعيّنة مسبقاً أو المنتهية لا تُمسّ، وما لا يجد مندوباً يُعاد عدّه كـ«متروك».
+ */
+export async function autoDistributeOrders(orderIds?: string[]): Promise<DistributionResult> {
+  try {
+    await assertManagePermission("couriers")
+    const ids = orderIds?.length ? idsSchema.parse(orderIds) : null
+
+    const result = await db.transaction(async (tx) => {
+      const candidates = await tx
+        .select({ id: orders.id, city: orders.city, createdAt: orders.createdAt })
+        .from(orders)
+        .where(
+          and(
+            isNull(orders.courierId),
+            notInArray(orders.status, ["delivered", "cancelled", "returned", "failed"]),
+            ids ? inArray(orders.id, ids) : undefined,
+          ),
+        )
+        .orderBy(asc(orders.createdAt))
+        .limit(MAX_DISTRIBUTION)
+        .for("update")
+      if (candidates.length === 0) return { plan: null as DistributionPlan | null, couriersById: new Map<string, { name: string; phone: string }>() }
+
+      const active = await tx.select().from(couriers).where(eq(couriers.status, "active"))
+      const loads = await tx
+        .select({ courierId: orders.courierId, n: sql<number>`count(*)::int` })
+        .from(orders)
+        .where(and(sql`${orders.courierId} is not null`, notInArray(orders.status, ["delivered", "cancelled", "returned", "failed"])))
+        .groupBy(orders.courierId)
+      const loadById = new Map(loads.map((l) => [l.courierId as string, l.n]))
+
+      const plan = planDistribution(
+        candidates.map((o) => ({ id: o.id, city: o.city ?? "", createdAt: o.createdAt })),
+        active.map((c) => ({ id: c.id, name: c.name, cities: c.cities, load: loadById.get(c.id) ?? 0 })),
+      )
+      const couriersById = new Map(active.map((c) => [c.id, { name: c.name, phone: c.phone ?? "" }]))
+      const now = new Date()
+      for (const a of plan.assignments) {
+        const c = couriersById.get(a.courierId)!
+        await tx
+          .update(orders)
+          .set({
+            courierId: a.courierId,
+            courierSnapshot: { courierId: a.courierId, name: c.name, phone: c.phone },
+            courierAssignedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(orders.id, a.orderId))
+      }
+      return { plan, couriersById }
+    })
+
+    const plan = result.plan
+    if (!plan) return { ok: true, message: "لا توجد طلبات مفتوحة بلا مندوب للتوزيع.", assigned: 0, skipped: 0, perCourier: [] }
+
+    const counts = new Map<string, number>()
+    for (const a of plan.assignments) counts.set(a.courierId, (counts.get(a.courierId) ?? 0) + 1)
+    const perCourier = [...counts].map(([courierId, count]) => ({ courierId, name: result.couriersById.get(courierId)!.name, count }))
+    revalidateOrders()
+    const skipped = plan.skipped.length
+    return {
+      ok: true,
+      assigned: plan.assignments.length,
+      skipped,
+      perCourier,
+      message:
+        plan.assignments.length === 0
+          ? "لم يُوزَّع أي طلب: لا يوجد مندوب نشط يغطي مدن هذه الطلبات."
+          : `تم توزيع ${plan.assignments.length} طلب على ${perCourier.length} مندوب` + (skipped ? ` وتُرك ${skipped} بلا مندوب لعدم وجود مندوب يغطي مدينتها` : ""),
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) return { ok: false, error: firstZodError(error) }
+    return { ok: false, error: error instanceof Error ? error.message : "تعذّر توزيع الطلبات" }
+  }
 }
 
 export async function unassignCourier(id: string): Promise<OrderActionResult> {

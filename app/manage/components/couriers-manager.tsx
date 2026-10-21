@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { Bike, Phone, MapPin, Package, Truck, CheckCircle2, XCircle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { SectionHeader, ImageField, DeleteButton } from "./shared"
+import { AutoDistributeButton } from "./auto-distribute-button"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 import {
   COURIER_STATUS_BADGE,
@@ -51,6 +53,7 @@ function Stat({
 }
 
 export function CouriersManager({ couriers }: { couriers: Courier[] }) {
+  const router = useRouter()
   const [search, setSearch] = useState("")
   const [cityFilter, setCityFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState<CourierStatus | "all">("all")
@@ -108,6 +111,13 @@ export function CouriersManager({ couriers }: { couriers: Courier[] }) {
         onSearchChange={setSearch}
         searchPlaceholder="ابحث بالاسم أو الهاتف أو المدينة..."
       />
+
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+        <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+          توزيع الطلبات المفتوحة التي بلا مندوب على المناديب النشطين بحسب مدينة الطلب والحمل الحالي لكل مندوب.
+        </div>
+        <AutoDistributeButton label="وزّع الطلبات غير المعيّنة" onDone={() => router.refresh()} />
+      </div>
 
       {/* مرشحات المدينة والحالة */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -220,6 +230,12 @@ export function CouriersManager({ couriers }: { couriers: Courier[] }) {
 
               {/* عدد الطلبات المسندة وفي الطريق والمنفذة */}
               <div className="flex flex-wrap gap-1.5">
+                <Stat
+                  icon={Package}
+                  label="مفتوحة الآن"
+                  value={courier.stats.openLoad}
+                  tone="text-amber-500"
+                />
                 <Stat
                   icon={Package}
                   label="مسندة"

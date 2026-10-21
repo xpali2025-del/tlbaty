@@ -54,6 +54,8 @@ export type CourierStats = {
   delivered: number
   /** الطلبات التي تعذّر تسليمها. */
   failed: number
+  /** الطلبات المفتوحة حالياً عنده (لم تُسلَّم ولم تُلغَ ولم تفشل) — أساس التوزيع العادل. */
+  openLoad: number
 }
 
 export const EMPTY_COURIER_STATS: CourierStats = {
@@ -61,6 +63,7 @@ export const EMPTY_COURIER_STATS: CourierStats = {
   onTheWay: 0,
   delivered: 0,
   failed: 0,
+  openLoad: 0,
 }
 
 /**
