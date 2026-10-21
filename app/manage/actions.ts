@@ -19,12 +19,13 @@ import {
   subcategories,
 } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
+import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
+import { isCategoryCode } from "@/lib/product-code"
 import { isRole, normalizePermissions, ROLE_PRESETS, type Role } from "@/lib/permissions"
 import {
   bool,
   englishSlug,
   json,
-  makeProductId,
   newImageKey,
   newImageKeys,
   num,
@@ -172,28 +173,12 @@ export async function saveProduct(id: string | null, form: FormData) {
         if (mainKey && existing.mainImageKey !== mainKey) removed.push(existing.mainImageKey)
         rowId = productId
       } else {
-        // رقم المنتج عشوائي؛ نعيد المحاولة في الحالة النادرة لتصادمه مع رقم موجود.
-        let inserted: { id: string } | undefined
-        for (let attempt = 0; attempt < 5 && !inserted; attempt++) {
-          try {
-            ;[inserted] = await tx.transaction(async (inner) =>
-              inner
-                .insert(products)
-                .values({
-                  ...base,
-                  productNumber: makeProductId(category.slug, subSlug),
-                  rating: 5,
-                  reviewsCount: 0,
-                  tags: [],
-                  mainImageKey: mainKey ?? null,
-                })
-                .returning({ id: products.id }),
-            )
-          } catch (e) {
-            if (!uniqueViolation(e)?.includes("product_number")) throw e
-          }
-        }
-        if (!inserted) throw new Error("تعذّر توليد رقم منتج فريد، حاول مرة أخرى")
+        // رمز قصير بالتسلسل داخل القسم (مثل DR-012)، يُحجز ذرياً فلا يتكرر.
+        const productNumber = await allocateProductCode(tx, categoryId)
+        const [inserted] = await tx
+          .insert(products)
+          .values({ ...base, productNumber, rating: 5, reviewsCount: 0, tags: [], mainImageKey: mainKey ?? null })
+          .returning({ id: products.id })
         rowId = inserted.id
       }
 
@@ -262,9 +247,13 @@ export async function saveCategory(id: string | null, form: FormData) {
     incoming.set(slugify(s.slug || s.name), { name: s.name.trim(), description: s.description?.trim() || null })
   }
 
+  const codeRaw = str(form, "code")?.toUpperCase()
+  if (codeRaw && !isCategoryCode(codeRaw)) throw new Error("رمز القسم: 2 إلى 4 أحرف إنجليزية (ورقم اختياري في الآخر)، مثل DR")
+
   const values = {
     name,
     slug: slugify(str(form, "slug") ?? name),
+    ...(codeRaw ? { code: codeRaw } : {}),
     description: str(form, "description") ?? null,
     sortOrder: Math.max(0, Math.trunc(num(form, "sortOrder") ?? 0)),
     metaTitle: str(form, "metaTitle") ?? null,
@@ -286,6 +275,7 @@ export async function saveCategory(id: string | null, form: FormData) {
       } else {
         ;[{ id: rowId }] = await tx.insert(categories).values({ ...values, imageKey: imageKey ?? null }).returning({ id: categories.id })
       }
+      await ensureCategoryCode(tx, rowId)
 
       const current = await tx.select().from(subcategories).where(eq(subcategories.categoryId, rowId))
       const stale = current.filter((c) => !incoming.has(c.slug)).map((c) => c.id)
@@ -300,7 +290,9 @@ export async function saveCategory(id: string | null, form: FormData) {
       }
     })
   } catch (e) {
-    if (uniqueViolation(e) !== null) throw new Error("هذا الرابط (slug) مستخدم لقسم آخر، اختر رابطاً مختلفاً")
+    const constraint = uniqueViolation(e)
+    if (constraint?.includes("code")) throw new Error("رمز القسم مستخدم لقسم آخر، اختر رمزاً مختلفاً")
+    if (constraint !== null) throw new Error("هذا الرابط (slug) مستخدم لقسم آخر، اختر رابطاً مختلفاً")
     throw e
   }
 

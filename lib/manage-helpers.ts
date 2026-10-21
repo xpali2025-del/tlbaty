@@ -38,19 +38,6 @@ export function englishSlug(input: string): string {
   )
 }
 
-/** رمز قصير من نص (3 أحرف لاتينية) لاستخدامه في رقم المنتج. */
-function shortCode(value: string, fallback: string): string {
-  const ascii = value.toUpperCase().replace(/[^A-Z0-9]/g, "")
-  return ascii.slice(0, 3) || fallback
-}
-
-export function makeProductId(categorySlug: string, subcategory?: string): string {
-  const suffix = Math.random().toString(36).slice(2, 10).toUpperCase()
-  const cat = shortCode(categorySlug, "CAT")
-  const sub = subcategory ? `-${shortCode(subcategory, "SUB")}` : ""
-  return `TRF-${cat}${sub}-${suffix}`
-}
-
 export function str(form: FormData, key: string): string | undefined {
   const v = form.get(key)
   if (typeof v !== "string") return undefined

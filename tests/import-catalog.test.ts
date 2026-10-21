@@ -171,4 +171,18 @@ describe('image resolver', () => {
     expect(slides.every((x) => x.imageKey === '/placeholder.svg')).toBe(true)
     expect((await fresh.select().from(s.products)).every((x) => x.mainImageKey === null)).toBe(true)
   })
+
+  it('assignCodes gives every product a short sequential code per category, stable across re-runs', async () => {
+    const fresh = drizzle(new PGlite())
+    await migrate(fresh, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+    await importCatalog(fresh, seed, { assignCodes: true })
+    const rows = await fresh.select().from(s.products)
+    expect(rows.every((p) => /^[A-Z]{2,4}[0-9]?-\d{3,}$/.test(p.productNumber))).toBe(true)
+    expect(new Set(rows.map((p) => p.productNumber)).size).toBe(rows.length)
+    const before = new Map(rows.map((p) => [p.slug, p.productNumber]))
+    await importCatalog(fresh, seed, { assignCodes: true })
+    for (const p of await fresh.select().from(s.products)) expect(p.productNumber).toBe(before.get(p.slug))
+    const cats = await fresh.select().from(s.categories)
+    expect(cats.every((c) => c.code && c.productSeq > 0)).toBe(true)
+  })
 })

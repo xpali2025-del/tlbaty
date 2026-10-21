@@ -45,7 +45,7 @@ async function main() {
   }
   const client = postgres(url, { prepare: false, max: 1 })
   try {
-    await importCatalog(drizzle(client), data, { log: (m) => console.log(`✅ ${m}`) })
+    await importCatalog(drizzle(client), data, { assignCodes: true, log: (m) => console.log(`✅ ${m}`) })
     console.log("\n🎉 اكتمل الاستيراد.")
   } finally {
     await client.end()

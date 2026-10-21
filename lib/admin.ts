@@ -75,6 +75,8 @@ export type AdminCategory = {
   _id: string
   name: string
   slug?: string
+  /** رمز القسم الذي يبدأ به رمز كل منتج فيه (DR → DR-012). */
+  code?: string
   description?: string
   image?: string
   sortOrder?: number
@@ -248,6 +250,7 @@ export const getAdminCategories = () =>
       _id: c.id,
       name: c.name,
       slug: c.slug,
+      code: opt(c.code),
       description: opt(c.description),
       image: resolveOptionalImageUrl(c.imageKey),
       sortOrder: c.sortOrder,

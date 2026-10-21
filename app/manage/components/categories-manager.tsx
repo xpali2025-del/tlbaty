@@ -137,6 +137,20 @@ function CategoryDialog({
           </div>
           <SlugField basePath="/category/" defaultValue={category?.slug} label="رابط القسم" />
           <div className="flex flex-col gap-2">
+            <Label>رمز القسم (يبدأ به رمز كل منتج)</Label>
+            <Input
+              name="code"
+              defaultValue={category?.code}
+              dir="ltr"
+              maxLength={5}
+              placeholder="يُولَّد تلقائياً، مثل DR"
+              className="uppercase"
+            />
+            <p className="text-xs text-muted-foreground">
+              رموز المنتجات تصير مثل DR-001 و DR-002. تغيير الرمز لا يغيّر رموز المنتجات الموجودة.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
             <Label>الوصف</Label>
             <Textarea name="description" defaultValue={category?.description} rows={2} />
           </div>

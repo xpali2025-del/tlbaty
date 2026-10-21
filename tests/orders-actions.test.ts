@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
-vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageUsername: () => 'odoo', getManageSessionUser: async () => 'مدير الاختبار' }))
+vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'مدير الاختبار' }))
 vi.mock('@/lib/storage/proofs', async (orig) => ({ ...(await orig<typeof import('@/lib/storage/proofs')>()), deletePaymentProof: mocks.deletePaymentProof }))
 
 const A = await import('@/app/manage/orders-actions')

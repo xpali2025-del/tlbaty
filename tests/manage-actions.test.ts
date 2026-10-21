@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: mocks.revalidateTag, revalidatePath: mocks.revalidatePath }))
-vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageUsername: () => 'odoo', getManageSessionUser: async () => 'tester' }))
+vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'tester' }))
 vi.mock('@/lib/storage/r2', () => ({ deleteImageObject: mocks.deleteImageObject, createImageUpload: vi.fn(async (type: string, size: number, folder: string) => ({ uploadUrl: `https://r2/${folder}/${type}/${size}`, objectKey: `${folder}/new.png` })) }))
 vi.mock('ai', () => ({ generateText: vi.fn(async () => ({ text: 'Women Dress Nike!' })) }))
 
@@ -61,7 +61,7 @@ describe('saveProduct', () => {
       stock: '7', oldPrice: '150', subcategory: 'gold-accessories', brandId, isNew: 'true', badge: 'جديد',
     }))
     const [p] = (await rows(s.products)).filter((x) => x.slug === 'test-product')
-    expect(p.productNumber).toMatch(/^TRF-ACC-GOL-[A-Z0-9]+$/)
+    expect(p.productNumber).toMatch(/^[A-Z]{2,4}[0-9]?-\d{3,}$/)
     expect(p).toMatchObject({ rating: 5, reviewsCount: 0, tags: [], stock: 7, price: 100, oldPrice: 150, isNew: true, isBestseller: false, badge: 'جديد', mainImageKey: KEY('products', 'main'), brandId, sizes: ['S', 'M'] })
     expect(p.subcategoryId).not.toBeNull()
     const imgs = (await rows(s.productImages)).filter((i) => i.productId === p.id).sort((a, b) => a.sortOrder - b.sortOrder)
@@ -366,7 +366,6 @@ describe('helpers', () => {
     for (const bad of ['', 'x', null, undefined, 5, '00000000-0000-4000-8000-00000000000g']) expect(() => helpers.uuidParam(bad)).toThrow('معرّف غير صالح')
     expect(helpers.slugify(' فستان   أحمر! ')).toBe('فستان-أحمر')
     expect(helpers.englishSlug('Red  Shirt!! 2026')).toBe('red-shirt-2026')
-    expect(helpers.makeProductId('women', 'dresses')).toMatch(/^TRF-WOM-DRE-[A-Z0-9]{1,8}$/)
     expect(helpers.syncTags(['new', 'offer', 'bestseller'], { isNew: false })).toEqual(['offer', 'bestseller'])
     expect(helpers.syncTags(['new'], { isNew: true })).toEqual(['new'])
     expect(helpers.uniqueViolation({ code: '23505', constraint_name: 'products_slug_unique' })).toBe('products_slug_unique')

@@ -3,6 +3,7 @@ import path from "node:path"
 import { eq } from "drizzle-orm"
 import type { PgDatabase } from "drizzle-orm/pg-core"
 import * as s from "../../lib/db/store"
+import { allocateProductCode, ensureCategoryCode } from "../../lib/product-code-db"
 
 // ============================================
 // استيراد الكتالوج من ملفات JSON إلى جداول store (PostgreSQL).
@@ -144,6 +145,8 @@ export type ImportOptions = {
   /** يحوّل مسار صورة من البيانات إلى القيمة التي تُخزَّن (مفتاح R2 أو مسار محلي)، أو null إن فُقدت. الافتراضي: بلا صور. */
   resolveImage?: (publicPath: string) => Promise<string | null>
   log?: (message: string) => void
+  /** يعيّن لكل منتج جديد رمزاً قصيراً (DR-012) بدل معرّف الملف. المنتجات الموجودة تحتفظ برقمها. */
+  assignCodes?: boolean
 }
 
 export type ImportReport = {
@@ -200,6 +203,7 @@ export async function importCatalog(
         .onConflictDoUpdate({ target: s.categories.slug, set: values })
         .returning({ id: s.categories.id })
       categoryIds.set(c.slug, row.id)
+      if (options.assignCodes) await ensureCategoryCode(tx, row.id)
       for (const [j, sub] of (c.subcategories ?? []).entries()) {
         const subValues = {
           categoryId: row.id,
@@ -272,6 +276,10 @@ export async function importCatalog(
         metaDescription: p.metaDescription ?? null,
         keywords: p.keywords ?? [],
         updatedAt: new Date(),
+      }
+      if (options.assignCodes) {
+        const [existing] = await tx.select({ productNumber: s.products.productNumber }).from(s.products).where(eq(s.products.slug, p.slug)).limit(1)
+        values.productNumber = existing?.productNumber ?? (await allocateProductCode(tx, values.categoryId))
       }
       const [row] = await tx
         .insert(s.products)

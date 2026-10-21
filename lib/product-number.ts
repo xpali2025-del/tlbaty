@@ -17,6 +17,8 @@ const PREFIX = "TJ"
  */
 export function buildProductNumber(productId: unknown): string {
   if (typeof productId !== "string") return ""
+  // الرمز القصير الجديد (DR-012) هو رقم المنتج نفسه.
+  if (/^[A-Z]{2,4}[0-9]?-\d{3,}$/.test(productId)) return productId
   // معرّفات قديمة قد تحتوي شرطات أو بادئة drafts. نأخذ الحروف والأرقام فقط.
   const clean = productId.replace(/^drafts\./, "").replace(/[^a-zA-Z0-9]/g, "")
   if (!clean) return ""
