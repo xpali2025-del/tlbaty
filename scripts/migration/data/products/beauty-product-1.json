@@ -1,0 +1,43 @@
+{
+  "id": "gp157",
+  "slug": "beauty-product-1",
+  "name": "أحمر شفاه",
+  "description": "أحمر شفاه بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 39,
+  "tags": [
+    "regular"
+  ],
+  "image": "/products/beauty-1.jpg",
+  "images": [
+    "/products/beauty-1.jpg",
+    "/products/beauty-b.png"
+  ],
+  "category": "beauty",
+  "subcategory": "makeup",
+  "rating": 4,
+  "reviewsCount": 10,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 8,
+  "brand": "ترف",
+  "sku": "gp157",
+  "metaTitle": "أحمر شفاه | متجر ترف",
+  "metaDescription": "أحمر شفاه بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "أحمر شفاه",
+    "beauty"
+  ]
+}

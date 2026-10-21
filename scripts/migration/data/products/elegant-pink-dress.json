@@ -1,0 +1,26 @@
+{
+  "id": "p2",
+  "slug": "elegant-pink-dress",
+  "name": "فستان زهري أنيق",
+  "description": "فستان أنيق مصنوع من أجود الأقمشة، مثالي للمناسبات والإطلالات اليومية.",
+  "price": 89,
+  "oldPrice": 129,
+  "tags": ["offer", "bestseller"],
+  "image": "/products/dress-1.jpg",
+  "images": ["/products/dress-1.jpg", "/products/dress-1-2.jpg"],
+  "category": "women",
+  "subcategory": "dresses",
+  "rating": 4.7,
+  "reviewsCount": 124,
+  "colors": [
+    { "name": "زهري", "hex": "#F8BBD0" },
+    { "name": "أبيض", "hex": "#FFFFFF" }
+  ],
+  "sizes": ["S", "M", "L", "XL"],
+  "stock": 18,
+  "brand": "ترف",
+  "sku": "p2",
+  "metaTitle": "فستان زهري أنيق للمناسبات والإطلالات اليومية",
+  "metaDescription": "فستان نسائي زهري أنيق من أجود الأقمشة، مثالي للمناسبات والإطلالات اليومية. تسوقيه الآن من متجر ترف.",
+  "keywords": ["فستان زهري", "فستان نسائي", "فساتين أنيقة", "ملابس نسائية"]
+}

@@ -1,0 +1,43 @@
+{
+  "id": "gp107",
+  "slug": "women-product-7",
+  "name": "تنورة طويلة",
+  "description": "تنورة طويلة بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 259,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/dress-1.jpg",
+  "images": [
+    "/products/dress-1.jpg",
+    "/products/women-b.png"
+  ],
+  "category": "women",
+  "subcategory": "tops",
+  "rating": 4.6,
+  "reviewsCount": 52,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 26,
+  "brand": "أناقة",
+  "sku": "gp107",
+  "metaTitle": "تنورة طويلة | متجر ترف",
+  "metaDescription": "تنورة طويلة بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "تنورة طويلة",
+    "women"
+  ]
+}

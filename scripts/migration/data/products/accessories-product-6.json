@@ -1,0 +1,43 @@
+{
+  "id": "gp155",
+  "slug": "accessories-product-6",
+  "name": "دبوس مزخرف",
+  "description": "دبوس مزخرف بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 217,
+  "tags": [
+    "bestseller"
+  ],
+  "image": "/products/accessory-b.png",
+  "images": [
+    "/products/accessory-b.png",
+    "/products/accessory-1.jpg"
+  ],
+  "category": "accessories",
+  "subcategory": "silver-accessories",
+  "rating": 4.5,
+  "reviewsCount": 45,
+  "colors": [
+    {
+      "name": "كحلي",
+      "hex": "#1F2A44"
+    },
+    {
+      "name": "أبيض",
+      "hex": "#F5F5F5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 23,
+  "brand": "لمسة",
+  "sku": "gp155",
+  "metaTitle": "دبوس مزخرف | متجر ترف",
+  "metaDescription": "دبوس مزخرف بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "دبوس مزخرف",
+    "accessories"
+  ]
+}

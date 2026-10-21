@@ -1,0 +1,44 @@
+{
+  "id": "gp132",
+  "slug": "bags-product-4",
+  "name": "حقيبة سهرة",
+  "description": "حقيبة سهرة بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 224,
+  "tags": [
+    "offer"
+  ],
+  "image": "/products/bag-b.png",
+  "images": [
+    "/products/bag-b.png",
+    "/products/bag-1.jpg"
+  ],
+  "category": "bags",
+  "subcategory": "shoulder-bags",
+  "rating": 4.3,
+  "reviewsCount": 31,
+  "colors": [
+    {
+      "name": "بني",
+      "hex": "#8B4513"
+    },
+    {
+      "name": "كحلي",
+      "hex": "#1F2A44"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 17,
+  "brand": "روان",
+  "sku": "gp132",
+  "metaTitle": "حقيبة سهرة | متجر ترف",
+  "metaDescription": "حقيبة سهرة بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "حقيبة سهرة",
+    "bags"
+  ],
+  "oldPrice": 291
+}

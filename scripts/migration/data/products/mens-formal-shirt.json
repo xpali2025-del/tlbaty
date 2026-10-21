@@ -1,0 +1,26 @@
+{
+  "id": "p7",
+  "slug": "mens-formal-shirt",
+  "name": "قميص رجالي رسمي",
+  "description": "قميص قطني فاخر للمناسبات والعمل.",
+  "price": 99,
+  "oldPrice": 139,
+  "tags": ["offer"],
+  "image": "/products/shirt-1.jpg",
+  "images": ["/products/shirt-1.jpg"],
+  "category": "men",
+  "subcategory": "shirts",
+  "rating": 4.6,
+  "reviewsCount": 56,
+  "colors": [
+    { "name": "أبيض", "hex": "#FFFFFF" },
+    { "name": "أزرق فاتح", "hex": "#90CAF9" }
+  ],
+  "sizes": ["S", "M", "L", "XL", "XXL"],
+  "stock": 28,
+  "brand": "ترف",
+  "sku": "p7",
+  "metaTitle": "قميص رجالي رسمي قطني فاخر",
+  "metaDescription": "قميص رجالي رسمي قطني فاخر مثالي للمناسبات والعمل. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": ["قميص رجالي", "قميص رسمي", "قميص قطني", "ملابس رجالية"]
+}

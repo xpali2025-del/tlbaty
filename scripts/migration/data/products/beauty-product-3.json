@@ -1,0 +1,43 @@
+{
+  "id": "gp159",
+  "slug": "beauty-product-3",
+  "name": "باليت ظلال",
+  "description": "باليت ظلال بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 79,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/beauty-1.jpg",
+  "images": [
+    "/products/beauty-1.jpg",
+    "/products/beauty-b.png"
+  ],
+  "category": "beauty",
+  "subcategory": "makeup",
+  "rating": 4.2,
+  "reviewsCount": 24,
+  "colors": [
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    },
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 14,
+  "brand": "أناقة",
+  "sku": "gp159",
+  "metaTitle": "باليت ظلال | متجر ترف",
+  "metaDescription": "باليت ظلال بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "باليت ظلال",
+    "beauty"
+  ]
+}

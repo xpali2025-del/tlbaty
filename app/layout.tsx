@@ -1,48 +1,223 @@
-import { Analytics } from '@vercel/analytics/next'
-import type { Metadata, Viewport } from 'next'
-import './globals.css'
+import { safeJsonLd } from "@/lib/json-ld"
+import type { Metadata, Viewport } from "next"
+import { Tajawal, Amiri } from "next/font/google"
+import { Analytics } from "@vercel/analytics/next"
+import { CartProvider } from "@/components/cart-provider"
+import { WishlistProvider } from "@/components/wishlist-provider"
+import { CurrencyProvider } from "@/components/currency-provider"
+import { NotificationsProvider } from "@/components/notifications-provider"
+import { Toaster } from "@/components/ui/toaster"
+import { getCurrencySettings } from "@/lib/data"
+import { getSiteConfig, toPublicSiteConfig, type SiteConfig } from "@/lib/site-config"
+import { SiteConfigProvider } from "@/components/site-config-provider"
+import "./globals.css"
 
-export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
-  icons: {
-    icon: [
+const tajawal = Tajawal({
+  subsets: ["arabic", "latin"],
+  weight: ["300", "400", "500", "700", "800"],
+  variable: "--font-tajawal",
+  display: "swap",
+})
+
+const amiri = Amiri({
+  subsets: ["arabic", "latin"],
+  weight: ["400", "700"],
+  variable: "--font-amiri",
+  display: "swap",
+})
+
+// ============================================
+// SEO ثابت في HTML - يقرأه جوجل أثناء الزحف
+// ============================================
+export async function generateMetadata(): Promise<Metadata> {
+  const SITE_CONFIG = await getSiteConfig()
+  return {
+  metadataBase: new URL(SITE_CONFIG.url),
+  title: {
+    default: `${SITE_CONFIG.name} | متجر ملابس وأزياء رجالية ونسائية وأطفال`,
+    template: `%s | ${SITE_CONFIG.name}`,
+  },
+  description: SITE_CONFIG.description,
+  keywords: [...SITE_CONFIG.keywords],
+  authors: [{ name: SITE_CONFIG.name }],
+  creator: SITE_CONFIG.name,
+  publisher: SITE_CONFIG.name,
+  generator: "Next.js",
+  applicationName: SITE_CONFIG.name,
+  referrer: "origin-when-cross-origin",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: SITE_CONFIG.locale,
+    url: SITE_CONFIG.url,
+    title: `${SITE_CONFIG.name} | متجر الأزياء الأول في اليمن`,
+    description: SITE_CONFIG.description,
+    siteName: SITE_CONFIG.name,
+    images: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
       },
     ],
-    apple: '/apple-icon.png',
   },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_CONFIG.name,
+    description: SITE_CONFIG.description,
+    images: ["/og-image.png"],
+  },
+  alternates: {
+    canonical: SITE_CONFIG.url,
+  },
+  category: "shopping",
+  formatDetection: {
+    telephone: true,
+    email: false,
+    address: true,
+  },
+}
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
-  ],
+  themeColor: "#DC2626",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 }
 
-export default function RootLayout({
+// ============================================
+// JSON-LD للمتجر (Schema.org) - سيو محلي متقدم
+// نوع ClothingStore (وهو LocalBusiness) مع إحداثيات
+// جغرافية وساعات عمل ومناطق الخدمة داخل اليمن
+// ============================================
+function buildLocalBusinessJsonLd(SITE_CONFIG: SiteConfig) {
+  return {
+
+  "@context": "https://schema.org",
+  "@type": "ClothingStore",
+  "@id": SITE_CONFIG.ids.store,
+  name: SITE_CONFIG.name,
+  alternateName: SITE_CONFIG.nameEn,
+  description: SITE_CONFIG.description,
+  slogan: SITE_CONFIG.tagline,
+  url: SITE_CONFIG.url,
+  // ربط الشعار ككيان ImageObject مستقل بمعرّف ثابت
+  logo: {
+    "@type": "ImageObject",
+    "@id": SITE_CONFIG.ids.logo,
+    url: SITE_CONFIG.logoUrl ?? `${SITE_CONFIG.url}/logo.png`,
+  },
+  image: `${SITE_CONFIG.url}/og-image.png`,
+  telephone: SITE_CONFIG.contact.phone,
+  priceRange: SITE_CONFIG.priceRange,
+  currenciesAccepted: "YER",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: SITE_CONFIG.contact.address,
+    addressLocality: SITE_CONFIG.geo.city,
+    addressRegion: SITE_CONFIG.geo.region,
+    addressCountry: SITE_CONFIG.geo.countryCode,
+  },
+  geo: {
+    "@type": "GeoCoordinates",
+    latitude: SITE_CONFIG.geo.latitude,
+    longitude: SITE_CONFIG.geo.longitude,
+  },
+  areaServed: SITE_CONFIG.areaServed.map((name) => ({
+    "@type": "AdministrativeArea",
+    name,
+  })),
+  openingHoursSpecification: [
+    {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: SITE_CONFIG.openingHours.days,
+      opens: SITE_CONFIG.openingHours.opens,
+      closes: SITE_CONFIG.openingHours.closes,
+    },
+  ],
+  contactPoint: {
+    "@type": "ContactPoint",
+    telephone: SITE_CONFIG.contact.phone,
+    contactType: "customer service",
+    areaServed: SITE_CONFIG.geo.countryCode,
+    availableLanguage: ["Arabic"],
+  },
+  sameAs: Object.values(SITE_CONFIG.social).filter(Boolean),
+  }
+}
+
+// JSON-LD للموقع مع مربع البحث (يفعّل Sitelinks Search Box في جوجل)
+function buildWebSiteJsonLd(SITE_CONFIG: SiteConfig) {
+  return {
+
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": SITE_CONFIG.ids.website,
+  name: SITE_CONFIG.name,
+  alternateName: SITE_CONFIG.nameEn,
+  url: SITE_CONFIG.url,
+  inLanguage: "ar-YE",
+  publisher: { "@id": SITE_CONFIG.ids.store },
+  potentialAction: {
+    "@type": "SearchAction",
+    target: {
+      "@type": "EntryPoint",
+      urlTemplate: `${SITE_CONFIG.url}/search?q={search_term_string}`,
+    },
+    "query-input": "required name=search_term_string",
+  },
+  }
+}
+
+export default async function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
+  const [{ currencies, defaultCode }, siteConfig] = await Promise.all([getCurrencySettings(), getSiteConfig()])
+  const localBusinessJsonLd = buildLocalBusinessJsonLd(siteConfig)
+  const webSiteJsonLd = buildWebSiteJsonLd(siteConfig)
+
   return (
-    <html lang="en">
-      <body className="antialiased">
-        {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+    <html
+      lang="ar"
+      dir="rtl"
+      className={`${tajawal.variable} ${amiri.variable} bg-background`}
+    >
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(localBusinessJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(webSiteJsonLd) }}
+        />
+      </head>
+      <body className="font-sans antialiased">
+        <SiteConfigProvider config={toPublicSiteConfig(siteConfig)}>
+        <CurrencyProvider currencies={currencies} defaultCode={defaultCode}>
+          <CartProvider>
+            <WishlistProvider>
+              <NotificationsProvider>
+                {children}
+                <Toaster />
+              </NotificationsProvider>
+            </WishlistProvider>
+          </CartProvider>
+        </CurrencyProvider>
+        </SiteConfigProvider>
+        {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>
   )

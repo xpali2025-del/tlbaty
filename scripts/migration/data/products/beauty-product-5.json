@@ -1,0 +1,43 @@
+{
+  "id": "gp161",
+  "slug": "beauty-product-5",
+  "name": "ماسكارا",
+  "description": "ماسكارا بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 119,
+  "tags": [
+    "regular"
+  ],
+  "image": "/products/beauty-1.jpg",
+  "images": [
+    "/products/beauty-1.jpg",
+    "/products/beauty-b.png"
+  ],
+  "category": "beauty",
+  "subcategory": "makeup",
+  "rating": 4.4,
+  "reviewsCount": 38,
+  "colors": [
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    },
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 20,
+  "brand": "ترف",
+  "sku": "gp161",
+  "metaTitle": "ماسكارا | متجر ترف",
+  "metaDescription": "ماسكارا بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "ماسكارا",
+    "beauty"
+  ]
+}
