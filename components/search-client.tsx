@@ -359,7 +359,7 @@ function FilterPanel({ params, facets, update }: { params: SearchParams; facets:
                   type="button"
                   title={`${c.label} (${c.count})`}
                   aria-label={c.label}
-                  aria-pressed={active}
+                  aria-pressed={Boolean(active)}
                   onClick={() => update({ colors: toggle(params.colors, c.key) })}
                   className={`h-8 w-8 rounded-full border-2 transition ${active ? "scale-110 border-primary ring-2 ring-primary/30" : "border-border"}`}
                   style={{ backgroundColor: c.hex }}
@@ -379,7 +379,7 @@ function FilterPanel({ params, facets, update }: { params: SearchParams; facets:
                 <button
                   key={s.size}
                   type="button"
-                  aria-pressed={active}
+                  aria-pressed={Boolean(active)}
                   onClick={() => update({ sizes: toggle(params.sizes, s.size) })}
                   className={`min-w-10 rounded-lg border px-3 py-1.5 text-xs font-medium ${active ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary/50"}`}
                 >
@@ -436,7 +436,7 @@ function FilterGroup({ title, children }: { title: string; children: React.React
 
 function FilterOption({ active, count, onClick, children }: { active: boolean; count?: number; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={active} className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-right ${active ? "bg-primary/10 font-bold text-primary" : "hover:bg-muted"}`}>
+    <button type="button" onClick={onClick} aria-pressed={Boolean(active)} className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-right ${active ? "bg-primary/10 font-bold text-primary" : "hover:bg-muted"}`}>
       <span>{children}</span>
       {count !== undefined && <span className="text-xs text-muted-foreground">{count}</span>}
     </button>

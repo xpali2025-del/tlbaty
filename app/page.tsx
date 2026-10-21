@@ -70,7 +70,7 @@ export default async function HomePage() {
         {/* 4. المضاف حديثاً */}
         <ProductSection
           title="المضاف حديثاً"
-          products={newArrivals.length ? newArrivals : allProducts.slice(0, 6)}
+          products={(newArrivals.length ? newArrivals : allProducts).slice(0, 6)}
           limit={6}
           viewAllHref="/categories?filter=new"
         />
@@ -81,7 +81,7 @@ export default async function HomePage() {
         {/* 5. الأكثر مبيعاً */}
         <ProductSection
           title="الأكثر مبيعاً"
-          products={bestsellers.length ? bestsellers : allProducts.slice(0, 6)}
+          products={(bestsellers.length ? bestsellers : allProducts).slice(0, 6)}
           limit={6}
           viewAllHref="/categories?filter=bestsellers"
         />

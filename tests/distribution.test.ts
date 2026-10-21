@@ -22,15 +22,15 @@ describe('planDistribution', () => {
     expect(plan.skipped).toEqual([])
   })
 
-  it('prefers couriers of the order city, falls back to all-area couriers, otherwise skips', () => {
+  it('considers city couriers plus all-area couriers, prefers the city courier on equal load, otherwise skips', () => {
     const plan = planDistribution(
       [order('o1', 'عدن'), order('o2', 'تعز'), order('o3', 'مأرب')],
       [courier('aden', ['عدن']), courier('any', []), courier('taiz', ['تعز'], 10)],
     )
     const to = (id: string) => plan.assignments.find((a) => a.orderId === id)?.courierId
-    expect(to('o1')).toBe('aden')
-    expect(to('o2')).toBe('taiz') // city match wins even if heavily loaded
-    expect(to('o3')).toBe('any')
+    expect(to('o1')).toBe('aden') // tie on load -> the city courier
+    expect(to('o2')).toBe('any') // taiz courier is heavily loaded, the idle all-area courier takes it
+    expect(to('o3')).toBe('any') // only the all-area courier covers it (its load is now 1, still the only candidate)
     const strict = planDistribution([order('x', 'مأرب')], [courier('aden', ['عدن'])])
     expect(strict.assignments).toEqual([])
     expect(strict.skipped).toEqual([{ orderId: 'x', reason: 'no_city_match' }])

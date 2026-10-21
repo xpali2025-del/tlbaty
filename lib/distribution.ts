@@ -1,9 +1,9 @@
 // توزيع الطلبات على المناديب — منطق خالص بلا قاعدة بيانات (قابل للاختبار ويُستخدم في الخادم).
 //
-// القاعدة: لكل طلب (الأقدم أولاً) نختار المندوب الأقل حملاً بين مناديب مدينة الطلب؛
-// إن لم يوجد مندوب لتلك المدينة نأخذ من المناديب الذين بلا مدن محددة (يغطّون كل المناطق)؛
-// وإن لم يوجد أحد يُترك الطلب بلا تعيين مع سبب واضح. الحمل يزيد مع كل تعيين داخل نفس الدفعة
-// فيتوزّع العدد بالتساوي بدل أن يذهب كله لمن بدأ بأقل حمل.
+// القاعدة: لكل طلب (الأقدم أولاً) المرشَّحون هم مناديب مدينة الطلب + المناديب الذين بلا مدن محددة
+// (يغطّون كل المناطق). نختار الأقل حملاً، وعند التعادل يُفضَّل مندوب المدينة على مندوب كل المناطق.
+// إن لم يوجد مرشّح يُترك الطلب بلا تعيين مع سبب واضح. الحمل يزيد مع كل تعيين داخل نفس الدفعة
+// فيتوزّع العدد بالتساوي بدل أن يذهب كله لمن بدأ بأقل حمل (ولا يبقى مندوب كل المناطق عاطلاً).
 
 export type DistributionOrder = { id: string; city: string; createdAt: Date }
 export type DistributionCourier = { id: string; name: string; cities: string[]; load: number }
@@ -28,13 +28,17 @@ export function planDistribution(orders: DistributionOrder[], couriers: Distribu
   const byAge = [...orders].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
   for (const order of byAge) {
     const city = norm(order.city)
-    let candidates = pool.filter((c) => c.cities.length > 0 && c.cities.includes(city))
-    if (candidates.length === 0) candidates = pool.filter((c) => c.cities.length === 0)
+    const candidates = pool.filter((c) => c.cities.length === 0 || c.cities.includes(city))
     if (candidates.length === 0) {
       plan.skipped.push({ orderId: order.id, reason: "no_city_match" })
       continue
     }
-    const chosen = candidates.reduce((best, c) => (c.load < best.load || (c.load === best.load && c.name.localeCompare(best.name, "ar") < 0) ? c : best))
+    const specific = (c: (typeof pool)[number]) => (c.cities.length > 0 ? 0 : 1)
+    const chosen = candidates.reduce((best, c) => {
+      if (c.load !== best.load) return c.load < best.load ? c : best
+      if (specific(c) !== specific(best)) return specific(c) < specific(best) ? c : best
+      return c.name.localeCompare(best.name, "ar") < 0 ? c : best
+    })
     chosen.load += 1
     plan.assignments.push({ orderId: order.id, courierId: chosen.id })
   }
