@@ -167,9 +167,11 @@ export async function POST(req: Request) {
 
   // ---- طريقة الدفع (افتراضياً الدفع عند الاستلام) ----
   const requestedMethod = str(body.paymentMethod, 40)
-  const paymentMethod: PaymentMethod = isPaymentMethod(requestedMethod)
-    ? requestedMethod
-    : "cash_on_delivery"
+  // قيمة غير فارغة وغير معروفة تُرفض بدل أن تتحول بصمت إلى «الدفع عند الاستلام».
+  if (requestedMethod && !isPaymentMethod(requestedMethod)) {
+    return fail("INVALID_PAYMENT_METHOD", 400, "طريقة الدفع غير معروفة.")
+  }
+  const paymentMethod: PaymentMethod = isPaymentMethod(requestedMethod) ? requestedMethod : "cash_on_delivery"
 
   // طرق الدفع المفعّلة من لوحة الإدارة تُفرض هنا أيضاً (لا يكفي إخفاؤها في الواجهة).
   const { payments } = await getSiteConfig()

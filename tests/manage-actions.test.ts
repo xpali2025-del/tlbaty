@@ -112,6 +112,24 @@ describe('saveProduct', () => {
     expect(after.productNumber).toBe(p.productNumber)
   })
 
+  it('applies stock as a delta from what the admin saw, so orders placed meanwhile are not erased', async () => {
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'test-product')
+    await db.update(s.products).set({ stock: 10 }).where(eq(s.products.id, p.id))
+    // admin opens the form (sees 10); a customer buys 3 meanwhile; admin saves a price change without touching stock
+    await db.update(s.products).set({ stock: 7 }).where(eq(s.products.id, p.id))
+    await A.saveProduct(p.id, productForm({ keptImages: [KEY('products', 'g1'), KEY('products', 'g3')], name: 'منتج معدّل', price: '130', stock: '10', stockBase: '10' }))
+    expect((await rows(s.products)).find((x) => x.id === p.id)!.stock).toBe(7)
+    // admin deliberately adds 5 units (10 -> 15) while 7 are on the shelf -> 12
+    await A.saveProduct(p.id, productForm({ keptImages: [KEY('products', 'g1'), KEY('products', 'g3')], name: 'منتج معدّل', price: '130', stock: '15', stockBase: '10' }))
+    expect((await rows(s.products)).find((x) => x.id === p.id)!.stock).toBe(12)
+    // never negative
+    await A.saveProduct(p.id, productForm({ keptImages: [KEY('products', 'g1'), KEY('products', 'g3')], name: 'منتج معدّل', price: '130', stock: '0', stockBase: '100' }))
+    expect((await rows(s.products)).find((x) => x.id === p.id)!.stock).toBe(0)
+    // without a base (old clients) the value is absolute
+    await A.saveProduct(p.id, productForm({ keptImages: [KEY('products', 'g1'), KEY('products', 'g3')], name: 'منتج معدّل', price: '130', stock: '9' }))
+    expect((await rows(s.products)).find((x) => x.id === p.id)!.stock).toBe(9)
+  })
+
   it('does not delete anything from R2 when the images are unchanged', async () => {
     const [p] = (await rows(s.products)).filter((x) => x.slug === 'test-product')
     await A.saveProduct(p.id, productForm({ keptImages: [KEY('products', 'g1'), KEY('products', 'g3')] }))

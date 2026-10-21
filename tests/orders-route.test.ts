@@ -113,6 +113,14 @@ describe('payment methods enabled from the panel', () => {
   })
 })
 
+describe('payment method validation', () => {
+  it('rejects an unknown payment method instead of treating it as cash on delivery', async () => {
+    const res = await post(order({ paymentMethod: 'bitcoin' }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('INVALID_PAYMENT_METHOD')
+  })
+})
+
 describe('stock', () => {
   it('answers 409 OUT_OF_STOCK and stores nothing when the quantity is not available', async () => {
     await db.update(s.products).set({ stock: 1 }).where(eq(s.products.productNumber, product.id))

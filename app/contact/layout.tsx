@@ -1,3 +1,4 @@
+import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata } from "next"
 import { getSiteConfig, type SiteConfig } from "@/lib/site-config"
 
@@ -81,7 +82,7 @@ export default async function ContactLayout({ children }: { children: React.Reac
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(contactJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(contactJsonLd) }}
       />
       {children}
     </>

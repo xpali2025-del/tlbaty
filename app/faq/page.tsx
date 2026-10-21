@@ -1,3 +1,4 @@
+import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata } from "next"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
@@ -67,7 +68,7 @@ export default async function FAQPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(faqJsonLd) }}
       />
       <Header />
       <main className="pb-24 lg:pb-12 mx-auto max-w-3xl px-4 py-6">

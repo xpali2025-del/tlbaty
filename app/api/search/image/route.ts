@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
   if (palette.length === 0) {
     return NextResponse.json({ error: "INVALID_IMAGE", message: "تعذّر قراءة ألوان الصورة." }, { status: 400 })
   }
-  const filters = parseSearchParams(record.filters && typeof record.filters === "object" ? record.filters : {})
   try {
+    const filters = parseSearchParams(record.filters && typeof record.filters === "object" && !Array.isArray(record.filters) ? record.filters : {})
     return NextResponse.json(await searchByPalette(palette, filters))
   } catch (error) {
     console.error("image search failed:", error instanceof Error ? error.message : "unknown")

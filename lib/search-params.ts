@@ -29,8 +29,10 @@ const slugLike = /^[\p{L}\p{N}_-]{1,100}$/u
 
 function getAll(raw: Raw, key: string): string[] {
   if (raw instanceof URLSearchParams) return raw.getAll(key)
-  const v = raw[key]
-  return v === undefined ? [] : Array.isArray(v) ? v : [v]
+  const v = raw[key] as unknown
+  // قيم غير نصية (من JSON مثلاً) تُهمل بدل أن ترمي عند .trim()
+  const list = Array.isArray(v) ? v : [v]
+  return list.filter((x): x is string => typeof x === "string")
 }
 const first = (raw: Raw, key: string) => getAll(raw, key)[0]
 

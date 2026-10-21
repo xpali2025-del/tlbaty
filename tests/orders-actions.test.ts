@@ -85,7 +85,31 @@ describe('stock restore', () => {
   })
 })
 
+describe('deleteOrder stock', () => {
+  it('returns the units of an open order to stock when it is deleted, but not those of a delivered one', async () => {
+    const [cat] = await db.insert(s.categories).values({ name: 'ق2', slug: 'c-del' }).returning()
+    const [p] = await db.insert(s.products).values({ productNumber: 'DL-1', name: 'منتج', slug: 'dl-1', categoryId: cat.id, price: 5, description: 'd', stock: 4 }).returning()
+    const open = await order()
+    await db.insert(s.orderItems).values({ orderId: open.id, position: 0, productId: p.id, name: 'منتج', quantity: 3, price: 5 })
+    await A.deleteOrder(open.id)
+    expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(7)
+    const delivered = await order({ status: 'delivered' })
+    await db.insert(s.orderItems).values({ orderId: delivered.id, position: 0, productId: p.id, name: 'منتج', quantity: 2, price: 5 })
+    await A.deleteOrder(delivered.id)
+    expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(7)
+  })
+})
+
 describe('assignCourier', () => {
+  it('refuses closed orders', async () => {
+    const [c] = await db.insert(s.couriers).values({ name: 'مندوب مغلق' }).returning()
+    const done = await order({ status: 'delivered' })
+    expect((await A.assignCourier([done.id], c.id)).ok).toBe(false)
+    expect((await get(done.id)).courierId).toBeNull()
+  })
+})
+
+describe('assignCourier (basics)', () => {
   it('assigns many orders atomically and snapshots the courier', async () => {
     const [c] = await db.insert(s.couriers).values({ name: 'مندوب', phone: '700' }).returning()
     const [a, b] = [await order(), await order()]

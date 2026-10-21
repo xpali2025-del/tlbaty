@@ -136,6 +136,8 @@ export async function saveProduct(id: string | null, form: FormData) {
     return { name: c.name.trim(), hex: c.hex }
   })
   const flags = { isNew: bool(form, "isNew"), isBestseller: bool(form, "isBestseller") }
+  const stockBaseRaw = num(form, "stockBase")
+  const stockBase = stockBaseRaw === undefined ? undefined : Math.max(0, Math.trunc(stockBaseRaw))
 
   const base = {
     name,
@@ -171,7 +173,14 @@ export async function saveProduct(id: string | null, form: FormData) {
         existingKeys = (await tx.select().from(productImages).where(eq(productImages.productId, productId))).map((i) => i.imageKey)
         await tx
           .update(products)
-          .set({ ...base, tags: syncTags(existing.tags, flags), ...(mainKey ? { mainImageKey: mainKey } : {}) })
+          .set({
+            ...base,
+            // المخزون يُطبَّق كفرق عمّا رآه المدير عند فتح النموذج، لا كقيمة مطلقة: وإلا مسح حفظ تعديل سعر
+            // خصم الطلبات التي جرت أثناء فتح النموذج وسمح ببيع ما نفد.
+            stock: stockBase === undefined ? base.stock : sql`greatest(0, ${products.stock} + ${base.stock - stockBase})`,
+            tags: syncTags(existing.tags, flags),
+            ...(mainKey ? { mainImageKey: mainKey } : {}),
+          })
           .where(eq(products.id, productId))
         if (mainKey && existing.mainImageKey !== mainKey) removed.push(existing.mainImageKey)
         rowId = productId
@@ -659,6 +668,24 @@ export async function saveSettings(_id: string | null, form: FormData) {
 
 // ---------- مستخدمو اللوحة ----------
 
+/**
+ * هل يحق لهذا المنفّذ تعديل/تعطيل/حذف هذا المستخدم؟ المالك دائماً. غيره لا يلمس مستخدماً بدور «مدير عام»،
+ * ولا مستخدماً يملك صلاحية ليست عند المنفّذ (وإلا لعدّل كلمة مرور مستخدم أقوى ثم دخل بحسابه).
+ */
+function assertCanManageTarget(actor: { isOwner: boolean; permissions: string[] }, target: { role: string; permissions: string[] }) {
+  if (actor.isOwner) return
+  if (target.role === "admin") throw new Error("حساب المدير العام لا يعدّله إلا المالك")
+  if (target.permissions.some((p) => !actor.permissions.includes(p))) {
+    throw new Error("لا يمكنك تعديل مستخدم يملك صلاحيات أكثر منك")
+  }
+}
+
+/** معرّف صف المستخدم الحالي (للمقارنة بالمعرّف لا بالاسم، فلا يلتف عليها إعادة التسمية). المالك بلا صف. */
+async function actorRowId(actor: { username: string; isOwner: boolean }): Promise<string | null> {
+  if (actor.isOwner) return null
+  return (await findUserByUsername(actor.username))?._id ?? null
+}
+
 export async function saveUser(id: string | null, form: FormData) {
   const actor = await assertManagePermission("users")
 
@@ -679,10 +706,11 @@ export async function saveUser(id: string | null, form: FormData) {
   if (username.toLowerCase() === getManageUsername().toLowerCase()) {
     throw new Error("اسم المستخدم محجوز لحساب المالك، اختر اسماً آخر")
   }
-  // لا يمنح المستخدم غيره صلاحية لا يملكها هو (إلا المالك).
+  // لا يمنح المستخدم غيره صلاحية لا يملكها هو (إلا المالك)، ولا دور «مدير عام».
   if (!actor.isOwner) {
     const missing = permissions.filter((p) => !actor.permissions.includes(p))
     if (missing.length) throw new Error("لا يمكنك منح صلاحيات لا تملكها أنت")
+    if (role === "admin") throw new Error("دور «مدير عام» لا يمنحه إلا المالك")
   }
 
   const existing = await findUserByUsername(username)
@@ -690,10 +718,15 @@ export async function saveUser(id: string | null, form: FormData) {
     throw new Error("اسم المستخدم مُستخدم بالفعل، اختر اسماً آخر")
   }
 
-  if (userId && actor.username.toLowerCase() === username.toLowerCase()) {
-    // تعديل الشخص لنفسه: لا يُسقط صلاحية المستخدمين ولا يعطّل حسابه فيقفل اللوحة على نفسه.
-    if (!permissions.includes("users")) throw new Error("لا يمكنك سحب صلاحية إدارة المستخدمين من حسابك")
-    if (!active) throw new Error("لا يمكنك تعطيل حسابك")
+  if (userId) {
+    const [target] = await db.select().from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
+    if (!target) throw new Error("المستخدم غير موجود")
+    assertCanManageTarget(actor, { role: target.role, permissions: normalizePermissions(target.permissions) })
+    // تعديل الشخص لنفسه: لا يُسقط صلاحية المستخدمين ولا يعطّل حسابه فيقفل اللوحة على نفسه (بالمعرّف لا بالاسم).
+    if (userId === (await actorRowId(actor))) {
+      if (!permissions.includes("users")) throw new Error("لا يمكنك سحب صلاحية إدارة المستخدمين من حسابك")
+      if (!active) throw new Error("لا يمكنك تعطيل حسابك")
+    }
   }
 
   const base = { username, name: name ?? null, role, permissions, active, updatedAt: new Date() } as const
@@ -723,9 +756,10 @@ export async function saveUser(id: string | null, form: FormData) {
 export async function deleteUser(id: string) {
   const actor = await assertManagePermission("users")
   const userId = uuidParam(id)
-  const [target] = await db.select({ username: manageUsers.username }).from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
+  const [target] = await db.select().from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
   if (!target) return
-  if (target.username.toLowerCase() === actor.username.toLowerCase()) throw new Error("لا يمكنك حذف حسابك")
+  if (userId === (await actorRowId(actor))) throw new Error("لا يمكنك حذف حسابك")
+  assertCanManageTarget(actor, { role: target.role, permissions: normalizePermissions(target.permissions) })
   await db.delete(manageUsers).where(eq(manageUsers.id, userId))
   revalidateManage()
 }
@@ -733,9 +767,10 @@ export async function deleteUser(id: string) {
 export async function toggleUserActive(id: string, value: boolean) {
   const actor = await assertManagePermission("users")
   const userId = uuidParam(id)
-  const [target] = await db.select({ username: manageUsers.username }).from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
+  const [target] = await db.select().from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
   if (!target) throw new Error("المستخدم غير موجود")
-  if (!value && target.username.toLowerCase() === actor.username.toLowerCase()) throw new Error("لا يمكنك تعطيل حسابك")
+  if (!value && userId === (await actorRowId(actor))) throw new Error("لا يمكنك تعطيل حسابك")
+  assertCanManageTarget(actor, { role: target.role, permissions: normalizePermissions(target.permissions) })
   await db.update(manageUsers).set({ active: Boolean(value), updatedAt: new Date() }).where(eq(manageUsers.id, userId))
   revalidateManage()
 }

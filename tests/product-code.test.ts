@@ -69,4 +69,13 @@ describe('allocation', () => {
     expect(ca).not.toBe(cb)
     expect(await ensureCategoryCode(db, a.id)).toBe(ca)
   })
+
+  it('skips numbers already taken (a category code reused after a rename never collides)', async () => {
+    const [a, b] = await db.insert(s.categories).values([{ name: 'قديم', slug: 'old-cat', code: 'ZZ', productSeq: 2 }, { name: 'جديد', slug: 'new-cat' }]).returning()
+    await db.insert(s.products).values([{ productNumber: 'ZZ-001', name: 'p1', slug: 'zz1', categoryId: a.id, price: 1, description: 'd' }, { productNumber: 'ZZ-002', name: 'p2', slug: 'zz2', categoryId: a.id, price: 1, description: 'd' }])
+    await db.update(s.categories).set({ code: 'YY' }).where(eq(s.categories.id, a.id)) // renamed
+    await db.update(s.categories).set({ code: 'ZZ' }).where(eq(s.categories.id, b.id)) // code ZZ reused by a new category (seq 0)
+    // ZZ-001 and ZZ-002 exist already -> next free is ZZ-003 instead of a unique-violation
+    expect(await allocateProductCode(db, b.id)).toBe('ZZ-003')
+  })
 })

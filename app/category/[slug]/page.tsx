@@ -1,3 +1,4 @@
+import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
@@ -107,11 +108,11 @@ export default async function CategoryPage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbJsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(itemListJsonLd) }}
       />
       <Header />
       <main className="pb-24 lg:pb-12">

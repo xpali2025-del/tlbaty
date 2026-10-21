@@ -13,6 +13,8 @@ import {
   ORDER_STATUS_LABELS,
   type OrderStatus,
 } from "@/lib/order-status"
+import { invalidateStock } from "@/lib/orders/create"
+import { isOpenOrderStatus } from "@/lib/order-status"
 import { planDistribution, type DistributionPlan } from "@/lib/distribution"
 import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZE } from "@/lib/admin-orders"
 import { canTransitionPayment, initialPaymentStatus, isPaymentStatus, type PaymentStatus } from "@/lib/payment"
@@ -52,6 +54,28 @@ function revalidateOrders() {
   revalidatePath("/manage/couriers")
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** يعيد مخزون بنود طلب (المنتجات الحيّة فقط) ويعيد slugs المتأثرة لإبطال كاشها بعد نجاح المعاملة. */
+async function restoreStock(tx: Tx, orderId: string): Promise<string[]> {
+  const lines = await tx
+    .select({ productId: orderItems.productId, quantity: orderItems.quantity })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId))
+  const restore = new Map<string, number>()
+  for (const l of lines) if (l.productId) restore.set(l.productId, (restore.get(l.productId) ?? 0) + l.quantity)
+  const slugs: string[] = []
+  for (const [productId, qty] of [...restore].sort(([a], [b]) => a.localeCompare(b))) {
+    const [row] = await tx
+      .update(products)
+      .set({ stock: sql`${products.stock} + ${qty}` })
+      .where(eq(products.id, productId))
+      .returning({ slug: products.slug })
+    if (row) slugs.push(row.slug)
+  }
+  return slugs
+}
+
 export async function updateOrderStatus(id: string, next: OrderStatus, note?: string): Promise<OrderActionResult> {
   return run(async () => {
     await assertManagePermission("orders")
@@ -60,6 +84,7 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
     if (!isOrderStatus(next)) throw new Error("حالة طلب غير صالحة.")
     const admin = (await getManageSessionUser()) ?? "مدير"
 
+    const restoredSlugs: string[] = []
     await db.transaction(async (tx) => {
       const [current] = await tx.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId)).for("update")
       if (!current) throw new Error("الطلب غير موجود.")
@@ -74,17 +99,7 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
         .set({ status: next, updatedAt: now, ...(next === "delivered" ? { deliveredAt: now } : {}) })
         .where(eq(orders.id, orderId))
       // إلغاء الطلب أو إرجاعه يعيد المخزون (الحالتان نهائيتان فلا يتكرر الإرجاع).
-      if (next === "cancelled" || next === "returned") {
-        const lines = await tx
-          .select({ productId: orderItems.productId, quantity: orderItems.quantity })
-          .from(orderItems)
-          .where(eq(orderItems.orderId, orderId))
-        const restore = new Map<string, number>()
-        for (const l of lines) if (l.productId) restore.set(l.productId, (restore.get(l.productId) ?? 0) + l.quantity)
-        for (const [productId, qty] of [...restore].sort(([a], [b]) => a.localeCompare(b))) {
-          await tx.update(products).set({ stock: sql`${products.stock} + ${qty}` }).where(eq(products.id, productId))
-        }
-      }
+      if (next === "cancelled" || next === "returned") restoredSlugs.push(...(await restoreStock(tx, orderId)))
       await tx.insert(orderStatusHistory).values({
         orderId,
         fromStatus: from,
@@ -96,6 +111,7 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
     })
 
     revalidateOrders()
+    if (restoredSlugs.length) invalidateStock(restoredSlugs) // صفحات المنتج تعرض «نفد المخزون» من الكاش
     return `تم تحديث الحالة إلى "${ORDER_STATUS_LABELS[next]}"`
   })
 }
@@ -123,9 +139,9 @@ export async function assignCourier(orderIds: string[], courierId: string): Prom
           courierAssignedAt: now,
           updatedAt: now,
         })
-        .where(inArray(orders.id, ids))
+        .where(and(inArray(orders.id, ids), notInArray(orders.status, ["delivered", "cancelled", "returned"])))
         .returning({ id: orders.id })
-      if (updated.length !== new Set(ids).size) throw new Error("بعض الطلبات المحددة غير موجودة.")
+      if (updated.length !== new Set(ids).size) throw new Error("بعض الطلبات المحددة غير موجودة أو مغلقة (مسلَّمة/ملغاة/مُرجَعة).")
     })
 
     revalidateOrders()
@@ -299,8 +315,17 @@ export async function deleteOrder(id: string) {
   await assertManagePermission("orders")
   const orderId = idSchema.parse(id)
   const [proof] = await db.select().from(orderPaymentProofs).where(eq(orderPaymentProofs.orderId, orderId)).limit(1)
-  const deleted = await db.delete(orders).where(and(eq(orders.id, orderId))).returning({ id: orders.id })
-  if (deleted.length && proof) await deletePaymentProof(proof.objectKey).catch(() => {})
+  let slugs: string[] = []
+  const deleted = await db.transaction(async (tx) => {
+    const [current] = await tx.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId)).for("update")
+    if (!current) return false
+    // حذف طلب مفتوح (لم يُسلَّم ولم يُلغَ) يعيد وحداته للمخزون؛ المسلَّم والملغي/المُرجَع لا يُعاد لهما شيء هنا.
+    if (isOpenOrderStatus(normalizeOrderStatus(current.status))) slugs = await restoreStock(tx, orderId)
+    await tx.delete(orders).where(eq(orders.id, orderId))
+    return true
+  })
+  if (deleted && proof) await deletePaymentProof(proof.objectKey).catch(() => {})
+  if (slugs.length) invalidateStock(slugs)
   revalidateOrders()
 }
 

@@ -1,8 +1,8 @@
 import "server-only"
 
 import { cookies } from "next/headers"
-import { createHmac, timingSafeEqual } from "node:crypto"
-import { findUserByUsername, verifyStoredUser } from "@/lib/manage-users"
+import { createHash, createHmac, timingSafeEqual } from "node:crypto"
+import { findUserByUsername, verifyDummyPassword, verifyStoredUser } from "@/lib/manage-users"
 import { SCREENS, SCREEN_LABELS, type Screen } from "@/lib/permissions"
 
 // ============================================
@@ -45,9 +45,15 @@ export function isManageProtected(): boolean {
   return getPassword() !== null
 }
 
-function signUser(username: string, expires: number): string {
-  return createHmac("sha256", getSecret()).update(`user:${username}:${expires}`).digest("hex")
+function signUser(username: string, expires: number, fingerprint: string): string {
+  return createHmac("sha256", getSecret()).update(`user:${username}:${expires}:${fingerprint}`).digest("hex")
 }
+
+const fingerprint = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16)
+
+/** بصمة الحساب داخل الجلسة: تغيّر كلمة المرور أو حذف الحساب وإعادة إنشائه بالاسم نفسه تُبطل الجلسات القديمة. */
+const ownerFingerprint = () => fingerprint(`owner:${getPassword() ?? ""}`)
+const storedFingerprint = (id: string, passwordHash?: string) => fingerprint(`${id}:${passwordHash ?? ""}`)
 
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a)
@@ -80,9 +86,9 @@ export async function authenticate(username: string, password: string): Promise<
   // وضع التطوير فقط: لا كلمة مرور مضبوطة => السماح بالدخول. في الإنتاج يُرفض كل دخول.
   if (!getPassword()) return failClosed() ? null : uname
 
-  // حساب المالك من متغيرات البيئة.
-  if (safeEqual(uname.toLowerCase(), getUsername().toLowerCase()) && verifyPassword(password)) {
-    return getUsername()
+  // حساب المالك من متغيرات البيئة. اسمه محجوز: فشل كلمة مرور المالك لا يسقط إلى مستخدم مخزَّن بالاسم نفسه.
+  if (safeEqual(uname.toLowerCase(), getUsername().toLowerCase())) {
+    return verifyPassword(password) ? getUsername() : null
   }
 
   // مستخدم مُخزّن داخل اللوحة.
@@ -92,9 +98,16 @@ export async function authenticate(username: string, password: string): Promise<
 /** يضبط كوكي الجلسة بعد نجاح تسجيل الدخول لمستخدم محدّد. */
 export async function createManageSession(username: string): Promise<void> {
   if (!getPassword()) return
+  let fp: string
+  if (username.toLowerCase() === getUsername().toLowerCase()) fp = ownerFingerprint()
+  else {
+    const stored = await findUserByUsername(username)
+    if (!stored) throw new Error("المستخدم غير موجود")
+    fp = storedFingerprint(stored._id, stored.passwordHash)
+  }
   const store = await cookies()
   const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS
-  const token = `${Buffer.from(username).toString("base64url")}.${expires}.${signUser(username, expires)}`
+  const token = `${Buffer.from(username).toString("base64url")}.${expires}.${fp}.${signUser(username, expires, fp)}`
   store.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -129,8 +142,8 @@ export async function getManageContext(): Promise<ManageContext | null> {
   const store = await cookies()
   const token = store.get(COOKIE_NAME)?.value
   const parts = token?.split(".") ?? []
-  if (parts.length !== 3) return null
-  const [encoded, expiresRaw, sig] = parts
+  if (parts.length !== 4) return null
+  const [encoded, expiresRaw, fp, sig] = parts
   const expires = Number(expiresRaw)
   if (!Number.isInteger(expires) || expires < Math.floor(Date.now() / 1000)) return null
   let username: string
@@ -139,12 +152,12 @@ export async function getManageContext(): Promise<ManageContext | null> {
   } catch {
     return null
   }
-  if (!username || !safeEqual(sig, signUser(username, expires))) return null
-  if (username.toLowerCase() === getUsername().toLowerCase()) return ownerContext()
+  if (!username || !safeEqual(sig, signUser(username, expires, fp))) return null
+  if (username.toLowerCase() === getUsername().toLowerCase()) return safeEqual(fp, ownerFingerprint()) ? ownerContext() : null
   // مستخدم مُخزَّن: يجب أن يبقى موجوداً ونشطاً، وتُقرأ صلاحياته من القاعدة في كل طلب
   // (تعديل الصلاحيات أو الإيقاف يسري فوراً بلا انتظار انتهاء الجلسة).
   const stored = await findUserByUsername(username)
-  if (!stored || stored.active === false) return null
+  if (!stored || stored.active === false || !safeEqual(fp, storedFingerprint(stored._id, stored.passwordHash))) return null
   return { username: stored.username, isOwner: false, permissions: stored.permissions, role: stored.role }
 }
 

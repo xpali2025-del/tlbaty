@@ -175,4 +175,10 @@ describe('image search route', () => {
     for (let i = 0; i < 25; i++) last = (await call({ palette: [{ hex: '#d02530', weight: 1 }] }, '9.9.9.9')).status
     expect(last).toBe(429)
   })
+
+  it('survives non-string filter values instead of answering 500', async () => {
+    const { POST } = await import('@/app/api/search/image/route')
+    const res = await POST(new Request('http://x/api/search/image', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '3.3.3.3' }, body: JSON.stringify({ palette: [{ hex: '#d02530', weight: 1 }], filters: { q: 5, category: { a: 1 }, color: [1, 'x'], limit: [] } }) }) as never)
+    expect(res.status).toBe(200)
+  })
 })

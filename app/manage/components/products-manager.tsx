@@ -257,7 +257,8 @@ function ProductDialog({
               <Input name="oldPrice" type="number" step="0.01" defaultValue={product?.oldPrice ?? ""} />
             </Field>
             <Field label="المخزون">
-              <Input name="stock" type="number" defaultValue={product?.stock ?? 0} />
+              <Input name="stock" type="number" min={0} defaultValue={product?.stock ?? 0} />
+            {product ? <input type="hidden" name="stockBase" value={product.stock ?? 0} /> : null}
             </Field>
           </div>
 

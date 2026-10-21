@@ -72,10 +72,20 @@ export async function findUserByUsername(username: string): Promise<StoredUser |
   return row ? { ...toAdminUser(row), passwordHash: row.passwordHash } : null
 }
 
+// تجزئة وهمية: عند غياب المستخدم نُجري scrypt أيضاً حتى لا يكشف زمن الاستجابة وجود الاسم.
+const DUMMY_HASH = hashPassword("dummy-password-for-timing")
+export function verifyDummyPassword(password: string): void {
+  verifyPasswordHash(password, DUMMY_HASH)
+}
+
 /** يتحقّق من بيانات مستخدم مُخزّن ويعيد اسمه عند النجاح، أو null. */
 export async function verifyStoredUser(username: string, password: string): Promise<string | null> {
   const user = await findUserByUsername(username)
-  if (!user || user.active === false) return null
+  if (!user) {
+    verifyDummyPassword(password)
+    return null
+  }
+  if (user.active === false) return null
   if (!verifyPasswordHash(password, user.passwordHash)) return null
   return user.username
 }

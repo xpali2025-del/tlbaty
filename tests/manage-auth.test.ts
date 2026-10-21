@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const jar = new Map<string, string>()
-const stored = vi.hoisted(() => ({ user: null as null | { username: string; active: boolean; role: string; permissions: string[] } }))
+const stored = vi.hoisted(() => ({ user: null as null | { _id: string; passwordHash: string; username: string; active: boolean; role: string; permissions: string[] } }))
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (k: string) => (jar.has(k) ? { value: jar.get(k) } : undefined),
@@ -10,8 +10,9 @@ vi.mock('next/headers', () => ({
   }),
 }))
 vi.mock('@/lib/manage-users', () => ({
-  findUserByUsername: async () => stored.user,
-  verifyStoredUser: async (u: string, p: string) => (stored.user && p === 'pw' ? stored.user.username : null),
+  findUserByUsername: async (u: string) => (stored.user && stored.user.username.toLowerCase() === u.toLowerCase() ? stored.user : null),
+  verifyStoredUser: async (u: string, p: string) => (stored.user && stored.user.username.toLowerCase() === u.toLowerCase() && p === 'pw' ? stored.user.username : null),
+  verifyDummyPassword: () => {},
 }))
 
 const A = await import('@/lib/manage-auth')
@@ -42,10 +43,10 @@ describe('manage auth', () => {
     expect(user).toBe('odoo')
     await A.createManageSession(user!)
     expect(await A.getManageSessionUser()).toBe('odoo')
-    const [name, exp, sig] = jar.get('manage_session')!.split('.')
-    jar.set('manage_session', `${Buffer.from('admin2').toString('base64url')}.${exp}.${sig}`)
+    const [name, exp, fp, sig] = jar.get('manage_session')!.split('.')
+    jar.set('manage_session', `${Buffer.from('admin2').toString('base64url')}.${exp}.${fp}.${sig}`)
     expect(await A.getManageSessionUser()).toBeNull()
-    jar.set('manage_session', `${name}.${Number(exp) + 999999}.${sig}`)
+    jar.set('manage_session', `${name}.${Number(exp) + 999999}.${fp}.${sig}`)
     expect(await A.getManageSessionUser()).toBeNull()
     jar.set('manage_session', 'legacy-token-without-expiry.abc')
     expect(await A.getManageSessionUser()).toBeNull()
@@ -73,11 +74,11 @@ describe('manage auth', () => {
 
   it('ends the session of a stored user once disabled or deleted', async () => {
     vi.stubEnv('MANAGE_PASSWORD', 'owner-pass')
-    stored.user = { username: 'sara', active: true, role: 'editor', permissions: ['products'] }
+    stored.user = { _id: 'id-1', passwordHash: 'h1', username: 'sara', active: true, role: 'editor', permissions: ['products'] }
     expect(await A.authenticate('sara', 'pw')).toBe('sara')
     await A.createManageSession('sara')
     expect(await A.getManageSessionUser()).toBe('sara')
-    stored.user = { username: 'sara', active: false, role: 'editor', permissions: ['products'] }
+    stored.user = { _id: 'id-1', passwordHash: 'h1', username: 'sara', active: false, role: 'editor', permissions: ['products'] }
     expect(await A.getManageSessionUser()).toBeNull()
     stored.user = null
     expect(await A.isManageAuthenticated()).toBe(false)
@@ -89,7 +90,7 @@ describe('manage auth', () => {
     expect(await A.getManageContext()).toMatchObject({ isOwner: true, role: 'owner' })
     await expect(A.assertManagePermission('users')).resolves.toBeTruthy()
 
-    stored.user = { username: 'sara', active: true, role: 'editor', permissions: ['products'] }
+    stored.user = { _id: 'id-1', passwordHash: 'h1', username: 'sara', active: true, role: 'editor', permissions: ['products'] }
     await A.createManageSession('sara')
     expect(await A.getManageContext()).toMatchObject({ isOwner: false, permissions: ['products'] })
     await expect(A.assertManagePermission('products')).resolves.toBeTruthy()
@@ -98,5 +99,34 @@ describe('manage auth', () => {
     stored.user.permissions = ['orders']
     await expect(A.assertManagePermission('products')).rejects.toThrow()
     expect(await A.hasManagePermission('orders')).toBe(true)
+  })
+
+  it('invalidates sessions when the account is deleted and recreated, or its password changes', async () => {
+    vi.stubEnv('MANAGE_PASSWORD', 'owner-pass')
+    stored.user = { _id: 'id-1', passwordHash: 'h1', username: 'sara', active: true, role: 'editor', permissions: ['products'] }
+    await A.createManageSession('sara')
+    expect(await A.getManageSessionUser()).toBe('sara')
+    stored.user = { ...stored.user, _id: 'id-2' } // deleted and recreated under the same name
+    expect(await A.getManageSessionUser()).toBeNull()
+    stored.user = { ...stored.user, _id: 'id-1' }
+    expect(await A.getManageSessionUser()).toBe('sara')
+    stored.user = { ...stored.user, passwordHash: 'h2' } // password reset
+    expect(await A.getManageSessionUser()).toBeNull()
+  })
+
+  it('invalidates the owner session when the owner password changes, even with a dedicated secret', async () => {
+    vi.stubEnv('MANAGE_PASSWORD', 'owner-pass')
+    vi.stubEnv('MANAGE_SESSION_SECRET', 'c'.repeat(20))
+    await A.createManageSession('odoo')
+    expect(await A.getManageSessionUser()).toBe('odoo')
+    vi.stubEnv('MANAGE_PASSWORD', 'new-owner-pass')
+    expect(await A.getManageSessionUser()).toBeNull()
+  })
+
+  it('the owner username is reserved at login: a stored user with that name cannot sign in', async () => {
+    vi.stubEnv('MANAGE_PASSWORD', 'owner-pass')
+    stored.user = { _id: 'id-9', passwordHash: 'h', username: 'Odoo', active: true, role: 'admin', permissions: ['users'] }
+    expect(await A.authenticate('odoo', 'pw')).toBeNull()
+    expect(await A.authenticate('ODOO', 'owner-pass')).toBe('odoo')
   })
 })

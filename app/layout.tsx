@@ -1,3 +1,4 @@
+import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata, Viewport } from "next"
 import { Tajawal, Amiri } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
@@ -196,11 +197,11 @@ export default async function RootLayout({
       <head>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(localBusinessJsonLd) }}
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(webSiteJsonLd) }}
         />
       </head>
       <body className="font-sans antialiased">
