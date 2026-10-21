@@ -10,6 +10,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { getCurrencySettings } from "@/lib/data"
 import { getSiteConfig, toPublicSiteConfig, type SiteConfig } from "@/lib/site-config"
 import { SiteConfigProvider } from "@/components/site-config-provider"
+import { CustomerSync } from "@/components/customer-sync"
 import "./globals.css"
 
 const tajawal = Tajawal({
@@ -211,6 +212,7 @@ export default async function RootLayout({
             <WishlistProvider>
               <NotificationsProvider>
                 {children}
+                <CustomerSync />
                 <Toaster />
               </NotificationsProvider>
             </WishlistProvider>

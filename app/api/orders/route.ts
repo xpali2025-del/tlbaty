@@ -3,7 +3,7 @@ import { getCoupons, getCurrencySettings, getPaymentAccountById, getShippingZone
 import { isDbConfigured } from "@/lib/db-cache"
 import { getSiteConfig } from "@/lib/site-config"
 import { isProofStorageConfigured } from "@/lib/env"
-import { insertOrder, loadPricingProducts, OutOfStockError, ProofStorageError } from "@/lib/orders/create"
+import { findOrderByIdempotencyKey, insertOrder, loadPricingProducts, OutOfStockError, parseIdempotencyKey, ProofStorageError } from "@/lib/orders/create"
 import { computeOrderPricing, priceChanged } from "@/lib/orders/pricing"
 import { normalizeInternationalPhone } from "@/lib/phone"
 import { getCurrentCustomer } from "@/lib/otp/session"
@@ -117,6 +117,25 @@ export async function POST(req: Request) {
       body = parsed
     } catch {
       return fail("INVALID_JSON", 400)
+    }
+  }
+
+  // إعادة محاولة بنفس مفتاح الطلب (انقطاع اتصال، أو إعادة تسجيل دخول أثناء الدفع): نعيد الطلب المحفوظ
+  // نفسه ولا ننشئ آخر ولا نخصم المخزون مرة ثانية.
+  const idempotencyKey = parseIdempotencyKey(body.clientOrderKey)
+  if (idempotencyKey) {
+    const existing = await findOrderByIdempotencyKey(sessionCustomer.id, idempotencyKey)
+    if (existing) {
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+        id: existing.id,
+        orderNumber: existing.orderNumber,
+        total: existing.total,
+        currencyCode: existing.currencyCode,
+        priceChanged: false,
+        payment: { method: existing.paymentMethod, status: existing.paymentStatus },
+      })
     }
   }
 
@@ -307,6 +326,7 @@ export async function POST(req: Request) {
   try {
     const created = await insertOrder({
       customer: { id: sessionCustomer.id },
+      idempotencyKey,
       contact: {
         customerName,
         phone,

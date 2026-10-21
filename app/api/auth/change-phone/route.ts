@@ -5,7 +5,7 @@ import { getCustomerByPhone, updateCustomerPhone } from "@/lib/otp/store"
 import { consumeSendAttempt, consumeVerifyAttempt } from "@/lib/otp/rate-limit"
 import { createAndSendOtp } from "@/lib/otp/generate"
 import { verifyOtp } from "@/lib/otp/verify"
-import { resolveSession } from "@/lib/otp/session"
+import { resolveSession, revokeOtherSessions } from "@/lib/otp/session"
 import { logAuthEvent } from "@/lib/otp/audit"
 import { getClientContext } from "@/lib/otp/request-context"
 
@@ -113,13 +113,15 @@ export async function POST(req: Request) {
   }
 
   await updateCustomerPhone(customer.id, customer.phone, newPhone)
+  // الأجهزة الأخرى تُسجَّل خروجها؛ جهازه الحالي يبقى مفتوحاً ليكمل.
+  const otherSessionsEnded = await revokeOtherSessions(customer.id, resolved.sessionId).catch(() => 0)
   await logAuthEvent({
     event: "phone_changed",
     phone: newPhone,
     customerId: customer.id,
     ip,
     userAgent,
-    detail: `from ${customer.phone}`,
+    detail: `from ${customer.phone}; other sessions revoked: ${otherSessionsEnded}`,
   })
 
   return NextResponse.json({ ok: true, phoneMasked: maskPhone(newPhone) })

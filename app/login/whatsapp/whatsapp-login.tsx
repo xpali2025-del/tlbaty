@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { notifyLoggedIn } from '@/lib/customer-local-data'
 
 type Step = 'idle' | 'waiting' | 'claimed' | 'expired'
 
@@ -14,7 +15,8 @@ const ERRORS: Record<string, string> = {
   AUTH_NOT_CONFIGURED: 'الدخول غير متاح حاليًا',
 }
 
-export function WhatsAppLogin() {
+/** onSuccess: بدل الانتقال لصفحة أخرى (مثلاً داخل نافذة الدفع) نكمل في مكاننا والصفحة بحالتها. */
+export function WhatsAppLogin({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [step, setStep] = useState<Step>('idle')
   const [link, setLink] = useState<string>()
   const [token, setToken] = useState<string>()
@@ -69,7 +71,11 @@ export function WhatsAppLogin() {
         body: JSON.stringify({ code }),
       })
       const data = await res.json()
-      if (res.ok) return void (window.location.href = data.redirect ?? '/')
+      if (res.ok) {
+        notifyLoggedIn() // المزامنة تجلب سلة العميل ورغباته فور الدخول
+        if (onSuccess) return onSuccess()
+        return void (window.location.href = data.redirect ?? '/')
+      }
       if (['EXPIRED', 'TOO_MANY_ATTEMPTS', 'NO_CODE', 'CHALLENGE_EXPIRED'].includes(data.error)) setStep('expired')
       setError(ERRORS[data.error] ?? 'تعذّر التحقق')
     } finally {

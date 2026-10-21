@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { flushCustomerSync } from "@/components/customer-sync"
+import { clearLocalData } from "@/lib/customer-local-data"
 import { Loader2, LogOut, MonitorSmartphone, PencilLine } from "lucide-react"
 
 export function AccountActions() {
@@ -15,6 +17,8 @@ export function AccountActions() {
     setError("")
     setLoading(scope)
     try {
+      // آخر تعديلات السلة والرغبات تصل حسابه قبل الخروج.
+      await flushCustomerSync()
       const res = await fetch("/api/auth/logout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -24,6 +28,8 @@ export function AccountActions() {
         setError("تعذّر تسجيل الخروج. حاول مرة أخرى.")
         return
       }
+      // بياناته محفوظة في حسابه؛ نمسحها من هذا الجهاز كي لا يراها المستخدم التالي على جهاز مشترك.
+      clearLocalData()
       router.replace("/login")
       router.refresh()
     } catch {

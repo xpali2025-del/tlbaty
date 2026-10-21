@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, index, integer, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, index, integer, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { pk, store } from './common'
 import { authEventType, customerStatus, otpPurpose } from './enums'
 
@@ -100,3 +100,13 @@ export const loginChallenges = store.table('login_challenges', {
   index('login_challenges_ip_idx').on(t.ip, t.createdAt.desc()).where(sql`${t.ip} is not null`),
   check('login_challenges_claim_consistent', sql`(${t.claimedAt} is null) = (${t.phone} is null)`),
 ])
+
+/**
+ * Cart, wishlist, saved addresses and recently viewed items of a signed-in customer, one JSON row each,
+ * so they follow the customer to any device. Written once (debounced) per shopping session, never per click.
+ */
+export const customerData = store.table('customer_data', {
+  customerId: uuid('customer_id').primaryKey().references(() => customers.id, { onDelete: 'cascade' }),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  updatedAt: at('updated_at').notNull().defaultNow(),
+})

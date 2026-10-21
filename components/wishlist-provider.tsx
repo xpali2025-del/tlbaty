@@ -67,6 +67,8 @@ function parseStored(raw: string | null): WishlistItem[] {
   }
 }
 
+import { LOCAL_RELOAD, notifyLocalChanged } from "@/lib/customer-local-data"
+
 export function WishlistProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<WishlistItem[]>([])
   const [hydrated, setHydrated] = useState(false)
@@ -81,8 +83,16 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (hydrated) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+      notifyLocalChanged()
     }
   }, [items, hydrated])
+
+  // المزامنة (أو تسجيل الخروج) غيّرت التخزين المحلي: نعيد القراءة.
+  useEffect(() => {
+    const reload = () => setItems(parseStored(localStorage.getItem(STORAGE_KEY)))
+    window.addEventListener(LOCAL_RELOAD, reload)
+    return () => window.removeEventListener(LOCAL_RELOAD, reload)
+  }, [])
 
   const isInWishlist = (id: string) => items.some((i) => i.id === id)
 

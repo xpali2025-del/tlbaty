@@ -1,6 +1,6 @@
 import "server-only"
 import { cookies } from "next/headers"
-import { and, eq } from "drizzle-orm"
+import { and, eq, ne } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { customerSessions, customers } from "@/lib/db/store"
 import { SESSION_COOKIE, SESSION_EXPIRE_DAYS } from "./config"
@@ -87,4 +87,14 @@ export async function revokeAllSessions(customerId: string): Promise<void> {
     .set({ revoked: true })
     .where(and(eq(customerSessions.customerId, customerId), eq(customerSessions.revoked, false)))
   ;(await cookies()).delete(SESSION_COOKIE)
+}
+
+/** يُنهي كل جلسات العميل ما عدا الحالية (بعد تغيير الرقم: من فقد رقمه أو جهازه لا تبقى جلسته مفتوحة). */
+export async function revokeOtherSessions(customerId: string, keepSessionId: string): Promise<number> {
+  const revoked = await db
+    .update(customerSessions)
+    .set({ revoked: true })
+    .where(and(eq(customerSessions.customerId, customerId), ne(customerSessions.id, keepSessionId), eq(customerSessions.revoked, false)))
+    .returning({ id: customerSessions.id })
+  return revoked.length
 }

@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
-  boolean, check, doublePrecision, index, integer, jsonb, numeric, real, text, timestamp, uuid,
+  boolean, check, doublePrecision, index, integer, jsonb, numeric, real, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import { products } from './catalog'
 import { pk, store } from './common'
@@ -62,6 +62,8 @@ export const orders = store.table('orders', {
   }>(),
   transferSenderName: text('transfer_sender_name'),
   transferReference: text('transfer_reference'),
+  /** Client-generated key per checkout attempt: a retry (after a dropped connection or re-login) returns the same order instead of creating a second one. */
+  idempotencyKey: text('idempotency_key'),
   transferSubmittedAt: at('transfer_submitted_at'),
   paymentVerifiedAt: at('payment_verified_at'),
   paymentRejectedAt: at('payment_rejected_at'),
@@ -77,6 +79,7 @@ export const orders = store.table('orders', {
   index('orders_payment_status_idx').on(t.paymentStatus, t.createdAt.desc()),
   index('orders_courier_idx').on(t.courierId).where(sql`${t.courierId} is not null`),
   index('orders_phone_idx').on(t.customerPhoneNormalized),
+  uniqueIndex('orders_customer_idempotency_idx').on(t.customerId, t.idempotencyKey).where(sql`${t.idempotencyKey} is not null`),
   index('orders_transfer_reference_idx').on(t.transferReference).where(sql`${t.transferReference} is not null`),
   check('orders_amounts_nonneg', sql`${t.subtotal} >= 0 and ${t.total} >= 0 and ${t.discount} >= 0 and ${t.shippingPrice} >= 0`),
   check('orders_latitude_range', sql`${t.latitude} is null or ${t.latitude} between -90 and 90`),
