@@ -113,6 +113,42 @@ describe('payment methods enabled from the panel', () => {
   })
 })
 
+describe('idempotent submission (retry after a dropped connection or re-login)', () => {
+  const key = (n: string) => `checkout-key-${n}-0123456789`
+  const stockNow = async () => (await db.select().from(s.products).where(eq(s.products.productNumber, product.id)))[0].stock
+
+  it('returns the same order for the same key and deducts stock only once', async () => {
+    const before = await stockNow()
+    const first = await (await post(order({ clientOrderKey: key('a') }))).json()
+    const second = await (await post(order({ clientOrderKey: key('a') }))).json()
+    expect(first.ok && second.ok).toBe(true)
+    expect(second).toMatchObject({ duplicate: true, id: first.id, orderNumber: first.orderNumber })
+    expect(await stockNow()).toBe(before - 2) // quantity 2, once
+    expect((await db.select().from(s.orders).where(eq(s.orders.idempotencyKey, key('a')))).length).toBe(1)
+  })
+
+  it('a different key (or no key) is a new order', async () => {
+    const a = await (await post(order({ clientOrderKey: key('b1') }))).json()
+    const b = await (await post(order({ clientOrderKey: key('b2') }))).json()
+    const c = await (await post(order())).json()
+    expect(new Set([a.id, b.id, c.id]).size).toBe(3)
+  })
+
+  it('ignores malformed keys instead of failing', async () => {
+    expect((await post(order({ clientOrderKey: 'short' }))).status).toBe(200)
+    expect((await post(order({ clientOrderKey: { a: 1 } }))).status).toBe(200)
+  })
+
+  it('two simultaneous submissions with one key create exactly one order', async () => {
+    const before = await stockNow()
+    const [r1, r2] = await Promise.all([post(order({ clientOrderKey: key('race') })), post(order({ clientOrderKey: key('race') }))])
+    const [d1, d2] = [await r1.json(), await r2.json()]
+    expect(d1.ok && d2.ok).toBe(true)
+    expect(d1.id).toBe(d2.id)
+    expect(await stockNow()).toBe(before - 2)
+  })
+})
+
 describe('payment method validation', () => {
   it('rejects an unknown payment method instead of treating it as cash on delivery', async () => {
     const res = await post(order({ paymentMethod: 'bitcoin' }))

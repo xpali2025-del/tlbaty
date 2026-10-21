@@ -45,6 +45,8 @@ export async function loadPricingProducts(productNumbers: string[]): Promise<Map
 
 export type NewOrder = {
   customer: { id: string }
+  /** مفتاح محاولة الدفع من المتصفح؛ نفس المفتاح = نفس الطلب (لا يتكرر عند إعادة المحاولة). */
+  idempotencyKey?: string | null
   contact: {
     customerName: string
     /** كما كتبه العميل. */
@@ -70,7 +72,22 @@ export type NewOrder = {
   }
 }
 
-export type CreatedOrder = { id: string; orderNumber: string; paymentStatus: PaymentStatus }
+export type CreatedOrder = { id: string; orderNumber: string; paymentStatus: PaymentStatus; duplicate?: boolean }
+
+/** مفتاح صالح: 16–64 حرفاً من [A-Za-z0-9_-] (UUID مثلاً). غيره يُهمل. */
+export function parseIdempotencyKey(value: unknown): string | null {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(value) ? value : null
+}
+
+/** الطلب الذي حُفظ سابقاً بنفس المفتاح لنفس العميل (إن وُجد). */
+export async function findOrderByIdempotencyKey(customerId: string, key: string) {
+  const [row] = await db
+    .select({ id: orders.id, orderNumber: orders.orderNumber, paymentStatus: orders.paymentStatus, total: orders.total, currencyCode: orders.currencyCode, paymentMethod: orders.paymentMethod })
+    .from(orders)
+    .where(and(eq(orders.customerId, customerId), eq(orders.idempotencyKey, key)))
+    .limit(1)
+  return row ?? null
+}
 
 function makeOrderNumber(now: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0")
@@ -118,6 +135,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
               orderNumber: candidate,
               status: "new",
               customerId: input.customer.id,
+              idempotencyKey: input.idempotencyKey ?? null,
               customerPhoneNormalized: contact.phoneNormalized,
               customerName: contact.customerName,
               phone: contact.phone,
@@ -224,6 +242,12 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
     return created
   } catch (error) {
     if (proofKey) await deletePaymentProof(proofKey).catch(() => {})
+    // طلبان متزامنان بنفس المفتاح: الثاني يفشل بتفرّد المفتاح (والمعاملة تراجعت بما فيها المخزون)،
+    // فنعيد الطلب الذي نجح بدل خطأ.
+    if (input.idempotencyKey && uniqueViolation(error)?.includes("idempotency")) {
+      const existing = await findOrderByIdempotencyKey(input.customer.id, input.idempotencyKey)
+      if (existing) return { id: existing.id, orderNumber: existing.orderNumber, paymentStatus: existing.paymentStatus as PaymentStatus, duplicate: true }
+    }
     throw error
   }
 }

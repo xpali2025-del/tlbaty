@@ -49,6 +49,7 @@ import {
 import { useSiteConfig } from "@/components/site-config-provider"
 import { GovernorateCombobox } from "@/components/governorate-combobox"
 import { buildProductNumber } from "@/lib/product-number"
+import { LoginDialog } from "@/components/auth/login-dialog"
 import { FALLBACK_SHIPPING_METHODS, resolveShippingMethods } from "@/lib/shipping"
 import type { Coupon, ShippingMethod, ShippingZone } from "@/lib/types"
 import type { PaymentAccount } from "@/lib/payment"
@@ -123,6 +124,39 @@ export function CheckoutClient({
   const [submitting, setSubmitting] = useState(false)
   // رقم الطلب بعد نجاح الحفظ — وجوده يعني عرض شاشة النجاح.
   const [placedOrderNumber, setPlacedOrderNumber] = useState<string | null>(null)
+  // رابط واتساب بعد الحفظ: زر احتياطي في شاشة النجاح إن حجب المتصفح النافذة المنبثقة.
+  const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null)
+  // انتهاء الجلسة أثناء الدفع: نافذة تسجيل دخول داخل الصفحة بدل مغادرتها.
+  const [loginOpen, setLoginOpen] = useState(false)
+  const [sessionLost, setSessionLost] = useState(false)
+  const loginResolver = useRef<((ok: boolean) => void) | null>(null)
+  // مفتاح محاولة الدفع: يُنشأ مرة لكل محاولة ويُعاد استخدامه عند إعادة الإرسال، فلا يتكرر الطلب ولا يُخصم المخزون مرتين.
+  const orderKey = useRef<{ key: string; cart: string } | null>(null)
+
+  const requestLogin = () =>
+    new Promise<boolean>((resolve) => {
+      loginResolver.current = resolve
+      setLoginOpen(true)
+    })
+  const finishLogin = (ok: boolean) => {
+    loginResolver.current?.(ok)
+    loginResolver.current = null
+    setLoginOpen(false)
+    if (ok) setSessionLost(false)
+  }
+
+  // عند العودة للتبويب (قد تكون الجلسة انتهت أو أُلغيت من جهاز آخر) نتحقق بهدوء ونُنبّه قبل أن يملأ العميل بياناته.
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== "visible") return
+      fetch("/api/auth/me", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setSessionLost(d?.authenticated === false))
+        .catch(() => {})
+    }
+    document.addEventListener("visibilitychange", check)
+    return () => document.removeEventListener("visibilitychange", check)
+  }, [])
 
   // ملاحظة العميل — اختيارية تماماً ولا تمنع إرسال الطلب.
   const [customerNote, setCustomerNote] = useState("")
@@ -602,10 +636,13 @@ export function CheckoutClient({
       const waUrl = `https://wa.me/${SITE_CONFIG.contact.whatsapp}?text=${encodeURIComponent(
         buildMessage(orderNumber),
       )}`
+      setWhatsappUrl(waUrl)
       if (waWindow && !waWindow.closed) {
         waWindow.location.href = waUrl
       } else {
-        window.location.href = waUrl
+        // بعد إعادة تسجيل الدخول انتهت «نقرة المستخدم» فقد يحجب المتصفح النافذة؛ ولا نترك الصفحة،
+        // بل يبقى زر واتساب في شاشة النجاح.
+        window.open(waUrl, "_blank")
       }
     }
 
@@ -613,7 +650,11 @@ export function CheckoutClient({
     try {
       // نرسل البيانات والصورة معاً كـ multipart/form-data.
       // العميل لا يرسل حالة دفع ولا رقم حساب ولا اسم مزوّد — فقط معرّف الحساب.
+      // المفتاح مرتبط بمحتوى السلة: إن تغيّرت السلة بين محاولتين فهي طلب مختلف بمفتاح جديد.
+      const cartSignature = JSON.stringify(items.map((i) => [i.productId, i.size, i.color, i.quantity]))
+      if (orderKey.current?.cart !== cartSignature) orderKey.current = { key: crypto.randomUUID(), cart: cartSignature }
       const orderPayload = {
+        clientOrderKey: orderKey.current.key,
         customerName: name,
         phone,
         city,
@@ -647,17 +688,18 @@ export function CheckoutClient({
         body.append("paymentProof", payment.proofFile)
       }
 
-      const res = await fetch("/api/orders", { method: "POST", body })
+      let res = await fetch("/api/orders", { method: "POST", body })
 
-      // انتهت الجلسة أثناء الدفع: نعيد العميل لتسجيل الدخول ثم يعود لإتمام الطلب.
+      // انتهت الجلسة أثناء الدفع: نافذة تسجيل دخول داخل الصفحة (بياناتك وموقعك وصورة الحوالة تبقى)،
+      // ثم نعيد الإرسال تلقائياً بنفس مفتاح الطلب، فلا يتكرر إن كان قد حُفظ فعلاً.
       if (res.status === 401) {
         if (waWindow && !waWindow.closed) waWindow.close()
-        toast({
-          title: "انتهت الجلسة",
-          description: "الرجاء تسجيل الدخول مجدداً لإتمام طلبك.",
-        })
-        window.location.href = "/login?next=/checkout"
-        return
+        const loggedIn = await requestLogin()
+        if (!loggedIn) {
+          toast({ title: "لم يكتمل تسجيل الدخول", description: "سجّل دخولك ثم اضغط «تأكيد الطلب» مجدداً. بياناتك محفوظة." })
+          return
+        }
+        res = await fetch("/api/orders", { method: "POST", body })
       }
 
       const data = await res.json().catch(() => null)
@@ -665,6 +707,7 @@ export function CheckoutClient({
       if (res.ok && data?.ok) {
         const savedNumber = typeof data.orderNumber === "string" ? data.orderNumber : ""
         openWhatsApp(savedNumber)
+        orderKey.current = null // الطلب القادم محاولة جديدة بمفتاح جديد
         clearCart()
         // نعرض رقم الطلب للعميل مع زر التتبع بدل التحويل الفوري للرئيسية،
         // فيستطيع نسخ الرقم واستخدامه في شاشة التتبع لاحقاً.
@@ -729,6 +772,16 @@ export function CheckoutClient({
             ) : null}
 
             <div className="flex flex-col gap-3">
+              {whatsappUrl ? (
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full bg-emerald-600 px-6 py-3 font-bold text-white"
+                >
+                  إرسال تفاصيل الطلب إلى المتجر عبر واتساب
+                </a>
+              ) : null}
               {/* شاشة "طلباتي" تعتمد على تسجيل الدخول وتعرض كل الطلبات تلقائياً */}
               <Link
                 href="/orders"
@@ -774,7 +827,16 @@ export function CheckoutClient({
   return (
     <>
       <Header />
+      <LoginDialog open={loginOpen} onClose={() => finishLogin(false)} onLoggedIn={() => finishLogin(true)} />
       <main className="pb-12 mx-auto max-w-3xl px-4 py-6">
+        {sessionLost && !loginOpen && (
+          <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+            <p className="flex-1 text-amber-700">انتهت جلسة تسجيل الدخول. سجّل دخولك الآن وأكمل طلبك بنفس بياناتك.</p>
+            <button type="button" onClick={() => void requestLogin()} className="rounded-full bg-primary px-4 py-1.5 font-bold text-primary-foreground">
+              تسجيل الدخول
+            </button>
+          </div>
+        )}
         {/* مؤشر الخطوات */}
         <div className="flex items-center justify-between mb-8 max-w-md mx-auto" aria-label="خطوات الطلب">
           {[
