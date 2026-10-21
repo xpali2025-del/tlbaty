@@ -248,7 +248,7 @@ export function OrderPaymentPanel({ order }: { order: AdminOrder }) {
             ) : (
               <p className="flex items-center gap-1.5 py-4 text-xs text-muted-foreground">
                 <ImageIcon className="h-3.5 w-3.5" />
-                لا يوجد إثبات حوالة محفوظ.
+                لم يرفق العميل صورة (اختيارية). طابق رقم الحوالة واسم المرسل مع كشف حسابك قبل التأكيد.
               </p>
             )}
           </div>

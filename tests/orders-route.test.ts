@@ -226,15 +226,34 @@ describe('manual transfer', () => {
   const transfer = (over: Record<string, unknown> = {}) => order({ paymentMethod: 'manual_transfer', paymentAccountId: accountId, transferSenderName: 'محمد أحمد علي', transferReference: 'TR-4455', ...over })
   const png = () => new File([PNG], 'proof.png', { type: 'image/png' })
 
-  it('requires an available account, valid sender and reference, and a proof image', async () => {
+  it('requires an available account, valid sender name and transfer reference (the proof image is optional)', async () => {
     const e = async (over: Record<string, unknown>, proof?: File) => (await (await postForm(transfer(over), proof)).json()).error
     expect(await e({ paymentAccountId: '' }, png())).toBe('PAYMENT_ACCOUNT_REQUIRED')
     expect(await e({ paymentAccountId: '00000000-0000-4000-8000-000000000000' }, png())).toBe('PAYMENT_ACCOUNT_UNAVAILABLE')
     expect(await e({ transferSenderName: 'x' }, png())).toBe('INVALID_TRANSFER_SENDER')
     expect(await e({ transferReference: '12' }, png())).toBe('INVALID_TRANSFER_REFERENCE')
-    expect(await e({})).toBe('PAYMENT_PROOF_REQUIRED')
+    expect(await e({ transferSenderName: '' })).toBe('INVALID_TRANSFER_SENDER')
+    expect(await e({ transferReference: '' })).toBe('INVALID_TRANSFER_REFERENCE')
     expect(await e({}, new File([Buffer.from('not an image at all, just text')], 'x.png', { type: 'image/png' }))).toBe('INVALID_PAYMENT_PROOF')
     expect(m.put).not.toHaveBeenCalled()
+  })
+
+  it('accepts a transfer with no proof image: nothing is uploaded, the order waits for manual verification', async () => {
+    const res = await postForm(transfer({ transferReference: 'NOIMG-1234' }))
+    const data = await res.json()
+    expect(res.status).toBe(200)
+    expect(data.payment).toMatchObject({ method: 'manual_transfer', status: 'pending_verification', transferReference: 'NOIMG-1234' })
+    expect(m.put).not.toHaveBeenCalled()
+    expect(await db.select().from(s.orderPaymentProofs).where(eq(s.orderPaymentProofs.orderId, data.id))).toHaveLength(0)
+    expect(await stored(data.id)).toMatchObject({ transferSenderName: 'محمد أحمد علي', transferReference: 'NOIMG-1234' })
+  })
+
+  it('a transfer without an image still works when proof storage is not configured; only attaching an image needs it', async () => {
+    const saved = process.env.R2_PROOFS_BUCKET
+    delete process.env.R2_PROOFS_BUCKET
+    expect((await postForm(transfer({ transferReference: 'NOIMG-5678' }))).status).toBe(200)
+    expect((await postForm(transfer({ transferReference: 'WITHIMG-5678' }), png())).status).toBe(503)
+    process.env.R2_PROOFS_BUCKET = saved
   })
 
   it('stores the account snapshot from the server and uploads only the encrypted proof', async () => {

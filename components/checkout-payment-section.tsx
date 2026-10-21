@@ -301,12 +301,6 @@ export function PaymentSection({
         </p>
       )}
 
-      {transfer && !encryptionReady && sorted.length > 0 && (
-        <p className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          خطأ في إعداد الموقع: لا يمكن استقبال إثباتات الحوالة حالياً. الرجاء استخدام الدفع عند الاستلام أو التواصل معنا.
-        </p>
-      )}
-
       {transfer && sorted.length > 0 && (
         <div className="mt-4 space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
@@ -413,8 +407,15 @@ export function PaymentSection({
                 {errors.reference && <p className="mt-1 text-xs text-destructive">{errors.reference}</p>}
               </div>
 
+              {/* إرفاق الصورة يحتاج تخزيناً مهيّأً للإثباتات؛ إن لم يكن مهيّأً نُخفي الحقل ويبقى الطلب ممكناً بدونها */}
+              {encryptionReady ? (
               <div>
-                <span className="mb-1.5 block text-sm font-bold">صورة إثبات الحوالة</span>
+                <span className="mb-1.5 block text-sm font-bold">
+                  صورة إثبات الحوالة <span className="font-normal text-muted-foreground">(اختياري)</span>
+                </span>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  يسرّع التحقق من الدفع، ولا يمنع إتمام الطلب إن لم ترفقها. المطلوب: اسم المرسل ورقم الحوالة.
+                </p>
                 <input
                   ref={fileInputRef}
                   id="transfer-proof"
@@ -476,6 +477,7 @@ export function PaymentSection({
                   <p className="mt-1 text-xs text-destructive">{proofError || errors.proof}</p>
                 )}
               </div>
+              ) : null}
 
               <p className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-600">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

@@ -261,17 +261,14 @@ export function CheckoutClient({
     if (senderErr) next.senderName = senderErr
     const refErr = validateTransferReference(payment.reference)
     if (refErr) next.reference = refErr
-    if (!payment.proofFile) next.proof = "صورة إثبات الحوالة مطلوبة."
     return next
   }
 
   const paymentReady =
     payment.method === "cash_on_delivery" ||
-    (paymentProofReady &&
-      Boolean(payment.accountId) &&
+    (Boolean(payment.accountId) &&
       !validateSenderName(payment.senderName) &&
-      !validateTransferReference(payment.reference) &&
-      payment.proofFile !== null)
+      !validateTransferReference(payment.reference))
 
   // شروط تفعيل إرسال الطلب
   const canSubmit =
@@ -561,16 +558,16 @@ export function CheckoutClient({
           paymentIssues.account ??
           paymentIssues.senderName ??
           paymentIssues.reference ??
-          paymentIssues.proof ??
           "راجع بيانات الدفع.",
       })
       return
     }
 
-    if (payment.method === "manual_transfer" && !paymentProofReady) {
+    // إرفاق الصورة اختياري، فلا نمنع الحوالة إن كان تخزين الإثبات غير مهيأ (الحقل يُخفى حينها).
+    if (payment.method === "manual_transfer" && payment.proofFile && !paymentProofReady) {
       toast({
-        title: "الدفع بالتحويل غير متاح حالياً",
-        description: "خطأ في إعداد الموقع. الرجاء استخدام الدفع عند الاستلام.",
+        title: "تعذّر إرفاق الصورة",
+        description: "إرفاق صورة الإثبات غير متاح حالياً. احذفها وأكمل الطلب برقم الحوالة واسم المرسل.",
       })
       return
     }
@@ -1351,7 +1348,7 @@ export function CheckoutClient({
             <p className="flex items-center gap-2 text-sm text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
               <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
               {!paymentReady
-                ? "أكمل بيانات الدفع: اختر حساب الدفع وأدخل اسم المرسل ورقم الحوالة وصورة الإثبات."
+                ? "أكمل بيانات الدفع: اختر حساب الدفع وأدخل اسم المرسل ورقم الحوالة (صورة الإثبات اختيارية)."
                 : "اختر عنوانًا محفوظًا أو أضف عنوانًا جديدًا وحدد موقعه لإرسال الطلب."}
             </p>
           )}

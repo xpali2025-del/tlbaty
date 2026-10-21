@@ -224,9 +224,7 @@ export async function POST(req: Request) {
     if (!isValidTransferReference(transferReference)) {
       return fail("INVALID_TRANSFER_REFERENCE", 400, "رقم الحوالة غير صالح.")
     }
-    if (!proofFile) {
-      return fail("PAYMENT_PROOF_REQUIRED", 400, "صورة إثبات الحوالة مطلوبة.")
-    }
+    // صورة الإثبات اختيارية؛ الإلزامي: حساب الدفع واسم المرسل ورقم الحوالة (تُفحص أعلاه)، والإدارة تطابقها يدوياً.
 
     // Snapshot موثوق من الخادم: لا نقبل أي بيانات حساب من العميل.
     paymentAccountSnapshot = {
