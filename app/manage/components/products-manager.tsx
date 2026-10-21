@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { AdminBrand, AdminCategory, AdminColor, AdminProduct } from "@/lib/admin"
-import { saveProduct, deleteProduct, generateProductSlug } from "../actions"
+import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes } from "../actions"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 
@@ -89,6 +89,8 @@ export function ProductsManager({
         onSearchChange={setSearch}
         searchPlaceholder="ابحث بالاسم أو القسم أو الرقم..."
       />
+
+      <PaletteBackfill />
 
       {filtered.length === 0 ? (
         <EmptyState label="لا توجد منتجات مطابقة." />
@@ -512,6 +514,41 @@ function Field({ label, required, children }: { label: string; required?: boolea
         {required ? <span className="text-destructive"> *</span> : null}
       </Label>
       {children}
+    </div>
+  )
+}
+
+
+/** يحسب بصمات ألوان صور المنتجات القائمة ليعمل «البحث بالصورة» عليها (المنتجات الجديدة تُحسب تلقائياً عند الحفظ). */
+function PaletteBackfill() {
+  const [busy, setBusy] = useState(false)
+  async function run() {
+    setBusy(true)
+    try {
+      let total = 0
+      for (let i = 0; i < 50; i++) {
+        const r = await backfillImagePalettes()
+        total += r.done
+        if (r.remaining === 0 || r.done === 0) {
+          toast.success(r.remaining === 0 ? `اكتمل: حُدّثت بصمات ${total} منتج` : `حُدّثت ${total} منتج، وتعذّر تحليل ${r.remaining} (صورتها غير متاحة)`)
+          return
+        }
+      }
+      toast.success(`حُدّثت ${total} منتج، أعد التشغيل لإكمال الباقي`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "تعذّر التحديث")
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm">
+      <p className="min-w-0 flex-1 text-muted-foreground">
+        البحث بالصورة يطابق ألوان صورة العميل مع صور منتجاتك. المنتجات الجديدة تُحلَّل تلقائياً؛ اضغط لتحليل الموجودة منها.
+      </p>
+      <Button size="sm" variant="outline" onClick={run} disabled={busy}>
+        {busy ? "جارٍ التحليل..." : "تحديث بصمات الصور"}
+      </Button>
     </div>
   )
 }

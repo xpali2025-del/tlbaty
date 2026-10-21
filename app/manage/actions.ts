@@ -1,7 +1,7 @@
 "use server"
 
 import { generateText } from "ai"
-import { and, count, eq, inArray } from "drizzle-orm"
+import { and, count, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import {
   adCategories,
@@ -19,6 +19,8 @@ import {
   subcategories,
 } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
+import { refreshProductSearch } from "@/lib/search-index"
+import { productsMissingPalette, refreshProductPalette } from "@/lib/product-palette"
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
 import { isCategoryCode } from "@/lib/product-code"
 import { isRole, normalizePermissions, ROLE_PRESETS, type Role } from "@/lib/permissions"
@@ -158,6 +160,7 @@ export async function saveProduct(id: string | null, form: FormData) {
   }
 
   const removed: (string | null)[] = []
+  let savedId: string | null = null
   try {
     await db.transaction(async (tx) => {
       let rowId: string
@@ -194,6 +197,8 @@ export async function saveProduct(id: string | null, form: FormData) {
       if (colors.length) {
         await tx.insert(productColors).values(colors.map((c, i) => ({ productId: rowId, name: c.name, hex: c.hex, sortOrder: i })))
       }
+      await refreshProductSearch(tx, { productIds: [rowId] })
+      savedId = rowId
     })
   } catch (e) {
     const constraint = uniqueViolation(e)
@@ -204,6 +209,18 @@ export async function saveProduct(id: string | null, form: FormData) {
 
   revalidateStore()
   await removeObjects(removed)
+  // بصمة الألوان للبحث بالصورة: عند رفع صورة رئيسية جديدة فقط، وأفضل جهد (لا تُفشل الحفظ).
+  if (mainKey && savedId) await refreshProductPalette(savedId, mainKey).catch(() => false)
+}
+
+/** تعبئة بصمات الألوان للمنتجات القائمة (صورها موجودة وبلا بصمة) — دفعة من 40 في كل نداء. */
+export async function backfillImagePalettes(): Promise<{ done: number; remaining: number }> {
+  await assertManagePermission("products")
+  const batch = await productsMissingPalette(40)
+  let done = 0
+  for (const p of batch) if (await refreshProductPalette(p.id, p.imageKey).catch(() => false)) done++
+  const [{ n }] = await db.select({ n: count() }).from(products).where(and(isNotNull(products.mainImageKey), sql`${products.imagePalette} = '[]'::jsonb`))
+  return { done, remaining: Number(n) }
 }
 
 export async function deleteProduct(id: string) {
@@ -288,6 +305,8 @@ export async function saveCategory(id: string | null, form: FormData) {
           .values(row)
           .onConflictDoUpdate({ target: [subcategories.categoryId, subcategories.slug], set: row })
       }
+      // إعادة تسمية القسم أو أقسامه الفرعية تغيّر نص بحث منتجاته.
+      if (categoryId) await refreshProductSearch(tx, { categoryId: rowId })
     })
   } catch (e) {
     const constraint = uniqueViolation(e)
@@ -342,6 +361,7 @@ export async function saveBrand(id: string | null, form: FormData) {
       const [existing] = await db.select().from(brands).where(eq(brands.id, brandId)).limit(1)
       if (!existing) throw new Error("البراند غير موجود")
       await db.update(brands).set({ ...values, ...(imageKey ? { imageKey } : {}) }).where(eq(brands.id, brandId))
+      if (existing.name !== values.name) await refreshProductSearch(db, { brandId })
       if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
     } else {
       await db.insert(brands).values({ ...values, imageKey: imageKey ?? null })

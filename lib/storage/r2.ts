@@ -1,6 +1,6 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { getR2Env } from '@/lib/env'
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, isImageFolder, isValidImageKey, type ImageFolder } from './keys'
@@ -52,4 +52,12 @@ export async function deleteImageObject(objectKey: string | null | undefined) {
   if (!objectKey) return
   if (!isValidImageKey(objectKey)) return
   await getClient().send(new DeleteObjectCommand({ Bucket: getR2Env().R2_BUCKET, Key: objectKey }))
+}
+
+/** Reads an uploaded public image (for server-side analysis such as the color palette). Null for non-R2 keys or oversized objects. */
+export async function getImageBytes(objectKey: string | null | undefined): Promise<Buffer | null> {
+  if (!objectKey || !isValidImageKey(objectKey)) return null
+  const res = await getClient().send(new GetObjectCommand({ Bucket: getR2Env().R2_BUCKET, Key: objectKey }))
+  if (!res.Body || (res.ContentLength ?? 0) > MAX_IMAGE_BYTES) return null
+  return Buffer.from(await res.Body.transformToByteArray())
 }

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm"
 import type { PgDatabase } from "drizzle-orm/pg-core"
 import * as s from "../../lib/db/store"
 import { allocateProductCode, ensureCategoryCode } from "../../lib/product-code-db"
+import { refreshProductSearch } from "../../lib/search-index"
 
 // ============================================
 // استيراد الكتالوج من ملفات JSON إلى جداول store (PostgreSQL).
@@ -299,6 +300,7 @@ export async function importCatalog(
       }
     }
     counts.products = data.products.length
+    await refreshProductSearch(tx)
     log(`المنتجات: ${counts.products}`)
 
     // 5) السلايدر

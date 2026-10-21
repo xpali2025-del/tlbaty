@@ -125,6 +125,14 @@ async function loadProducts(where?: SQL): Promise<Product[]> {
   }))
 }
 
+/** منتجات بأرقامها (رمز المنتج) بدقة وبالترتيب المطلوب — للبحث. بلا كاش: المعرّفات تأتي من استعلام حيّ. */
+export async function getProductsByNumbers(numbers: string[]): Promise<Product[]> {
+  if (numbers.length === 0) return []
+  const rows = await loadProducts(inArray(products.productNumber, numbers))
+  const order = new Map(numbers.map((n, i) => [n, i]))
+  return rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+}
+
 export const getProducts = cache(async (): Promise<Product[]> =>
   dbCached({
     keyParts: ["store", "products", "all"],

@@ -3,25 +3,31 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
 import { SearchClient } from "@/components/search-client"
-import { getProducts, getBrands } from "@/lib/data"
+import { getBrands } from "@/lib/data"
+import { searchProducts, getSearchFacets } from "@/lib/search"
+import { parseSearchParams } from "@/lib/search-params"
+import { getSiteConfig } from "@/lib/site-config"
 
-export const metadata: Metadata = {
-  title: "البحث",
-  description: "ابحث عن المنتجات في متجر تاج لاين بسهولة من بين كافة الأقسام والمنتجات.",
-  robots: { index: false, follow: true },
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSiteConfig()
+  return {
+    title: "البحث",
+    description: `ابحث عن المنتجات في متجر ${site.name} بالاسم أو رمز المنتج أو اللون أو الصورة.`,
+    robots: { index: false, follow: true },
+  }
 }
 
-// On-Demand Revalidation: الصفحة ثابتة وتُحدَّث فوراً
-// عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
-
-export default async function SearchPage() {
-  const [products, brands] = await Promise.all([getProducts(), getBrands()])
+// الصفحة ديناميكية: النتائج تُحسب على الخادم من معاملات الرابط (نص، قسم، لون، سعر…)،
+// فلا يُحمَّل كتالوج المتجر كله إلى المتصفح، والرابط قابل للمشاركة.
+export default async function SearchPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = parseSearchParams(await searchParams)
+  const [result, facets, brands] = await Promise.all([searchProducts(params), getSearchFacets(), getBrands()])
 
   return (
     <>
       <Header />
       <main className="pb-24 lg:pb-12">
-        <SearchClient products={products} brands={brands} />
+        <SearchClient params={params} result={result} facets={facets} brands={brands} />
       </main>
       <Footer />
       <MobileNav />
