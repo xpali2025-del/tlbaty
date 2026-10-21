@@ -8,7 +8,7 @@ import * as schema from '@/lib/db/schema'
 const db = drizzle(new PGlite(), { schema })
 vi.mock('@/lib/db/client', () => ({ db }))
 
-const { resolveCustomer, EmailBelongsToAccountError } = await import('@/lib/queries/customers')
+const { resolveCustomer, EmailBelongsToAccountError, findCustomerForAuth } = await import('@/lib/queries/customers')
 
 beforeAll(async () => {
   await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
@@ -51,5 +51,22 @@ describe('resolveCustomer', () => {
     const a = await resolveCustomer({ auth, contact: { email: auth.email, name: 'R' } })
     const b = await resolveCustomer({ auth, contact: { email: auth.email, name: 'R2' } })
     expect(b.id).toBe(a.id)
+  })
+})
+
+describe('findCustomerForAuth', () => {
+
+  it('returns null without creating a row when nothing matches', async () => {
+    const before = (await db.select().from(schema.customers)).length
+    const auth = { id: crypto.randomUUID(), email: 'nobody@x.co', emailConfirmed: true }
+    expect(await findCustomerForAuth(auth)).toBeNull()
+    expect((await db.select().from(schema.customers)).length).toBe(before)
+  })
+
+  it('claims a guest row only for a verified email', async () => {
+    await resolveCustomer({ contact: { email: 'late@x.co', name: 'G' } })
+    const id = crypto.randomUUID()
+    expect(await findCustomerForAuth({ id, email: 'late@x.co', emailConfirmed: false })).toBeNull()
+    expect((await findCustomerForAuth({ id, email: 'late@x.co', emailConfirmed: true }))?.authUserId).toBe(id)
   })
 })

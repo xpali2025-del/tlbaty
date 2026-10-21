@@ -26,3 +26,12 @@ export async function getAuthUser() {
   const { data } = await supabase.auth.getUser()
   return data.user
 }
+
+/** Like getAuthUser but returns null when Supabase isn't configured (e.g. local builds). */
+export async function getOptionalAuthUser() {
+  try {
+    return await getAuthUser()
+  } catch {
+    return null
+  }
+}

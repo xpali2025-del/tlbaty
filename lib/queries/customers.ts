@@ -14,6 +14,19 @@ export type AuthIdentity = { id: string; email: string; emailConfirmed: boolean 
 
 const byEmail = (email: string) => sql`lower(${customers.email}) = ${email.toLowerCase()}`
 
+/** Registered user's customer row: by auth id, else claims the guest row for their verified email. */
+export async function findCustomerForAuth(auth: AuthIdentity) {
+  const [existing] = await db.select().from(customers).where(eq(customers.authUserId, auth.id)).limit(1)
+  if (existing) return existing
+  if (!auth.emailConfirmed) return null
+  const [claimed] = await db
+    .update(customers)
+    .set({ authUserId: auth.id })
+    .where(and(byEmail(auth.email.trim()), isNull(customers.authUserId)))
+    .returning()
+  return claimed ?? null
+}
+
 /**
  * Registered user: find by auth id, else claim the guest row with the same
  * (verified) email so earlier guest orders carry over, else create.
@@ -24,16 +37,8 @@ export async function resolveCustomer(opts: { auth?: AuthIdentity | null; contac
   const email = (auth?.email ?? contact.email).trim()
 
   if (auth) {
-    const [existing] = await db.select().from(customers).where(eq(customers.authUserId, auth.id)).limit(1)
-    if (existing) return existing
-    if (auth.emailConfirmed) {
-      const [claimed] = await db
-        .update(customers)
-        .set({ authUserId: auth.id })
-        .where(and(byEmail(email), isNull(customers.authUserId)))
-        .returning()
-      if (claimed) return claimed
-    }
+    const found = await findCustomerForAuth(auth)
+    if (found) return found
     const [created] = await db
       .insert(customers)
       .values({ authUserId: auth.id, email, name: contact.name, phone: contact.phone })
