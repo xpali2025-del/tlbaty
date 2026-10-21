@@ -42,11 +42,11 @@ export default async function HomePage() {
 
   // الإعلانات (مفلترة ومرتبة مسبقاً من getAds) نعرضها بالتناوب في مواضع مختلفة من الصفحة
   const homeAds = ads
-  let adCursor = 0
+  const cursor = { n: 0 }
   const renderAd = () => {
     if (homeAds.length === 0) return null
-    const ad = homeAds[adCursor % homeAds.length]
-    adCursor += 1
+    const ad = homeAds[cursor.n % homeAds.length]
+    cursor.n += 1
     return (
       <section className="mx-auto max-w-7xl px-4 py-4" aria-label={ad.title}>
         <AdBanner ad={ad} />

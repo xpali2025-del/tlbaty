@@ -1,30 +1,19 @@
 "use client"
 
 import Link from "next/link"
-import { Minus, Plus, Trash2, MessageCircle, ArrowLeft, ShoppingBag } from "lucide-react"
+import { Minus, Plus, Trash2, ArrowLeft, ShoppingBag } from "lucide-react"
 import { SafeImage } from "@/components/safe-image"
 import { Header } from "@/components/header"
 import { FooterClient } from "@/components/footer-client"
 import { MobileNav } from "@/components/mobile-nav"
 import { useCart } from "@/components/cart-provider"
 import { useCurrency } from "@/components/currency-provider"
-import { useSiteConfig } from "@/components/site-config-provider"
 
 export default function CartPage() {
-  const SITE_CONFIG = useSiteConfig()
   const { items, removeItem, updateQuantity, subtotal } = useCart()
   const { format } = useCurrency()
   const discount = 30
   const total = subtotal - (subtotal > 100 ? discount : 0)
-
-  const handleWhatsAppCheckout = () => {
-    const lines = items.map(
-      (i) =>
-        `• ${i.name}\n  المقاس: ${i.size} | اللون: ${i.color} | الكمية: ${i.quantity} | ${format(i.price * i.quantity)}`,
-    )
-    const msg = `مرحباً، أرغب في إتمام طلبي:\n\n${lines.join("\n\n")}\n\n*المجموع: ${format(total)}*`
-    window.open(`https://wa.me/${SITE_CONFIG.contact.whatsapp}?text=${encodeURIComponent(msg)}`, "_blank")
-  }
 
   return (
     <>

@@ -1,33 +1,59 @@
-# tajlin
+# متجر تاج لاين
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+متجر إلكتروني (Next.js 16 + React 19) على **PostgreSQL** (Supabase) عبر Drizzle، والصور على **Cloudflare R2**، مع لوحة إدارة كاملة في `/manage`.
 
-## Built with v0
+## المزايا
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+- **الكتالوج:** منتجات وأقسام وأقسام فرعية وبراندات وسلايدر وإعلانات وكوبونات وآراء، كلها من لوحة الإدارة.
+- **رموز منتجات سهلة الحفظ:** رمز القسم + رقم تسلسلي، مثل `DR-012`. الرقم لا يُعاد استخدامه بعد الحذف. يُكتب بأي صيغة في البحث (`dr12`، `DR 012`).
+- **بحث متقدم:** بحث عربي موحّد الحروف والأرقام، فلاتر (قسم، قسم فرعي، براند، لون، مقاس، سعر، متوفر، تخفيض)، ترتيب، رابط قابل للمشاركة، وبحث برمز المنتج.
+- **بحث بالصورة:** يُحلَّل لون الصورة داخل المتصفح (لا تُرفع الصورة) ويُطابق مع بصمة ألوان صور المنتجات. يطابق اللون والمظهر العام ولا يتعرف على نوع القطعة، فيُستحسن اختيار القسم معه.
+- **الطلبات:** تسعير من الخادم (لا يُصدَّق سعر المتصفح)، خصم المخزون ذرياً، إعادته عند الإلغاء/الإرجاع، إثبات الحوالة مشفّر في bucket خاص.
+- **المناديب وتوزيع الطلبات:** تعيين يدوي أو **توزيع تلقائي عادل** بحسب مدينة الطلب والحمل الحالي لكل مندوب.
+- **المستخدمون والصلاحيات:** كل شاشة في اللوحة صلاحية مستقلة (طلبات، مناديب، منتجات، إعدادات، مستخدمون…) مع أدوار جاهزة قابلة للتخصيص. تُفرض على الخادم في كل عملية، ولا تُرسَل للمتصفح بيانات شاشة غير مسموحة.
+- **إعدادات المتجر من اللوحة:** الاسم والشعار والشعار النصي ورقما الهاتف والواتساب والعنوان وروابط التواصل، وأسعار الصرف، وأسعار الشحن حسب المحافظة، وطرق الدفع المتاحة (تُفرض على الخادم أيضاً).
+- **الدخول:** برقم الهاتف + رمز عبر واتساب (`worker/whatsapp`)، لليمن (+967) والسعودية (+966).
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_6UEWbZmrFtSbGZovph9Nc9NqYmyQ)
-
-## Getting Started
-
-First, run the development server:
+## التشغيل محلياً
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local        # عدّل القيم
+pnpm db:migrate                   # ينشئ الجداول (يحتاج DATABASE_URL)
+pnpm migrate:catalog              # يستورد البيانات الأولية (بلا صور). جرّبه أولاً: -- --dry-run
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## الفحوصات
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
 
-## Learn More
+الاختبارات تعمل على PGlite (PostgreSQL داخل الذاكرة) بنفس ملفات الهجرة، فلا تحتاج قاعدة خارجية.
 
-To learn more, take a look at the following resources:
+## النشر (Vercel + Supabase + R2)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+1. أنشئ مشروع Supabase وانسخ رابط الاتصال إلى `DATABASE_URL` (على Vercel استخدم رابط الـPooler، المنفذ 6543).
+2. أنشئ bucketين في R2: واحد للصور العامة (مع نطاق عام `R2_PUBLIC_URL` وإعداد CORS للرفع المباشر)، وآخر **خاص** لإثباتات الدفع (`R2_PROOFS_BUCKET`).
+3. أضف المتغيرات في Vercel (القائمة الكاملة في `.env.example`): قاعدة البيانات، R2، `PAYMENT_PROOF_ENCRYPTION_KEY`، `MANAGE_USERNAME` و`MANAGE_PASSWORD` (بدونها تُغلق اللوحة في الإنتاج)، `SESSION_SECRET`، `CRON_SECRET`.
+4. من جهازك نفّذ مرة واحدة: `pnpm db:migrate` ثم `pnpm migrate:catalog`.
+5. انشر، ثم سجّل الدخول إلى `/manage` وارفع الصور، واضبط الإعدادات والشحن والعملات، وحدّد مخزون كل منتج.
+6. من شاشة المنتجات اضغط «تحديث بصمات الصور» ليعمل البحث بالصورة على المنتجات القائمة (الجديدة تُحلَّل تلقائياً عند الحفظ).
+
+التنظيف اليومي للجداول المؤقتة (رموز الدخول المنتهية وغيرها) يعمل عبر Vercel Cron (`vercel.json`).
+
+## هيكل المشروع
+
+| المسار | المحتوى |
+| --- | --- |
+| `lib/db/store/*` | مخطط قاعدة البيانات (Drizzle)، والهجرات في `drizzle/` |
+| `lib/data.ts` | قراءة المتجر (مع كاش بوسوم يُبطَل من إجراءات اللوحة) |
+| `lib/search*.ts`, `lib/palette.ts` | البحث والفلاتر والبحث بالصورة |
+| `lib/orders/*` | تسعير الطلبات وإنشاؤها وخصم المخزون |
+| `lib/permissions.ts`, `lib/manage-auth.ts` | الصلاحيات وجلسات اللوحة |
+| `lib/site-config.ts` | إعدادات المتجر من اللوحة مدموجة مع القيم الافتراضية |
+| `app/manage/*` | لوحة الإدارة وإجراءاتها على الخادم |
+| `worker/whatsapp` | خدمة إرسال رموز الدخول عبر واتساب |
+
+عند تعديل المخطط: `pnpm db:generate` ثم راجع ملف الهجرة. الجداول الجديدة تحتاج سطر `ENABLE ROW LEVEL SECURITY` في هجرة جديدة (انظر `drizzle/0001_enable_rls.sql`).
