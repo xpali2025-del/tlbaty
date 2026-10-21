@@ -20,7 +20,7 @@ const currencySchema = z.object({
 })
 
 export async function saveCurrencies(list: unknown, defaultCode: unknown): Promise<void> {
-  await assertManagePermission("shipping")
+  await assertManagePermission("currencies")
   const parsed = z.array(currencySchema).min(1, "أضف عملة واحدة على الأقل").max(20).parse(list)
   const codes = parsed.map((c) => c.code)
   if (new Set(codes).size !== codes.length) throw new Error("رمز العملة مكرر")
@@ -31,8 +31,18 @@ export async function saveCurrencies(list: unknown, defaultCode: unknown): Promi
   if (!codes.includes(def)) throw new Error("العملة الافتراضية غير موجودة في القائمة")
 
   await db.transaction(async (tx) => {
+    // تاريخ «آخر تحديث» يتغير فقط للعملة التي تغيّر سعرها أو اسمها أو رمزها أو أُضيفت الآن،
+    // فيعرف المدير متى حُدّث كل سعر فعلاً (لا كلما ضغط حفظ).
+    const existing = new Map((await tx.select().from(currencies)).map((c) => [c.code, c]))
+    const now = new Date()
     await tx.delete(currencies)
-    await tx.insert(currencies).values(parsed.map((c, sortOrder) => ({ ...c, sortOrder })))
+    await tx.insert(currencies).values(
+      parsed.map((c, sortOrder) => {
+        const old = existing.get(c.code)
+        const unchanged = old && old.rate === c.rate && old.name === c.name && old.symbol === c.symbol
+        return { ...c, sortOrder, updatedAt: unchanged ? old.updatedAt : now }
+      }),
+    )
     await tx
       .insert(siteSettings)
       .values({ id: 1, defaultCurrency: def })

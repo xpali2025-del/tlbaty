@@ -20,6 +20,7 @@ import {
   Wallet,
   Bell,
   Bike,
+  Coins,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "@/lib/permissions"
@@ -49,6 +50,7 @@ import { CouponsManager } from "./components/coupons-manager"
 import { ReviewsManager } from "./components/reviews-manager"
 import { AdsManager } from "./components/ads-manager"
 import { ShippingManager } from "./components/shipping-manager"
+import { CurrenciesManager } from "./components/currencies-manager"
 import { SettingsManager } from "./components/settings-manager"
 import { OrdersManager } from "./components/orders-manager"
 import { CouriersManager } from "./components/couriers-manager"
@@ -70,6 +72,7 @@ type TabId =
   | "ads"
   | "users"
   | "shipping"
+  | "currencies"
   | "settings"
 
 type DashboardProps = {
@@ -120,7 +123,8 @@ export function Dashboard(props: DashboardProps) {
     { id: "reviews", label: "آراء العملاء", icon: Star, count: props.reviews.length },
     { id: "ads", label: "الإعلانات", icon: Megaphone, count: props.ads.length },
     { id: "users", label: "المستخدمون", icon: Users, count: props.users.length },
-    { id: "shipping", label: "الشحن والعملات", icon: Truck },
+    { id: "shipping", label: "الشحن", icon: Truck },
+    { id: "currencies", label: "العملات", icon: Coins },
     { id: "settings", label: "إعدادات الموقع", icon: Settings },
   ] as { id: TabId; label: string; icon: typeof Package; count?: number }[]).filter((item) => props.permissions.includes(item.id))
   const [tab, setTab] = useState<TabId>(nav[0]?.id ?? "orders")
@@ -226,6 +230,9 @@ export function Dashboard(props: DashboardProps) {
         {tab === "ads" && <AdsManager ads={props.ads} categories={props.categories} />}
         {tab === "users" && <UsersManager users={props.users} currentUser={props.currentUser} />}
         {tab === "shipping" && <ShippingManager data={props.shipping} />}
+        {tab === "currencies" && (
+          <CurrenciesManager currencies={props.shipping.currencies} defaultCurrency={props.shipping.defaultCurrency} />
+        )}
         {tab === "settings" && <SettingsManager settings={props.settings} />}
       </main>
     </div>

@@ -396,7 +396,7 @@ export const getAdminPaymentAccounts = () =>
 
 export type AdminShippingMethod = { name: string; description: string; price: number; icon: "express" | "standard" | "pickup" }
 export type AdminShippingZone = { _id: string; governorate: string; isDefault: boolean; methods: AdminShippingMethod[] }
-export type AdminCurrency = { code: string; name: string; symbol: string; rate: number }
+export type AdminCurrency = { code: string; name: string; symbol: string; rate: number; updatedAt?: string }
 export type AdminShipping = { zones: AdminShippingZone[]; currencies: AdminCurrency[]; defaultCurrency: string }
 
 export const getAdminShipping = () =>
@@ -416,7 +416,7 @@ export const getAdminShipping = () =>
           .filter((m) => m.zoneId === z.id)
           .map((m) => ({ name: m.name, description: m.description ?? "", price: m.price, icon: m.icon })),
       })),
-      currencies: rates.map((c) => ({ code: c.code, name: c.name, symbol: c.symbol, rate: c.rate })),
+      currencies: rates.map((c) => ({ code: c.code, name: c.name, symbol: c.symbol, rate: c.rate, updatedAt: c.updatedAt.toISOString() })),
       defaultCurrency: settings?.defaultCurrency ?? "YER",
     }
   })

@@ -57,7 +57,14 @@ export default async function ManagePage() {
     need(can("reviews"), [], getAdminReviews),
     need(can("ads"), [], getAdminAds),
     need(can("settings"), null, getAdminSettings),
-    need(can("shipping"), { zones: [], currencies: [], defaultCurrency: "YER" }, getAdminShipping),
+    need(can("shipping") || can("currencies"), { zones: [], currencies: [], defaultCurrency: "YER" }, async () => {
+      const data = await getAdminShipping()
+      return {
+        zones: can("shipping") ? data.zones : [],
+        currencies: can("currencies") ? data.currencies : [],
+        defaultCurrency: can("currencies") ? data.defaultCurrency : "YER",
+      }
+    }),
     // الدفعة الأولى فقط من الطلبات — الباقي يُحمَّل عند الطلب.
     need(can("orders"), { orders: [], total: 0, hasMore: false }, () => getAdminOrdersPage({ status: "all", sort: "newest" }, 0)),
     need(can("orders"), EMPTY_ORDER_STATS, getAdminOrderStats),
