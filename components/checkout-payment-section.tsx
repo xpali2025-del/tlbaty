@@ -6,11 +6,12 @@ import {
   Check,
   Copy,
   ImageIcon,
+  Landmark,
   Loader2,
   ShieldCheck,
   Trash2,
+  UploadCloud,
   Wallet,
-  X,
 } from "lucide-react"
 import {
   Dialog,
@@ -22,6 +23,7 @@ import {
 import { SafeImage } from "@/components/safe-image"
 import { useSiteConfig } from "@/components/site-config-provider"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 import type { PaymentAccount, PaymentMethod } from "@/lib/payment"
 
 // ============================================
@@ -249,10 +251,21 @@ export function PaymentSection({
     onChange({ ...value, proofFile: null })
   }
 
+  const copyAmount = async () => {
+    // الرقم فقط بلا رمز العملة، ليُلصق مباشرة في تطبيق التحويل.
+    const digits = formattedTotal.replace(/[^\d.,\u0660-\u0669\u06f0-\u06f9]/g, "")
+    try {
+      await navigator.clipboard.writeText(digits)
+      toast({ title: "تم نسخ المبلغ" })
+    } catch {
+      toast({ title: "تعذّر النسخ", description: "انسخ المبلغ يدوياً." })
+    }
+  }
+
   return (
-    <section className="bg-card border border-border rounded-2xl p-5">
-      <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-        <Wallet className="w-5 h-5 text-primary" aria-hidden="true" />
+    <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-bold">
+        <Wallet className="h-5 w-5 text-primary" aria-hidden="true" />
         طريقة الدفع
       </h2>
 
@@ -264,279 +277,239 @@ export function PaymentSection({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="طريقة الدفع">
         {payments.cashOnDelivery && (
-        <button
-          type="button"
-          role="radio"
-          aria-checked={!transfer}
-          onClick={chooseCashOnDelivery}
-          className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-right transition-colors ${
-            !transfer ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-          }`}
-        >
-          <span className="flex items-center gap-2 font-bold text-sm">
-            <Banknote className={`w-5 h-5 ${!transfer ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
-            الدفع عند الاستلام
-            {!transfer && <Check className="w-4 h-4 text-primary" aria-hidden="true" />}
-          </span>
-          <span className="text-xs leading-relaxed text-muted-foreground">
-            ادفع قيمة طلبك عند الاستلام.
-          </span>
-        </button>
+          <MethodCard
+            selected={!transfer}
+            onSelect={chooseCashOnDelivery}
+            icon={<Banknote className="h-5 w-5" aria-hidden="true" />}
+            title="الدفع عند الاستلام"
+            description="ادفع قيمة طلبك نقداً عند وصوله إليك."
+            chip="بدون دفع مسبق"
+          />
         )}
-
         {payments.manualTransfer && (
-        <button
-          type="button"
-          role="radio"
-          aria-checked={transfer}
-          onClick={chooseTransfer}
-          className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-right transition-colors ${
-            transfer ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-          }`}
-        >
-          <span className="flex items-center gap-2 font-bold text-sm">
-            <Wallet className={`w-5 h-5 ${transfer ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
-            الدفع عبر حساب دفع
-            {transfer && <Check className="w-4 h-4 text-primary" aria-hidden="true" />}
-          </span>
-          <span className="text-xs leading-relaxed text-muted-foreground">
-            حوّل قيمة الطلب إلى أحد الحسابات المتاحة، ثم أرسل بيانات الحوالة للتحقق منها.
-          </span>
-        </button>
+          <MethodCard
+            selected={transfer}
+            onSelect={chooseTransfer}
+            icon={<Landmark className="h-5 w-5" aria-hidden="true" />}
+            title="الدفع عبر حساب دفع"
+            description="حوّل المبلغ إلى أحد حساباتنا ثم أدخل بيانات الحوالة."
+            chip="تحويل وتحقق"
+          />
         )}
       </div>
 
       {transfer && sorted.length === 0 && (
-        <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600">
+        <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
           لا توجد حسابات دفع متاحة حالياً. يمكنك استخدام الدفع عند الاستلام.
         </p>
       )}
 
       {transfer && sorted.length > 0 && (
-        <div className="mt-4 space-y-4">
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
-            <span className="text-sm text-muted-foreground">المبلغ المطلوب تحويله</span>
-            <span className="text-lg font-bold text-primary">{formattedTotal}</span>
-          </div>
+        <div className="mt-5 space-y-6">
+          {/* الخطوة 1: المبلغ والحساب */}
+          <Step n={1} title="حوّل المبلغ إلى الحساب">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+              <div>
+                <p className="text-xs text-muted-foreground">المبلغ المطلوب تحويله</p>
+                <p className="text-xl font-bold text-primary">{formattedTotal}</p>
+              </div>
+              <button
+                type="button"
+                onClick={copyAmount}
+                className="flex min-h-10 items-center gap-1.5 rounded-lg border border-primary/30 bg-card px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/10"
+              >
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                نسخ المبلغ
+              </button>
+            </div>
 
-          {selectedAccount ? (
-            <div className="rounded-xl border border-primary/40 bg-primary/5 p-4">
-              <div className="flex items-start gap-3">
-                {selectedAccount.imageUrl ? (
-                  <SafeImage
-                    src={selectedAccount.imageUrl}
-                    alt={selectedAccount.providerName}
-                    width={48}
-                    height={48}
-                    className="h-12 w-12 shrink-0 rounded-lg object-cover"
-                  />
-                ) : (
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted">
-                    <Wallet className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-sm">{selectedAccount.providerName}</p>
-                  <p className="text-xs text-muted-foreground">{selectedAccount.accountHolderName}</p>
-                  <p className="mt-1 text-sm font-bold" dir="ltr">
-                    {selectedAccount.accountNumber}
-                  </p>
-                  {selectedAccount.instructions && (
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      {selectedAccount.instructions}
-                    </p>
+            {selectedAccount ? (
+              <div className="rounded-xl border border-border bg-background p-4">
+                <div className="flex items-start gap-3">
+                  <AccountLogo account={selectedAccount} size={48} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold">{selectedAccount.accountDisplayName || selectedAccount.providerName}</p>
+                    <p className="text-xs text-muted-foreground">{selectedAccount.accountHolderName}</p>
+                  </div>
+                  {sorted.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setSheetOpen(true)}
+                      className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-primary hover:bg-primary/10"
+                    >
+                      تغيير
+                    </button>
                   )}
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => copyAccountNumber(selectedAccount.accountNumber)}
-                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-bold hover:border-primary/50"
-                >
-                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                  نسخ رقم الحساب
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSheetOpen(true)}
-                  className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-bold hover:border-primary/50"
-                >
-                  تغيير الحساب
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSheetOpen(true)}
-              className="w-full rounded-xl border border-dashed border-primary/50 px-4 py-3 text-sm font-bold text-primary hover:bg-primary/5"
-            >
-              اختر حساب الدفع
-            </button>
-          )}
-          {errors.account && <p className="text-xs text-destructive">{errors.account}</p>}
-
-          {selectedAccount && (
-            <div className="space-y-4 border-t border-border pt-4">
-              <div>
-                <label htmlFor="transfer-sender" className="mb-1.5 block text-sm font-bold">
-                  اسم مرسل الحوالة
-                </label>
-                <input
-                  id="transfer-sender"
-                  type="text"
-                  value={value.senderName}
-                  onChange={(e) => onChange({ ...value, senderName: e.target.value })}
-                  maxLength={80}
-                  autoComplete="off"
-                  placeholder="الاسم كما يظهر في الحوالة"
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary"
-                />
-                {errors.senderName && <p className="mt-1 text-xs text-destructive">{errors.senderName}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="transfer-sender-phone" className="mb-1.5 block text-sm font-bold">
-                  رقم هاتف المرسل
-                </label>
-                <input
-                  id="transfer-sender-phone"
-                  type="tel"
-                  inputMode="tel"
-                  dir="ltr"
-                  value={value.senderPhone}
-                  onChange={(e) => onChange({ ...value, senderPhone: e.target.value })}
-                  maxLength={25}
-                  autoComplete="off"
-                  placeholder="الرقم الذي حُوّل منه، مثل 771234567"
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary"
-                />
-                {errors.senderPhone && <p className="mt-1 text-xs text-destructive">{errors.senderPhone}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="transfer-reference" className="mb-1.5 block text-sm font-bold">
-                  رقم الحوالة
-                </label>
-                <input
-                  id="transfer-reference"
-                  type="text"
-                  inputMode="text"
-                  dir="ltr"
-                  value={value.reference}
-                  onChange={(e) => onChange({ ...value, reference: e.target.value })}
-                  maxLength={40}
-                  autoComplete="off"
-                  placeholder="0012345678"
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  أدخل الرقم كما هو تماماً، مع الأصفار في بدايته إن وُجدت.
-                </p>
-                {errors.reference && <p className="mt-1 text-xs text-destructive">{errors.reference}</p>}
-              </div>
-
-              {/* إرفاق الصورة يحتاج تخزيناً مهيّأً للإثباتات؛ إن لم يكن مهيّأً نُخفي الحقل ويبقى الطلب ممكناً بدونها */}
-              {encryptionReady ? (
-              <div>
-                <span className="mb-1.5 block text-sm font-bold">
-                  صورة إثبات الحوالة <span className="font-normal text-muted-foreground">(اختياري)</span>
-                </span>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  يسرّع التحقق من الدفع، ولا يمنع إتمام الطلب إن لم ترفقها. المطلوب: اسم المرسل ورقم الحوالة.
-                </p>
-                <input
-                  ref={fileInputRef}
-                  id="transfer-proof"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => handleFile(e.target.files?.[0])}
-                  className="sr-only"
-                />
-
-                {previewUrl ? (
-                  <div className="rounded-xl border border-border p-3">
-                    {/* معاينة محلية من ذاكرة المتصفح — لا تُرفع إلا مع الطلب */}
-                    <img
-                      src={previewUrl}
-                      alt="معاينة إثبات الحوالة"
-                      className="mx-auto max-h-56 w-auto rounded-lg object-contain"
-                    />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-bold hover:border-primary/50"
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                        استبدال الصورة
-                      </button>
-                      <button
-                        type="button"
-                        onClick={removeProof}
-                        className="flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        حذف الصورة
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2">
+                  <span dir="ltr" className="select-all font-mono text-base font-bold tracking-wide tabular-nums">
+                    {selectedAccount.accountNumber}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={processing}
-                    className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground hover:border-primary/50 disabled:opacity-70"
+                    onClick={() => copyAccountNumber(selectedAccount.accountNumber)}
+                    className="flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-bold transition-colors hover:border-primary/50"
+                    aria-label={`نسخ رقم حساب ${selectedAccount.providerName}`}
                   >
-                    {processing ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-                        جارٍ معالجة الصورة...
-                      </>
-                    ) : (
-                      <>
-                        <ImageIcon className="h-5 w-5" aria-hidden="true" />
-                        اختر صورة إثبات الحوالة (JPEG أو PNG أو WebP)
-                      </>
-                    )}
+                    <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                    نسخ
                   </button>
-                )}
-
-                {(proofError || errors.proof) && (
-                  <p className="mt-1 text-xs text-destructive">{proofError || errors.proof}</p>
+                </div>
+                {selectedAccount.instructions && (
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{selectedAccount.instructions}</p>
                 )}
               </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSheetOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 px-4 py-4 text-sm font-bold text-primary transition-colors hover:bg-primary/5"
+              >
+                <Landmark className="h-4 w-4" aria-hidden="true" />
+                اختر حساب الدفع
+              </button>
+            )}
+            {errors.account && <p className="text-xs text-destructive">{errors.account}</p>}
+          </Step>
+
+          {selectedAccount && (
+            <>
+              {/* الخطوة 2: بيانات الحوالة */}
+              <Step n={2} title="أدخل بيانات الحوالة">
+                <Field id="transfer-sender" label="اسم مرسل الحوالة" error={errors.senderName}>
+                  <input
+                    id="transfer-sender"
+                    type="text"
+                    value={value.senderName}
+                    onChange={(e) => onChange({ ...value, senderName: e.target.value })}
+                    maxLength={80}
+                    autoComplete="off"
+                    placeholder="الاسم كما يظهر في الحوالة"
+                    aria-invalid={Boolean(errors.senderName)}
+                    className={inputClass(Boolean(errors.senderName))}
+                  />
+                </Field>
+
+                <Field id="transfer-sender-phone" label="رقم هاتف المرسل" error={errors.senderPhone}>
+                  <input
+                    id="transfer-sender-phone"
+                    type="tel"
+                    inputMode="tel"
+                    dir="ltr"
+                    value={value.senderPhone}
+                    onChange={(e) => onChange({ ...value, senderPhone: e.target.value })}
+                    maxLength={25}
+                    autoComplete="off"
+                    placeholder="الرقم الذي حُوّل منه، مثل 771234567"
+                    aria-invalid={Boolean(errors.senderPhone)}
+                    className={cn(inputClass(Boolean(errors.senderPhone)), "text-left")}
+                  />
+                </Field>
+
+                <Field
+                  id="transfer-reference"
+                  label="رقم الحوالة"
+                  hint="أدخل الرقم كما هو تماماً، مع الأصفار في بدايته إن وُجدت."
+                  error={errors.reference}
+                >
+                  <input
+                    id="transfer-reference"
+                    type="text"
+                    inputMode="text"
+                    dir="ltr"
+                    value={value.reference}
+                    onChange={(e) => onChange({ ...value, reference: e.target.value })}
+                    maxLength={40}
+                    autoComplete="off"
+                    placeholder="0012345678"
+                    aria-invalid={Boolean(errors.reference)}
+                    className={cn(inputClass(Boolean(errors.reference)), "text-left")}
+                  />
+                </Field>
+              </Step>
+
+              {/* الخطوة 3: إشعار الدفع (اختياري). إرفاقه يحتاج تخزيناً مهيّأً للإثباتات، وإلا نُخفيه ويبقى الطلب ممكناً بدونه. */}
+              {encryptionReady ? (
+                <Step n={3} title="إشعار الدفع" optional>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    أرفق صورة الإشعار لتسريع التحقق من الدفع. لا يمنع إتمام الطلب إن لم ترفقها.
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    id="transfer-proof"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => handleFile(e.target.files?.[0])}
+                    className="sr-only"
+                  />
+
+                  {previewUrl ? (
+                    <div className="rounded-xl border border-border bg-background p-3">
+                      {/* معاينة محلية من ذاكرة المتصفح — لا تُرفع إلا مع الطلب */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={previewUrl} alt="معاينة إشعار الدفع" className="mx-auto max-h-56 w-auto rounded-lg object-contain" />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-bold hover:border-primary/50"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          استبدال الصورة
+                        </button>
+                        <button
+                          type="button"
+                          onClick={removeProof}
+                          className="flex min-h-9 items-center gap-1.5 rounded-lg border border-destructive/40 px-3 text-xs font-bold text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          حذف الصورة
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={processing}
+                      className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 disabled:opacity-70"
+                    >
+                      {processing ? (
+                        <>
+                          <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+                          جارٍ معالجة الصورة...
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="h-6 w-6 text-primary" aria-hidden="true" />
+                          <span className="font-bold text-foreground">اختر صورة الإشعار</span>
+                          <span className="text-xs">JPEG أو PNG أو WebP</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {(proofError || errors.proof) && <p className="text-xs text-destructive">{proofError || errors.proof}</p>}
+                </Step>
               ) : null}
 
-              <p className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-600">
+              <p className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-700">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                 سيبقى طلبك في حالة «جارٍ التحقق من الدفع» حتى تتم مراجعة بيانات الحوالة.
               </p>
-            </div>
+            </>
           )}
         </div>
       )}
 
       <Dialog open={sheetOpen} onOpenChange={setSheetOpen}>
-        <DialogContent className="max-w-lg" dir="rtl">
+        <DialogContent dir="rtl" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>اختر حساب الدفع</DialogTitle>
-            <DialogDescription>
-              حوّل {formattedTotal} إلى الحساب الذي تختاره، ثم أرسل بيانات الحوالة.
-            </DialogDescription>
+            <DialogDescription>حوّل {formattedTotal} إلى الحساب الذي تختاره، ثم أدخل بيانات الحوالة.</DialogDescription>
           </DialogHeader>
 
-          {/*
-            شبكة بعمودين ثابتين — بطاقتان متجاورتان في كل سطر حتى على الهاتف،
-            بلا تمرير أفقي. البطاقة الأخيرة عند العدد الفردي تبقى بعرض نصف الصف
-            لأن العناصر لا تتمدد في grid ذات أعمدة ثابتة.
-          */}
-          <div
-            className="grid max-h-[60vh] grid-cols-2 items-stretch gap-2.5 overflow-y-auto overflow-x-hidden p-0.5 sm:gap-3"
-            role="radiogroup"
-            aria-label="حسابات الدفع"
-          >
+          <div className="max-h-[55vh] space-y-2.5 overflow-y-auto p-0.5" role="radiogroup" aria-label="حسابات الدفع">
             {sorted.map((account) => {
               const active = account.id === value.accountId
               const displayName = account.accountDisplayName || account.providerName
@@ -545,8 +518,7 @@ export function PaymentSection({
                 setSheetOpen(false)
               }
               return (
-                // البطاقة كاملة قابلة للضغط، وزر النسخ داخلها زر حقيقي مستقل
-                // لذلك نستخدم div بدور radio بدلاً من زر داخل زر.
+                // الصف كله قابل للضغط، وزر النسخ داخله زر حقيقي مستقل، فنستخدم div بدور radio لا زراً داخل زر.
                 <div
                   key={account.id}
                   role="radio"
@@ -559,95 +531,161 @@ export function PaymentSection({
                       select()
                     }
                   }}
-                  className={`flex h-full min-w-0 cursor-pointer flex-col gap-2 rounded-xl border p-3 text-right transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                    active
-                      ? "border-2 border-primary bg-primary/10 shadow-sm"
-                      : "border border-border hover:border-primary/50"
-                  }`}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-right transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                    active ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/30" : "border-border hover:border-primary/40",
+                  )}
                 >
-                  {/* صورة أو شعار الحساب */}
-                  <div className="flex items-start justify-between gap-2">
-                    {account.imageUrl ? (
-                      <SafeImage
-                        src={account.imageUrl}
-                        alt={displayName}
-                        width={44}
-                        height={44}
-                        className="h-11 w-11 shrink-0 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        <Wallet className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-                      </span>
-                    )}
-                    {/* علامة الحساب المحدد */}
-                    {active && (
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary">
-                        <Check className="h-4 w-4 text-primary-foreground" aria-hidden="true" />
-                        <span className="sr-only">الحساب المحدد</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* اسم الحساب — يستخدم كامل عرض البطاقة */}
-                  <p className="line-clamp-2 w-full text-sm font-bold leading-snug break-words">
-                    {displayName}
-                  </p>
-
-                  {/* رقم الحساب بالاتجاه LTR + زر النسخ أسفله */}
-                  <div className="mt-auto w-full min-w-0">
-                    <p
-                      dir="ltr"
-                      className="w-full truncate text-left font-mono text-[13px] font-bold tabular-nums"
-                      title={account.accountNumber}
-                    >
+                  <AccountLogo account={account} size={48} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold">{displayName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{account.accountHolderName}</p>
+                    <p dir="ltr" className="mt-0.5 truncate text-left font-mono text-sm font-bold tabular-nums" title={account.accountNumber}>
                       {account.accountNumber}
                     </p>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        // النسخ لا يغيّر الحساب المحدد ولا يغلق النافذة.
-                        e.stopPropagation()
-                        copyAccountNumber(account.accountNumber)
-                      }}
-                      aria-label={`نسخ رقم حساب ${displayName}`}
-                      className="mt-1.5 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-2 py-2 text-xs font-bold transition-colors hover:border-primary/50 hover:bg-accent"
-                    >
-                      <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      نسخ الرقم
-                    </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      // النسخ لا يغيّر الحساب المحدد ولا يغلق النافذة.
+                      e.stopPropagation()
+                      copyAccountNumber(account.accountNumber)
+                    }}
+                    aria-label={`نسخ رقم حساب ${displayName}`}
+                    className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:border-primary/50 hover:bg-accent"
+                  >
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <RadioDot checked={active} />
                 </div>
               )
             })}
           </div>
-
-          {/* تفاصيل الحساب المختار كاملة — أسفل الشبكة لتبقى البطاقات مرتبة */}
-          {selectedAccount && (
-            <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 text-xs leading-relaxed">
-              <p className="font-bold text-sm">{selectedAccount.providerName}</p>
-              <p className="text-muted-foreground">
-                صاحب الحساب: {selectedAccount.accountHolderName}
-              </p>
-              <p className="text-muted-foreground" dir="ltr">
-                {selectedAccount.accountNumber}
-              </p>
-              {selectedAccount.instructions && (
-                <p className="mt-1.5 text-muted-foreground">{selectedAccount.instructions}</p>
-              )}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setSheetOpen(false)}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-bold hover:border-primary/50"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-            إغلاق
-          </button>
         </DialogContent>
       </Dialog>
     </section>
   )
 }
+
+// ---------- مكوّنات العرض المساعدة ----------
+
+function RadioDot({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+        checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
+      )}
+    >
+      {checked ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+    </span>
+  )
+}
+
+function MethodCard({
+  selected,
+  onSelect,
+  icon,
+  title,
+  description,
+  chip,
+}: {
+  selected: boolean
+  onSelect: () => void
+  icon: React.ReactNode
+  title: string
+  description: string
+  chip: string
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        "flex items-start gap-3 rounded-xl border p-4 text-right transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        selected ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/40",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors",
+          selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold">{title}</span>
+        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{description}</span>
+        <span
+          className={cn(
+            "mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold",
+            selected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {chip}
+        </span>
+      </span>
+      <RadioDot checked={selected} />
+    </button>
+  )
+}
+
+function AccountLogo({ account, size }: { account: PaymentAccount; size: number }) {
+  return account.imageUrl ? (
+    <SafeImage
+      src={account.imageUrl}
+      alt={account.providerName}
+      width={size}
+      height={size}
+      className="shrink-0 rounded-xl object-cover"
+      style={{ width: size, height: size }}
+    />
+  ) : (
+    <span className="flex shrink-0 items-center justify-center rounded-xl bg-muted" style={{ width: size, height: size }}>
+      <Wallet className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+    </span>
+  )
+}
+
+/** خطوة مرقّمة في مسار الحوالة، بخط جانبي يربط الخطوات ببعضها. */
+function Step({ n, title, optional, children }: { n: number; title: string; optional?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <div className="mb-3 flex items-center gap-2.5">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+          {n}
+        </span>
+        <h3 className="text-sm font-bold">{title}</h3>
+        {optional && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">اختياري</span>}
+      </div>
+      <div className="space-y-3 ps-1 sm:ps-9">{children}</div>
+    </div>
+  )
+}
+
+function Field({ id, label, hint, error, children }: { id: string; label: string; hint?: string; error?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium">
+        {label}
+      </label>
+      {children}
+      {hint && !error && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+const inputClass = (invalid: boolean) =>
+  cn(
+    "h-12 w-full rounded-xl border bg-background px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/70 focus:ring-2",
+    invalid ? "border-destructive focus:border-destructive focus:ring-destructive/20" : "border-border focus:border-primary focus:ring-primary/20",
+  )
