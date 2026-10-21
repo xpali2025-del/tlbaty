@@ -67,6 +67,7 @@ export type NewOrder = {
     method: PaymentMethod
     account: PaymentAccountSnapshot | null
     senderName: string
+    senderPhone: string
     reference: string
     proof: PaymentProofPayload | null
   }
@@ -159,6 +160,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
               paymentStatus,
               paymentAccountSnapshot: isTransfer ? payment.account : null,
               transferSenderName: isTransfer ? payment.senderName : null,
+              transferSenderPhone: isTransfer ? payment.senderPhone || null : null,
               transferReference: isTransfer ? payment.reference : null,
               transferSubmittedAt: isTransfer ? now : null,
               duplicateTransferReference: isTransfer ? duplicateTransferReference : false,

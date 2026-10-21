@@ -44,6 +44,20 @@ describe('currencies', () => {
     auth.mockRejectedValueOnce(new Error('unauthorized'))
     await expect(A.saveCurrencies([YER], 'YER')).rejects.toThrow('unauthorized')
   })
+  it('checks the currencies permission, not shipping', async () => {
+    await A.saveCurrencies([YER], 'YER')
+    expect(auth).toHaveBeenCalledWith('currencies')
+  })
+  it('keeps updatedAt for unchanged rates and bumps it for changed ones', async () => {
+    await A.saveCurrencies([YER, SAR], 'YER')
+    const first = (await getAdminShipping()).currencies
+    expect(first.every((c) => !!c.updatedAt)).toBe(true)
+    await new Promise((r) => setTimeout(r, 20))
+    await A.saveCurrencies([YER, { ...SAR, rate: 150 }], 'YER')
+    const second = (await getAdminShipping()).currencies
+    expect(second.find((c) => c.code === 'YER')!.updatedAt).toBe(first.find((c) => c.code === 'YER')!.updatedAt)
+    expect(second.find((c) => c.code === 'SAR')!.updatedAt).not.toBe(first.find((c) => c.code === 'SAR')!.updatedAt)
+  })
 })
 
 describe('shipping zones', () => {

@@ -151,7 +151,7 @@ export function ProductDetail({
           </h1>
 
           {/* البراند وكود المنتج */}
-          {(product.brand || product.sku) && (
+          {product.brand && (
             <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               {product.brand &&
                 (brandSlug ? (
@@ -167,18 +167,22 @@ export function ProductDetail({
                     <span className="text-muted-foreground">البراند:</span> {product.brand}
                   </span>
                 ))}
-              {product.sku && (
-                <span className="text-muted-foreground">
-                  كود المنتج: <span className="font-medium text-foreground" dir="ltr">{product.sku}</span>
-                </span>
-              )}
             </div>
           )}
 
-          <div className="mb-4 flex items-center gap-2">
+          {/* رمز المنتج القصير (مثل DR-012) هو ما يذكره العميل عند التواصل ويبحث به؛ رقم الصنف الخارجي (SKU) ثانوي ويظهر إن اختلف. */}
+          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="text-sm text-muted-foreground">
-              رقم الصنف: <span className="font-medium text-foreground" dir="ltr">{product.id}</span>
+              رمز المنتج:{" "}
+              <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-sm font-bold text-foreground" dir="ltr">
+                {product.id}
+              </span>
             </span>
+            {product.sku && product.sku !== product.id && (
+              <span className="text-xs text-muted-foreground">
+                SKU: <span className="font-medium text-foreground" dir="ltr">{product.sku}</span>
+              </span>
+            )}
           </div>
 
           <div className="mb-5 flex items-center gap-3">

@@ -1,0 +1,1 @@
+ALTER TABLE "store"."orders" ADD COLUMN "transfer_sender_phone" text;

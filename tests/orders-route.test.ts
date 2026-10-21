@@ -223,18 +223,51 @@ describe('server-side pricing (price tampering)', () => {
 })
 
 describe('manual transfer', () => {
-  const transfer = (over: Record<string, unknown> = {}) => order({ paymentMethod: 'manual_transfer', paymentAccountId: accountId, transferSenderName: 'محمد أحمد علي', transferReference: 'TR-4455', ...over })
+  const transfer = (over: Record<string, unknown> = {}) => order({ paymentMethod: 'manual_transfer', paymentAccountId: accountId, transferSenderName: 'محمد أحمد علي', transferSenderPhone: '0771234567', transferReference: 'TR-4455', ...over })
   const png = () => new File([PNG], 'proof.png', { type: 'image/png' })
 
-  it('requires an available account, valid sender and reference, and a proof image', async () => {
+  it('requires an available account, valid sender name and transfer reference (the proof image is optional)', async () => {
     const e = async (over: Record<string, unknown>, proof?: File) => (await (await postForm(transfer(over), proof)).json()).error
     expect(await e({ paymentAccountId: '' }, png())).toBe('PAYMENT_ACCOUNT_REQUIRED')
     expect(await e({ paymentAccountId: '00000000-0000-4000-8000-000000000000' }, png())).toBe('PAYMENT_ACCOUNT_UNAVAILABLE')
     expect(await e({ transferSenderName: 'x' }, png())).toBe('INVALID_TRANSFER_SENDER')
     expect(await e({ transferReference: '12' }, png())).toBe('INVALID_TRANSFER_REFERENCE')
-    expect(await e({})).toBe('PAYMENT_PROOF_REQUIRED')
+    expect(await e({ transferSenderName: '' })).toBe('INVALID_TRANSFER_SENDER')
+    expect(await e({ transferSenderPhone: '' })).toBe('INVALID_TRANSFER_SENDER_PHONE')
+    expect(await e({ transferSenderPhone: '12ab' })).toBe('INVALID_TRANSFER_SENDER_PHONE')
+    expect(await e({ transferSenderPhone: '123' })).toBe('INVALID_TRANSFER_SENDER_PHONE')
+    expect(await e({ transferSenderPhone: undefined })).toBe('INVALID_TRANSFER_SENDER_PHONE')
+    expect(await e({ transferReference: '' })).toBe('INVALID_TRANSFER_REFERENCE')
     expect(await e({}, new File([Buffer.from('not an image at all, just text')], 'x.png', { type: 'image/png' }))).toBe('INVALID_PAYMENT_PROOF')
     expect(m.put).not.toHaveBeenCalled()
+  })
+
+  it('accepts a transfer with no proof image: nothing is uploaded, the order waits for manual verification', async () => {
+    const res = await postForm(transfer({ transferReference: 'NOIMG-1234' }))
+    const data = await res.json()
+    expect(res.status).toBe(200)
+    expect(data.payment).toMatchObject({ method: 'manual_transfer', status: 'pending_verification', transferReference: 'NOIMG-1234' })
+    expect(m.put).not.toHaveBeenCalled()
+    expect(await db.select().from(s.orderPaymentProofs).where(eq(s.orderPaymentProofs.orderId, data.id))).toHaveLength(0)
+    expect(await stored(data.id)).toMatchObject({ transferSenderName: 'محمد أحمد علي', transferSenderPhone: '967771234567', transferReference: 'NOIMG-1234' })
+    expect(data.payment.transferSenderPhone).toBe('967771234567') // 0771234567 -> international
+  })
+
+  it('accepts arabic digits, other wallet numbers, and stores digits only', async () => {
+    const arabic = await (await postForm(transfer({ transferReference: 'AR-1111', transferSenderPhone: '٠٧٧١٢٣٤٥٦٧' }))).json()
+    expect((await stored(arabic.id)).transferSenderPhone).toBe('967771234567')
+    const saudi = await (await postForm(transfer({ transferReference: 'SA-2222', transferSenderPhone: '+966 50 123 4567' }))).json()
+    expect((await stored(saudi.id)).transferSenderPhone).toBe('966501234567')
+    const other = await (await postForm(transfer({ transferReference: 'OT-3333', transferSenderPhone: '+44 7700 900123' }))).json()
+    expect((await stored(other.id)).transferSenderPhone).toBe('447700900123')
+  })
+
+  it('a transfer without an image still works when proof storage is not configured; only attaching an image needs it', async () => {
+    const saved = process.env.R2_PROOFS_BUCKET
+    delete process.env.R2_PROOFS_BUCKET
+    expect((await postForm(transfer({ transferReference: 'NOIMG-5678' }))).status).toBe(200)
+    expect((await postForm(transfer({ transferReference: 'WITHIMG-5678' }), png())).status).toBe(503)
+    process.env.R2_PROOFS_BUCKET = saved
   })
 
   it('stores the account snapshot from the server and uploads only the encrypted proof', async () => {

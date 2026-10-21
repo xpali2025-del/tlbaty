@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
-  boolean, check, date, index, integer, numeric, primaryKey, smallint, text, uniqueIndex, uuid,
+  boolean, check, date, index, integer, numeric, primaryKey, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import { categories } from './catalog'
 import { pk, store, timestamps } from './common'
@@ -129,6 +129,8 @@ export const currencies = store.table('currencies', {
   symbol: text('symbol').notNull(),
   rate: numeric('rate', { precision: 18, scale: 6, mode: 'number' }).notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** When this currency's rate (or definition) last changed; the panel warns when rates get stale. */
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [check('currencies_rate_positive', sql`${t.rate} > 0`)])
 
 export const siteLinks = store.table('site_links', {

@@ -267,7 +267,8 @@ export async function importCatalog(
         mainImageKey: img(p.image),
         stock: p.stock ?? 0,
         sizes: p.sizes ?? [],
-        sku: p.sku ?? null,
+        // SKU القديم الذي يطابق المعرّف القديم للمنتج لا فائدة منه مع الرمز القصير الجديد، فلا يُستورد (يتكرر على صفحة المنتج).
+        sku: options.assignCodes && p.sku === p.id ? null : (p.sku ?? null),
         badge: p.badge ?? null,
         tags,
         sortOrder: i,

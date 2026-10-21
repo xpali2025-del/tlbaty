@@ -14,6 +14,7 @@ export const SCREENS = [
   "reviews",
   "ads",
   "shipping",
+  "currencies",
   "settings",
   "users",
 ] as const
@@ -32,7 +33,8 @@ export const SCREEN_LABELS: Record<Screen, string> = {
   coupons: "أكواد الخصم",
   reviews: "آراء العملاء",
   ads: "الإعلانات",
-  shipping: "الشحن والعملات",
+  shipping: "الشحن",
+  currencies: "العملات وأسعار الصرف",
   settings: "إعدادات المتجر",
   users: "المستخدمون والصلاحيات",
 }

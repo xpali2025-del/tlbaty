@@ -157,3 +157,17 @@ export function maskPhone(international: string): string {
   const national = country ? international.slice(country.code.length) : international
   return `${country ? `+${country.code} ` : ""}${maskLocalPhone(national)}`
 }
+
+/**
+ * رقم هاتف مرسل الحوالة: قد يكون يمنياً أو سعودياً (فيُوحَّد للصيغة الدولية)، أو رقم محفظة آخر (8–15 رقماً).
+ * يعيد أرقاماً فقط، أو null إن لم يكن رقماً صالحاً. لا يُستخدم لهوية العميل.
+ */
+export function normalizeSenderPhone(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const raw = toEnglishDigits(value.trim())
+  if (!/^\+?[\d\s().-]{7,25}$/.test(raw)) return null
+  const international = normalizeInternationalPhone(raw)
+  if (international) return international
+  const digits = raw.replace(/\D/g, "").replace(/^00/, "")
+  return digits.length >= 8 && digits.length <= 15 ? digits : null
+}

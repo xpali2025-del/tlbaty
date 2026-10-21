@@ -61,6 +61,8 @@ export const orders = store.table('orders', {
     accountHolderName?: string; accountNumber?: string; imageUrl?: string
   }>(),
   transferSenderName: text('transfer_sender_name'),
+  /** Sender's phone number as digits (international when Yemeni/Saudi), required for bank transfers. */
+  transferSenderPhone: text('transfer_sender_phone'),
   transferReference: text('transfer_reference'),
   /** Client-generated key per checkout attempt: a retry (after a dropped connection or re-login) returns the same order instead of creating a second one. */
   idempotencyKey: text('idempotency_key'),

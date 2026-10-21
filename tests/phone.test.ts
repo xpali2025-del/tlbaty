@@ -60,3 +60,18 @@ describe('app and worker agree on which numbers are valid', () => {
     if (!input.replace(/\D/g, '').match(/^(967|966)/)) expect(worker).toBeNull()
   })
 })
+
+import { normalizeSenderPhone } from '@/lib/phone'
+describe('normalizeSenderPhone', () => {
+  it('unifies yemeni/saudi numbers to international digits and accepts other wallets', () => {
+    expect(normalizeSenderPhone('0771234567')).toBe('967771234567')
+    expect(normalizeSenderPhone('771234567')).toBe('967771234567')
+    expect(normalizeSenderPhone('+967 77-123-4567')).toBe('967771234567')
+    expect(normalizeSenderPhone('٠٧٧١٢٣٤٥٦٧')).toBe('967771234567')
+    expect(normalizeSenderPhone('0501234567')).toBe('966501234567')
+    expect(normalizeSenderPhone('+44 7700 900123')).toBe('447700900123')
+  })
+  it('rejects empty, short, long, lettered and non-string input', () => {
+    for (const bad of ['', '   ', '123', '12ab34567', '1'.repeat(16), null, undefined, 5, '++9677712']) expect(normalizeSenderPhone(bad)).toBeNull()
+  })
+})

@@ -164,3 +164,12 @@ describe('getAdminCouriers', () => {
     expect(list.find((c) => c._id === courierB.id)).toMatchObject({ status: 'suspended', stats: { assigned: 0 } })
   })
 })
+
+describe('sender phone of a transfer', () => {
+  it('is returned to the panel and searchable', async () => {
+    await mk({ orderNumber: 'ORD-SP', paymentMethod: 'manual_transfer', paymentStatus: 'pending_verification', transferReference: 'SP-1234', transferSenderName: 'محمد علي', transferSenderPhone: '967779998877' })
+    const page = await getAdminOrdersPage({ search: '779998877' })
+    expect(page.orders.map((o) => o.orderNumber)).toEqual(['ORD-SP'])
+    expect(page.orders[0]).toMatchObject({ transferSenderName: 'محمد علي', transferSenderPhone: '967779998877' })
+  })
+})

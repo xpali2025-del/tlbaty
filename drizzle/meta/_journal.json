@@ -29,6 +29,20 @@
       "when": 1792618630645,
       "tag": "0003_customer_data",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792621537536,
+      "tag": "0004_transfer_sender_phone",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792625856389,
+      "tag": "0005_currency_updated_at",
+      "breakpoints": true
     }
   ]
 }

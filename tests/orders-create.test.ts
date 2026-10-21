@@ -36,7 +36,7 @@ const price = async (productIds: string[], over: { method?: string; code?: strin
   return r
 }
 const contact = { customerName: 'علي', phone: '0781234567', phoneNormalized: '967781234567', city: 'صنعاء', address: 'شارع الرقاص', addressSource: 'new' as const, latitude: 15.3, longitude: 44.2, accuracy: 20, capturedAt: new Date('2026-10-21T10:00:00Z'), note: '' }
-const cod = { method: 'cash_on_delivery' as const, account: null, senderName: '', reference: '', proof: null }
+const cod = { method: 'cash_on_delivery' as const, account: null, senderName: '', senderPhone: '', reference: '', proof: null }
 const proof = { ciphertext: Buffer.from('cipher'), iv: 'aXY=', authTag: 'dGFn', keyVersion: '1', originalMimeType: 'image/png' as const, processedMimeType: 'image/webp', byteSize: 6 }
 
 beforeAll(async () => {
@@ -99,7 +99,7 @@ describe('insertOrder', () => {
 
   it('stores a manual transfer with its encrypted proof, flags duplicate references, and uploads the proof first', async () => {
     const pricing = await price([seed.products[5].id])
-    const transfer = { method: 'manual_transfer' as const, account: { providerName: 'جيب', accountNumber: '777', accountHolderName: 'م' }, senderName: 'محمد أحمد', reference: 'REF-12345', proof }
+    const transfer = { method: 'manual_transfer' as const, account: { providerName: 'جيب', accountNumber: '777', accountHolderName: 'م' }, senderName: 'محمد أحمد', senderPhone: '967771234567', reference: 'REF-12345', proof }
     const one = await insertOrder({ customer: { id: customerId }, contact, pricing, payment: transfer })
     expect(one.paymentStatus).toBe('pending_verification')
     expect(proofs.put).toHaveBeenCalledTimes(1)
@@ -108,7 +108,7 @@ describe('insertOrder', () => {
     expect(putBody.toString()).toBe('cipher')
 
     const [o1] = await db.select().from(s.orders).where(eq(s.orders.id, one.id))
-    expect(o1).toMatchObject({ transferSenderName: 'محمد أحمد', transferReference: 'REF-12345', duplicateTransferReference: false, paymentAccountSnapshot: transfer.account })
+    expect(o1).toMatchObject({ transferSenderName: 'محمد أحمد', transferSenderPhone: '967771234567', transferReference: 'REF-12345', duplicateTransferReference: false, paymentAccountSnapshot: transfer.account })
     const [row] = await db.select().from(s.orderPaymentProofs).where(eq(s.orderPaymentProofs.orderId, one.id))
     expect(row).toMatchObject({ objectKey: putKey, iv: 'aXY=', authTag: 'dGFn', keyVersion: '1', byteSize: 6 })
 
@@ -120,7 +120,7 @@ describe('insertOrder', () => {
   it('aborts cleanly when the proof upload fails (no order is written)', async () => {
     proofs.put.mockRejectedValueOnce(new Error('R2 down'))
     const before = (await db.select({ n: count() }).from(s.orders))[0].n
-    const transfer = { method: 'manual_transfer' as const, account: {}, senderName: 'محمد أحمد', reference: 'REF-99999', proof }
+    const transfer = { method: 'manual_transfer' as const, account: {}, senderName: 'محمد أحمد', senderPhone: '967771234567', reference: 'REF-99999', proof }
     await expect(insertOrder({ customer: { id: customerId }, contact, pricing: await price([seed.products[6].id]), payment: transfer })).rejects.toBeInstanceOf(ProofStorageError)
     expect((await db.select({ n: count() }).from(s.orders))[0].n).toBe(before)
   })
@@ -128,7 +128,7 @@ describe('insertOrder', () => {
   it('removes the uploaded proof when the database write fails', async () => {
     const before = (await db.select({ n: count() }).from(s.orders))[0].n
     const bad = { ...(await price([seed.products[7].id])), subtotal: -5, total: -5 } // violates orders_amounts_nonneg
-    const transfer = { method: 'manual_transfer' as const, account: {}, senderName: 'محمد أحمد', reference: 'REF-77777', proof }
+    const transfer = { method: 'manual_transfer' as const, account: {}, senderName: 'محمد أحمد', senderPhone: '967771234567', reference: 'REF-77777', proof }
     await expect(insertOrder({ customer: { id: customerId }, contact, pricing: bad, payment: transfer })).rejects.toThrow()
     expect(proofs.put).toHaveBeenCalledTimes(1)
     expect(proofs.del).toHaveBeenCalledWith(proofs.put.mock.calls[0][0])
@@ -183,7 +183,7 @@ describe('stock', () => {
   it('a failed proof upload does not consume stock', async () => {
     const id = seed.products[9].id
     proofs.put.mockRejectedValueOnce(new Error('r2 down'))
-    const transfer = { method: 'manual_transfer' as const, account: { providerName: 'x' } as never, senderName: 'س', reference: 'TRF-9911', proof }
+    const transfer = { method: 'manual_transfer' as const, account: { providerName: 'x' } as never, senderName: 'س', senderPhone: '967771234567', reference: 'TRF-9911', proof }
     await expect(insertOrder({ customer: { id: customerId }, contact, pricing: await price([id]), payment: transfer })).rejects.toBeInstanceOf(ProofStorageError)
     expect(await stockOf(id)).toBe(100)
   })

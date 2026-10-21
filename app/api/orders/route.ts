@@ -5,7 +5,7 @@ import { getSiteConfig } from "@/lib/site-config"
 import { isProofStorageConfigured } from "@/lib/env"
 import { findOrderByIdempotencyKey, insertOrder, loadPricingProducts, OutOfStockError, parseIdempotencyKey, ProofStorageError } from "@/lib/orders/create"
 import { computeOrderPricing, priceChanged } from "@/lib/orders/pricing"
-import { normalizeInternationalPhone } from "@/lib/phone"
+import { normalizeInternationalPhone, normalizeSenderPhone } from "@/lib/phone"
 import { getCurrentCustomer } from "@/lib/otp/session"
 import {
   isPaymentMethod,
@@ -200,6 +200,7 @@ export async function POST(req: Request) {
 
   let paymentAccountSnapshot: PaymentAccountSnapshot | null = null
   let transferSenderName = ""
+  let transferSenderPhone = ""
   let transferReference = ""
 
   if (paymentMethod === "manual_transfer") {
@@ -220,13 +221,16 @@ export async function POST(req: Request) {
     if (!isValidSenderName(transferSenderName)) {
       return fail("INVALID_TRANSFER_SENDER", 400, "اسم مرسل الحوالة غير صالح.")
     }
+    const senderPhone = normalizeSenderPhone(body.transferSenderPhone)
+    if (!senderPhone) {
+      return fail("INVALID_TRANSFER_SENDER_PHONE", 400, "رقم هاتف مرسل الحوالة غير صالح.")
+    }
+    transferSenderPhone = senderPhone
     transferReference = str(body.transferReference, 40)
     if (!isValidTransferReference(transferReference)) {
       return fail("INVALID_TRANSFER_REFERENCE", 400, "رقم الحوالة غير صالح.")
     }
-    if (!proofFile) {
-      return fail("PAYMENT_PROOF_REQUIRED", 400, "صورة إثبات الحوالة مطلوبة.")
-    }
+    // صورة الإثبات اختيارية؛ الإلزامي: حساب الدفع واسم المرسل ورقم هاتفه ورقم الحوالة (تُفحص أعلاه)، والإدارة تطابقها يدوياً.
 
     // Snapshot موثوق من الخادم: لا نقبل أي بيانات حساب من العميل.
     paymentAccountSnapshot = {
@@ -345,6 +349,7 @@ export async function POST(req: Request) {
         method: paymentMethod,
         account: paymentAccountSnapshot,
         senderName: transferSenderName,
+        senderPhone: transferSenderPhone,
         reference: transferReference,
         proof,
       },
@@ -364,6 +369,7 @@ export async function POST(req: Request) {
         status: created.paymentStatus,
         providerName: paymentAccountSnapshot?.providerName ?? null,
         transferSenderName: transferSenderName || null,
+        transferSenderPhone: transferSenderPhone || null,
         transferReference: transferReference || null,
       },
     })

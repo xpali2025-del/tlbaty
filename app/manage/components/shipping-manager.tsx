@@ -27,12 +27,7 @@ const selectClass = "h-9 rounded-md border bg-background px-2 text-sm"
 const errorText = (e: unknown) => (e instanceof Error ? e.message : "تعذّر الحفظ")
 
 export function ShippingManager({ data }: { data: AdminShipping }) {
-  return (
-    <div className="flex flex-col gap-10">
-      <ZonesSection zones={data.zones} />
-      <CurrenciesSection currencies={data.currencies} defaultCode={data.defaultCurrency} />
-    </div>
-  )
+  return <ZonesSection zones={data.zones} />
 }
 
 function ZonesSection({ zones }: { zones: AdminShippingZone[] }) {
@@ -152,59 +147,5 @@ function ZoneDialog({ zone, used, onClose }: { zone: AdminShippingZone | null; u
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function CurrenciesSection({ currencies, defaultCode }: { currencies: AdminCurrency[]; defaultCode: string }) {
-  const [rows, setRows] = useState<AdminCurrency[]>(
-    currencies.length ? currencies : [{ code: "YER", name: "ريال يمني (قديم)", symbol: "ر.ي", rate: 1 }],
-  )
-  const [def, setDef] = useState(defaultCode)
-  const [isPending, startTransition] = useTransition()
-  const patch = (i: number, p: Partial<AdminCurrency>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...p } : r)))
-
-  function save() {
-    startTransition(async () => {
-      try {
-        await saveCurrencies(rows, def)
-        toast.success("تم حفظ العملات")
-      } catch (e) {
-        toast.error(errorText(e))
-      }
-    })
-  }
-
-  return (
-    <section>
-      <SectionHeader
-        title="العملات"
-        description="سعر الصرف = كم يساوي 1 من العملة بالريال اليمني القديم (الأساسي). السعر المعروض = السعر الأساسي ÷ سعر الصرف."
-      />
-      <div className="flex flex-col gap-2">
-        {rows.map((r, i) => {
-          const base = r.code === "YER"
-          return (
-            <div key={i} className="grid items-center gap-2 rounded-md border p-2 sm:grid-cols-[6rem_1fr_6rem_8rem_auto_auto]">
-              <Input placeholder="الرمز" dir="ltr" value={r.code} disabled={base} onChange={(e) => patch(i, { code: e.target.value.toUpperCase() })} />
-              <Input placeholder="الاسم" value={r.name} onChange={(e) => patch(i, { name: e.target.value })} />
-              <Input placeholder="الرمز المعروض" value={r.symbol} onChange={(e) => patch(i, { symbol: e.target.value })} />
-              <Input type="number" step="any" min={0} dir="ltr" placeholder="سعر الصرف" value={r.rate} disabled={base} onChange={(e) => patch(i, { rate: Number(e.target.value) })} />
-              <label className="flex items-center gap-1 text-xs">
-                <input type="radio" name="default-currency" checked={def === r.code} onChange={() => setDef(r.code)} /> افتراضية
-              </label>
-              <Button type="button" size="icon" variant="ghost" disabled={base} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} aria-label="حذف العملة">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        })}
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setRows((rs) => [...rs, { code: "", name: "", symbol: "", rate: 1 }])}>
-          <Plus className="h-4 w-4" /> إضافة عملة
-        </Button>
-        <Button type="button" size="sm" onClick={save} disabled={isPending}>{isPending ? "جارٍ الحفظ..." : "حفظ العملات"}</Button>
-      </div>
-    </section>
   )
 }
