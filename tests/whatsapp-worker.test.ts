@@ -32,6 +32,64 @@ function call(
 
 const fast = { minIntervalMs: 0, jitterMs: 0, sleep: async () => {} }
 
+describe('whatsapp worker ban protections', () => {
+  const body = (phone: string) => ({ body: { phone, text: 'x' } })
+
+  it('refuses a second message to the same recipient inside the cooldown, then allows it later', async () => {
+    let t = 1_000_000
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const h = createHandler({ token: TOKEN, sendMessage, now: () => t, ...fast })
+    expect((await call(h, body('781234567'))).status).toBe(200)
+    const again = await call(h, body('781234567'))
+    expect(again.status).toBe(429)
+    expect(again.body).toMatchObject({ error: 'RECIPIENT_COOLDOWN' })
+    expect(sendMessage).toHaveBeenCalledTimes(1)
+    expect((await call(h, body('782222222'))).status).toBe(200)
+    t += 61_000
+    expect((await call(h, body('781234567'))).status).toBe(200)
+  })
+
+  it('caps messages per hour and per day across recipients', async () => {
+    let t = 0
+    const h = createHandler({ token: TOKEN, sendMessage: async () => {}, now: () => t, maxPerHour: 3, maxPerDay: 5, ...fast })
+    for (let i = 0; i < 3; i++) expect((await call(h, body(`78000000${i}`))).status).toBe(200)
+    expect((await call(h, body('780000009'))).body).toMatchObject({ error: 'HOURLY_LIMIT' })
+    t += 3_600_001
+    for (let i = 0; i < 2; i++) expect((await call(h, body(`77000000${i}`))).status).toBe(200)
+    expect((await call(h, body('770000009'))).body).toMatchObject({ error: 'DAILY_LIMIT' })
+    t += 24 * 3_600_000
+    expect((await call(h, body('770000009'))).status).toBe(200)
+  })
+
+  it('pauses after repeated send failures and resumes afterwards, ignoring NOT_ON_WHATSAPP', async () => {
+    let t = 0
+    let mode: 'fail' | 'notOn' | 'ok' = 'notOn'
+    const sendMessage = vi.fn(async () => {
+      if (mode === 'fail') throw new Error('crash')
+      if (mode === 'notOn') throw new Error('NOT_ON_WHATSAPP')
+    })
+    const h = createHandler({ token: TOKEN, sendMessage, now: () => t, breakerThreshold: 3, breakerPauseMs: 600_000, recipientCooldownMs: 0, ...fast })
+    for (let i = 0; i < 5; i++) expect((await call(h, body(`78100000${i}`))).status).toBe(422)
+    mode = 'fail'
+    for (let i = 0; i < 3; i++) expect((await call(h, body(`78200000${i}`))).status).toBe(502)
+    const paused = await call(h, body('783000000'))
+    expect(paused.status).toBe(503)
+    expect(paused.body).toMatchObject({ error: 'PAUSED' })
+    const calls = sendMessage.mock.calls.length
+    t += 600_001
+    mode = 'ok'
+    expect((await call(h, body('784000000'))).status).toBe(200)
+    expect(sendMessage.mock.calls.length).toBe(calls + 1)
+  })
+
+  it('does not count validation failures against the limits', async () => {
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const h = createHandler({ token: TOKEN, sendMessage, maxPerHour: 1, ...fast })
+    for (let i = 0; i < 5; i++) expect((await call(h, body('123'))).status).toBe(400)
+    expect((await call(h, body('781234567'))).status).toBe(200)
+  })
+})
+
 describe('whatsapp worker handler', () => {
   it('refuses to start with a short token', () => {
     expect(() => createHandler({ token: 'short', sendMessage: async () => {} })).toThrow()

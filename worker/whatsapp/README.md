@@ -21,6 +21,13 @@ process because it needs a persistent browser session; it cannot run on Vercel/s
   Responses: `200 ok`, `400` invalid input, `401` bad token, `422 NOT_ON_WHATSAPP`, `502 SEND_FAILED`, `503 NOT_READY`.
 - `GET /health` -> `{ ok, ready }`.
 
-Codes are never logged. Sends are serialised with a 3s+ gap to avoid burst patterns.
+## Ban-risk mitigations (built in)
+- Every message differs: it carries the send time (to the second, Aden time) and one of several wordings (`lib/otp/providers/whatsapp.ts`).
+- The app escalates the wait between codes for the same phone (1x, 2x, 5x, 15x of `OTP_RESEND`) and caps 5 codes/hour/phone and 15/hour/IP.
+- The worker adds its own limits: one message per recipient per `WORKER_RECIPIENT_COOLDOWN_MS` (60s), `WORKER_MAX_PER_HOUR` (60), `WORKER_MAX_PER_DAY` (300), serialised sends with a 3s+ random gap, a typing indicator before each send, and a circuit breaker (5 consecutive send failures pause sending for 10 minutes, `503 PAUSED`).
+- Responses: `429` (`RECIPIENT_COOLDOWN`, `HOURLY_LIMIT`, `DAILY_LIMIT`, with `Retry-After`) and `503 PAUSED`.
+- These lower the risk; they cannot remove it. The safest design for this channel is for the customer to message the number first (a `wa.me` link) and for the bot to reply with the code.
+
+Codes are never logged.
 The request logic is unit-tested in `tests/whatsapp-worker.test.ts`; the WhatsApp connection itself
 cannot be tested without a real number and must be verified by scanning the QR and sending a code.

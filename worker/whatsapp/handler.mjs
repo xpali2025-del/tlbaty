@@ -44,8 +44,34 @@ export function createHandler({
   jitterMs = 1500,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
   random = Math.random,
+  now = Date.now,
+  recipientCooldownMs = 60_000,
+  maxPerHour = 60,
+  maxPerDay = 300,
+  breakerThreshold = 5,
+  breakerPauseMs = 10 * 60_000,
 }) {
   if (!token || token.length < 16) throw new Error('WHATSAPP_WORKER_TOKEN must be at least 16 characters')
+
+  const lastSentTo = new Map()
+  let attempts = []
+  let consecutiveFailures = 0
+  let pausedUntil = 0
+
+  // Defence in depth against ban-prone patterns: per-recipient cooldown, global hourly/daily
+  // caps, and a circuit breaker that stops sending after repeated failures.
+  function limitReason(phone) {
+    const t = now()
+    if (t < pausedUntil) return { error: 'PAUSED', retryAfter: Math.ceil((pausedUntil - t) / 1000) }
+    const last = lastSentTo.get(phone)
+    if (last !== undefined && t - last < recipientCooldownMs) {
+      return { error: 'RECIPIENT_COOLDOWN', retryAfter: Math.ceil((recipientCooldownMs - (t - last)) / 1000) }
+    }
+    attempts = attempts.filter((x) => t - x < 24 * 3_600_000)
+    if (attempts.length >= maxPerDay) return { error: 'DAILY_LIMIT', retryAfter: 3600 }
+    if (attempts.filter((x) => t - x < 3_600_000).length >= maxPerHour) return { error: 'HOURLY_LIMIT', retryAfter: 600 }
+    return null
+  }
 
   let queue = Promise.resolve()
   const enqueue = (task) => {
@@ -72,12 +98,26 @@ export function createHandler({
       if (!/^\d{9}$/.test(phone)) return json(res, 400, { ok: false, error: 'INVALID_PHONE' })
       if (!text || text.length > MAX_TEXT_LENGTH) return json(res, 400, { ok: false, error: 'INVALID_TEXT' })
 
+      const limited = limitReason(phone)
+      if (limited) {
+        res.setHeader?.('Retry-After', String(limited.retryAfter))
+        return json(res, limited.error === 'PAUSED' ? 503 : 429, { ok: false, ...limited })
+      }
+      attempts.push(now())
+      lastSentTo.set(phone, now())
+      if (lastSentTo.size > 5000) lastSentTo.clear()
+
       try {
         await enqueue(() => sendMessage(`${YEMEN_DIAL_CODE}${phone}`, text))
       } catch (err) {
-        const code = err instanceof Error && err.message === 'NOT_ON_WHATSAPP' ? 'NOT_ON_WHATSAPP' : 'SEND_FAILED'
-        return json(res, code === 'NOT_ON_WHATSAPP' ? 422 : 502, { ok: false, error: code })
+        const notOn = err instanceof Error && err.message === 'NOT_ON_WHATSAPP'
+        if (!notOn && ++consecutiveFailures >= breakerThreshold) {
+          pausedUntil = now() + breakerPauseMs
+          consecutiveFailures = 0
+        }
+        return json(res, notOn ? 422 : 502, { ok: false, error: notOn ? 'NOT_ON_WHATSAPP' : 'SEND_FAILED' })
       }
+      consecutiveFailures = 0
       return json(res, 200, { ok: true })
     } catch (err) {
       const status = typeof err?.status === 'number' ? err.status : 500

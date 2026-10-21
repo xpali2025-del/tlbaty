@@ -27,7 +27,8 @@ const { verifyOtp } = await import('@/lib/otp/verify')
 const { consumeSendAttempt, consumeVerifyAttempt } = await import('@/lib/otp/rate-limit')
 const { createSession, resolveSession, destroyCurrentSession, revokeAllSessions } = await import('@/lib/otp/session')
 const { createCustomer } = await import('@/lib/otp/store')
-const { whatsappProvider } = await import('@/lib/otp/providers/whatsapp')
+const { whatsappProvider, buildMessage } = await import('@/lib/otp/providers/whatsapp')
+const { resendCooldownSeconds } = await import('@/lib/otp/generate')
 const sendRoute = await import('@/app/api/auth/send-otp/route')
 const verifyRoute = await import('@/app/api/auth/verify-otp/route')
 const meRoute = await import('@/app/api/auth/me/route')
@@ -156,6 +157,76 @@ describe('WhatsApp provider', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom 123456')))
     const res = await whatsappProvider.send({ phone: '781234567', code: '123456', purpose: 'login' })
     expect(res).toEqual({ ok: false, provider: 'whatsapp', errorCode: 'SEND_FAILED' })
+  })
+})
+
+describe('message variation (ban-risk mitigation)', () => {
+  const at = (iso: string) => new Date(iso)
+
+  it('includes the code, the Aden time to the second, and the validity period', () => {
+    const msg = buildMessage('123456', 'login', at('2026-10-21T09:05:07Z'), () => 0)
+    expect(msg).toContain('123456')
+    expect(msg).toContain('12:05:07') // UTC+3
+    expect(msg).toContain('5 دقائق')
+  })
+
+  it('never repeats the same text for the same code at different seconds', () => {
+    const texts = new Set(
+      Array.from({ length: 60 }, (_, i) => buildMessage('123456', 'login', new Date(Date.UTC(2026, 9, 21, 9, 0, i)), () => 0)),
+    )
+    expect(texts.size).toBe(60)
+  })
+
+  it('rotates among several wordings', () => {
+    const when = at('2026-10-21T09:00:00Z')
+    const variants = new Set([0, 0.3, 0.55, 0.9].map((r) => buildMessage('123456', 'login', when, () => r)))
+    expect(variants.size).toBe(4)
+  })
+
+  it('words the change-phone purpose differently from login', () => {
+    const when = at('2026-10-21T09:00:00Z')
+    expect(buildMessage('111111', 'change_phone', when, () => 0)).toContain('تغيير رقم الهاتف')
+    expect(buildMessage('111111', 'login', when, () => 0)).not.toContain('تغيير رقم الهاتف')
+  })
+
+  it('sends the varied text through the worker', async () => {
+    process.env.WHATSAPP_WORKER_URL = 'https://wa.example.com'
+    process.env.WHATSAPP_WORKER_TOKEN = 'x'.repeat(32)
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await whatsappProvider.send({ phone: '781234567', code: '654321', purpose: 'login' })
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).text).toMatch(/\d{2}:\d{2}:\d{2}/)
+    } finally {
+      delete process.env.WHATSAPP_WORKER_URL
+      delete process.env.WHATSAPP_WORKER_TOKEN
+    }
+  })
+})
+
+describe('escalating resend cooldown', () => {
+  it('grows 1x, 2x, 5x, 15x and then stays at 15x', () => {
+    expect([1, 2, 3, 4, 5, 9].map(resendCooldownSeconds)).toEqual([60, 120, 300, 900, 900, 900])
+    expect(resendCooldownSeconds(0)).toBe(60)
+  })
+
+  it('makes the third request wait 5 minutes even after 2 minutes have passed', async () => {
+    const phone = nextPhone()
+    const row = (ageSeconds: number) => ({
+      phone, codeHash: 'h', salt: 's', purpose: 'login' as const,
+      expiresAt: new Date(Date.now() + 1e5), createdAt: new Date(Date.now() - ageSeconds * 1000),
+    })
+    await db.insert(s.otpCodes).values([row(600), row(400), row(180)])
+    const blocked = await createAndSendOtp({ phone, purpose: 'login', ...ctx })
+    expect(blocked).toMatchObject({ ok: false, error: 'RESEND_TOO_SOON' })
+    expect((blocked as { retryAfter: number }).retryAfter).toBeGreaterThan(100)
+    expect((blocked as { retryAfter: number }).retryAfter).toBeLessThanOrEqual(120)
+
+    await db.update(s.otpCodes).set({ createdAt: new Date(Date.now() - 320_000) }).where(eq(s.otpCodes.phone, phone))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const allowed = await createAndSendOtp({ phone, purpose: 'login', ...ctx })
+    log.mockRestore()
+    expect(allowed.ok).toBe(true)
   })
 })
 

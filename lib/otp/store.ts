@@ -1,6 +1,6 @@
 import "server-only"
 import { randomBytes } from "node:crypto"
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, gte, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { customers, orders, otpCodes } from "@/lib/db/store"
 import type { OtpPurpose } from "./provider"
@@ -113,5 +113,16 @@ export async function countOrdersByCustomerId(customerId: string): Promise<numbe
     .select({ n: sql<number>`count(*)::int` })
     .from(orders)
     .where(eq(orders.customerId, customerId))
+  return row?.n ?? 0
+}
+
+/** عدد الرموز التي أُنشئت لهذا الرقم/الغرض خلال نافذة زمنية — لحساب الانتظار المتصاعد. */
+export async function countRecentOtps(phone: string, purpose: OtpPurpose, windowMs: number): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(otpCodes)
+    .where(
+      and(eq(otpCodes.phone, phone), eq(otpCodes.purpose, purpose), gte(otpCodes.createdAt, new Date(Date.now() - windowMs))),
+    )
   return row?.n ?? 0
 }

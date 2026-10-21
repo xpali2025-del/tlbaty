@@ -3,13 +3,22 @@ import { randomInt } from "node:crypto"
 import { OTP_EXPIRE, OTP_LENGTH, OTP_RESEND } from "./config"
 import { createSalt, hashOtp } from "./hash"
 import { getOtpProvider, type OtpPurpose } from "./provider"
-import { createOtp, getLastOtpCreatedAt, invalidatePreviousOtps } from "./store"
+import { countRecentOtps, createOtp, getLastOtpCreatedAt, invalidatePreviousOtps } from "./store"
 
 /** رمز رقمي عشوائي آمن بالطول المضبوط (randomInt غير متحيّز). */
 export function generateOtpCode(): string {
   let code = ""
   for (let i = 0; i < OTP_LENGTH; i++) code += randomInt(0, 10).toString()
   return code
+}
+
+/**
+ * الانتظار يتصاعد مع كل رمز جديد خلال الساعة: 1× ثم 2× ثم 5× ثم 15× من OTP_RESEND.
+ * طلبات الإرسال المتكررة من العميل نفسه هي أكثر ما يعرّض رقم واتساب للحظر، فنبطئها تدريجياً.
+ */
+export function resendCooldownSeconds(recentCount: number): number {
+  const steps = [1, 2, 5, 15]
+  return OTP_RESEND * steps[Math.min(Math.max(recentCount, 1), steps.length) - 1]
 }
 
 export type GenerateResult =
@@ -31,9 +40,10 @@ export async function createAndSendOtp(input: {
 
   const last = await getLastOtpCreatedAt(phone, purpose)
   if (last) {
+    const cooldown = resendCooldownSeconds(await countRecentOtps(phone, purpose, 3_600_000))
     const elapsed = (Date.now() - last.getTime()) / 1000
-    if (elapsed < OTP_RESEND) {
-      return { ok: false, error: "RESEND_TOO_SOON", retryAfter: Math.ceil(OTP_RESEND - elapsed) }
+    if (elapsed < cooldown) {
+      return { ok: false, error: "RESEND_TOO_SOON", retryAfter: Math.ceil(cooldown - elapsed) }
     }
   }
 

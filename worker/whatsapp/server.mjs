@@ -37,13 +37,33 @@ client.on('auth_failure', () => {
   console.error('WhatsApp auth failure - delete the session folder and scan the QR again')
 })
 
+const intEnv = (name, fallback) => {
+  const n = Number.parseInt(process.env[name] ?? '', 10)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
 async function sendMessage(phone, text) {
   const id = await client.getNumberId(phone)
   if (!id) throw new Error('NOT_ON_WHATSAPP')
+  // Show "typing..." for a human-like moment (proportional to the text) before sending.
+  try {
+    const chat = await client.getChatById(id._serialized)
+    await chat.sendStateTyping()
+    await new Promise((r) => setTimeout(r, 1000 + text.length * 25 + Math.random() * 1500))
+  } catch {
+    // Typing indication is cosmetic; never block the code on it.
+  }
   await client.sendMessage(id._serialized, text)
 }
 
-const handler = createHandler({ token, sendMessage, isReady: () => ready })
+const handler = createHandler({
+  token,
+  sendMessage,
+  isReady: () => ready,
+  recipientCooldownMs: intEnv('WORKER_RECIPIENT_COOLDOWN_MS', 60_000),
+  maxPerHour: intEnv('WORKER_MAX_PER_HOUR', 60),
+  maxPerDay: intEnv('WORKER_MAX_PER_DAY', 300),
+})
 http.createServer(handler).listen(port, host, () => console.log(`worker listening on ${host}:${port}`))
 
 await client.initialize()
