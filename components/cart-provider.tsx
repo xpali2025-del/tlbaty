@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import type { CartItem } from "@/lib/types"
+import { LOCAL_RELOAD, notifyLocalChanged } from "@/lib/customer-local-data"
 
 interface CartContextType {
   items: CartItem[]
@@ -32,8 +33,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (hydrated) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+      notifyLocalChanged() // المزامنة مع حساب العميل (مؤجّلة)
     }
   }, [items, hydrated])
+
+  // المزامنة (أو تسجيل الخروج) غيّرت التخزين المحلي: نعيد القراءة.
+  useEffect(() => {
+    const reload = () => {
+      try {
+        const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]")
+        setItems(Array.isArray(parsed) ? (parsed as CartItem[]) : [])
+      } catch {
+        setItems([])
+      }
+    }
+    window.addEventListener(LOCAL_RELOAD, reload)
+    return () => window.removeEventListener(LOCAL_RELOAD, reload)
+  }, [])
 
   const addItem = (item: CartItem) => {
     setItems((prev) => {

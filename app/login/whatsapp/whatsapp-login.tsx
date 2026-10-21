@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { notifyLoggedIn } from '@/lib/customer-local-data'
 
 type Step = 'idle' | 'waiting' | 'claimed' | 'expired'
 
@@ -71,6 +72,7 @@ export function WhatsAppLogin({ onSuccess }: { onSuccess?: () => void } = {}) {
       })
       const data = await res.json()
       if (res.ok) {
+        notifyLoggedIn() // المزامنة تجلب سلة العميل ورغباته فور الدخول
         if (onSuccess) return onSuccess()
         return void (window.location.href = data.redirect ?? '/')
       }

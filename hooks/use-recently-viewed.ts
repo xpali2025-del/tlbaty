@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { LOCAL_RELOAD, notifyLocalChanged } from "@/lib/customer-local-data"
 import type { Product, RecentlyViewedItem } from "@/lib/types"
 import {
   MAX_RECENTLY_VIEWED,
@@ -34,6 +35,7 @@ export function useRecordRecentlyViewed(product: Product | null | undefined) {
       const next = [toRecentlyViewedItem(product), ...withoutCurrent].slice(0, MAX_RECENTLY_VIEWED)
 
       window.localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next))
+      notifyLocalChanged()
     } catch {
       // بيانات تخزين تالفة أو تخزين غير متاح — نتجاهل بأمان
     }
@@ -56,6 +58,9 @@ export function useRecentlyViewed(): {
   useEffect(() => {
     setItems(readRecentlyViewed())
     setHydrated(true)
+    const reload = () => setItems(readRecentlyViewed())
+    window.addEventListener(LOCAL_RELOAD, reload)
+    return () => window.removeEventListener(LOCAL_RELOAD, reload)
   }, [])
 
   return { items, hydrated }

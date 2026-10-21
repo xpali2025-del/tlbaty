@@ -74,6 +74,8 @@ function isValidSavedAddress(value: unknown): value is SavedAddress {
   )
 }
 
+import { LOCAL_RELOAD, notifyLocalChanged } from "@/lib/customer-local-data"
+
 export function useSavedAddresses() {
   const [addresses, setAddresses] = useState<SavedAddress[]>([])
   // hydrated يمنع وميض النموذج الفارغ وأخطاء الترطيب:
@@ -81,18 +83,20 @@ export function useSavedAddresses() {
   const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(SAVED_ADDRESSES_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) {
-          setAddresses(parsed.filter(isValidSavedAddress))
-        }
+    const load = (): void => {
+      try {
+        const raw = window.localStorage.getItem(SAVED_ADDRESSES_KEY)
+        const parsed = raw ? JSON.parse(raw) : []
+        if (Array.isArray(parsed)) setAddresses(parsed.filter(isValidSavedAddress))
+      } catch {
+        // تجاهل بيانات تالفة — لا نمسح ما قد يكون موجوداً
       }
-    } catch {
-      // تجاهل بيانات تالفة — لا نمسح ما قد يكون موجوداً
     }
+    load()
     setHydrated(true)
+    // المزامنة (أو تسجيل الخروج) غيّرت التخزين المحلي: نعيد القراءة.
+    window.addEventListener(LOCAL_RELOAD, load)
+    return () => window.removeEventListener(LOCAL_RELOAD, load)
   }, [])
 
   // نكتب إلى localStorage فقط عند الإضافة/التعديل/الحذف (لا أثناء الترطيب).
@@ -101,6 +105,7 @@ export function useSavedAddresses() {
       const next = updater(prev)
       try {
         window.localStorage.setItem(SAVED_ADDRESSES_KEY, JSON.stringify(next))
+        notifyLocalChanged()
       } catch {
         // تجاهل — قد تكون مساحة التخزين ممتلئة أو محظورة
       }
