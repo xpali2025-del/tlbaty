@@ -1,0 +1,25 @@
+{
+  "id": "p5",
+  "slug": "small-shoulder-bag",
+  "name": "حقيبة كتف صغيرة",
+  "description": "حقيبة عملية وأنيقة مناسبة للاستخدام اليومي.",
+  "price": 119,
+  "tags": ["new"],
+  "image": "/products/bag-b.png",
+  "images": ["/products/bag-b.png"],
+  "category": "bags",
+  "subcategory": "shoulder-bags",
+  "rating": 4.3,
+  "reviewsCount": 38,
+  "colors": [
+    { "name": "وردي", "hex": "#E91E63" },
+    { "name": "بيج", "hex": "#D4A373" }
+  ],
+  "sizes": ["صغير"],
+  "stock": 22,
+  "brand": "ترف",
+  "sku": "p5",
+  "metaTitle": "حقيبة كتف صغيرة عملية وأنيقة",
+  "metaDescription": "حقيبة كتف صغيرة عملية وأنيقة مناسبة للاستخدام اليومي. تسوقيها الآن من متجر ترف بأفضل سعر.",
+  "keywords": ["حقيبة كتف صغيرة", "حقيبة يومية", "حقائب نسائية", "حقائب ترف"]
+}

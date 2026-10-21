@@ -1,0 +1,25 @@
+{
+  "id": "p4",
+  "slug": "classic-leather-bag",
+  "name": "حقيبة كلاسيك",
+  "description": "حقيبة كلاسيكية أنيقة مصنوعة من الجلد الطبيعي.",
+  "price": 129,
+  "tags": ["regular"],
+  "image": "/products/bag-1.jpg",
+  "images": ["/products/bag-1.jpg"],
+  "category": "bags",
+  "subcategory": "hand-bags",
+  "rating": 4.4,
+  "reviewsCount": 42,
+  "colors": [
+    { "name": "بني", "hex": "#8B4513" },
+    { "name": "أسود", "hex": "#1A1A1A" }
+  ],
+  "sizes": ["متوسط"],
+  "stock": 15,
+  "brand": "ترف",
+  "sku": "p4",
+  "metaTitle": "حقيبة يد كلاسيك من الجلد الطبيعي",
+  "metaDescription": "حقيبة يد كلاسيكية أنيقة مصنوعة من الجلد الطبيعي عالي الجودة. تسوقيها الآن من متجر ترف.",
+  "keywords": ["حقيبة كلاسيك", "حقيبة يد", "حقيبة جلد طبيعي", "حقائب نسائية"]
+}

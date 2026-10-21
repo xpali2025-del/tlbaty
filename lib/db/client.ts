@@ -2,7 +2,7 @@ import 'server-only'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { getServerEnv } from '@/lib/env'
-import * as schema from './schema'
+import * as schema from './store'
 
 type Db = PostgresJsDatabase<typeof schema>
 const globalForDb = globalThis as unknown as { pg?: ReturnType<typeof postgres>; db?: Db }

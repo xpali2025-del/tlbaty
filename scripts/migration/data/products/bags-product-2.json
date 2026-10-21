@@ -1,0 +1,43 @@
+{
+  "id": "gp130",
+  "slug": "bags-product-2",
+  "name": "حقيبة يد فاخرة",
+  "description": "حقيبة يد فاخرة بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 141,
+  "tags": [
+    "bestseller"
+  ],
+  "image": "/products/bag-b.png",
+  "images": [
+    "/products/bag-b.png",
+    "/products/bag-1.jpg"
+  ],
+  "category": "bags",
+  "subcategory": "hand-bags",
+  "rating": 4.1,
+  "reviewsCount": 17,
+  "colors": [
+    {
+      "name": "أبيض",
+      "hex": "#F5F5F5"
+    },
+    {
+      "name": "بني",
+      "hex": "#8B4513"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 11,
+  "brand": "لمسة",
+  "sku": "gp130",
+  "metaTitle": "حقيبة يد فاخرة | متجر ترف",
+  "metaDescription": "حقيبة يد فاخرة بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "حقيبة يد فاخرة",
+    "bags"
+  ]
+}

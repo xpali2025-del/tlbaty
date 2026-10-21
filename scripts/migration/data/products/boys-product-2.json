@@ -1,0 +1,43 @@
+{
+  "id": "gp123",
+  "slug": "boys-product-2",
+  "name": "قميص ولادي",
+  "description": "قميص ولادي بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 64,
+  "tags": [
+    "bestseller"
+  ],
+  "image": "/products/boys-b.png",
+  "images": [
+    "/products/boys-b.png",
+    "/products/kids-1.jpg"
+  ],
+  "category": "boys",
+  "subcategory": "boys-shirts",
+  "rating": 4.1,
+  "reviewsCount": 17,
+  "colors": [
+    {
+      "name": "أبيض",
+      "hex": "#F5F5F5"
+    },
+    {
+      "name": "بني",
+      "hex": "#8B4513"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 11,
+  "brand": "لمسة",
+  "sku": "gp123",
+  "metaTitle": "قميص ولادي | متجر ترف",
+  "metaDescription": "قميص ولادي بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "قميص ولادي",
+    "boys"
+  ]
+}

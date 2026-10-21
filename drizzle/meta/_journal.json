@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1792524117205,
-      "tag": "0000_luxuriant_absorbing_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1792526147485,
-      "tag": "0001_chief_talkback",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1792551019318,
-      "tag": "0002_plain_scalphunter",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1792551624324,
-      "tag": "0003_adorable_revanche",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1792552317824,
-      "tag": "0004_light_kulan_gath",
+      "when": 1792553392960,
+      "tag": "0000_unusual_martin_li",
       "breakpoints": true
     }
   ]

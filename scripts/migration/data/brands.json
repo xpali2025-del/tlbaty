@@ -1,0 +1,36 @@
+{
+  "brands": [
+    {
+      "id": "toraf",
+      "slug": "toraf",
+      "name": "ترف",
+      "image": "/brands/toraf.png",
+      "description": "علامة ترف للأزياء الراقية بتصاميم عصرية وجودة عالية تناسب جميع الإطلالات.",
+      "featured": true
+    },
+    {
+      "id": "anaqa",
+      "slug": "anaqa",
+      "name": "أناقة",
+      "image": "/brands/anaqa.png",
+      "description": "أناقة علامة نسائية فاخرة تجمع بين الفخامة والراحة في كل قطعة.",
+      "featured": true
+    },
+    {
+      "id": "lamsa",
+      "slug": "lamsa",
+      "name": "لمسة",
+      "image": "/brands/lamsa.png",
+      "description": "لمسة لأسلوب الحياة والجمال، منتجات مختارة بعناية لإطلالة مميزة.",
+      "featured": true
+    },
+    {
+      "id": "rawan",
+      "slug": "rawan",
+      "name": "روان",
+      "image": "/brands/rawan.png",
+      "description": "روان للحقائب والإكسسوارات الفاخرة بتصاميم أنيقة تكمل إطلالتك.",
+      "featured": false
+    }
+  ]
+}

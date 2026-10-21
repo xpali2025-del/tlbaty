@@ -1,0 +1,43 @@
+{
+  "id": "gp151",
+  "slug": "accessories-product-2",
+  "name": "إسوارة فضية",
+  "description": "إسوارة فضية بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 91,
+  "tags": [
+    "bestseller"
+  ],
+  "image": "/products/accessory-b.png",
+  "images": [
+    "/products/accessory-b.png",
+    "/products/accessory-1.jpg"
+  ],
+  "category": "accessories",
+  "subcategory": "silver-accessories",
+  "rating": 4.1,
+  "reviewsCount": 17,
+  "colors": [
+    {
+      "name": "أبيض",
+      "hex": "#F5F5F5"
+    },
+    {
+      "name": "بني",
+      "hex": "#8B4513"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 11,
+  "brand": "لمسة",
+  "sku": "gp151",
+  "metaTitle": "إسوارة فضية | متجر ترف",
+  "metaDescription": "إسوارة فضية بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "إسوارة فضية",
+    "accessories"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "p3",
+  "slug": "white-sport-shoes",
+  "name": "حذاء رياضي أبيض",
+  "description": "حذاء رياضي عصري مريح للاستخدام اليومي.",
+  "price": 129,
+  "tags": ["new"],
+  "image": "/products/shoes-1.jpg",
+  "images": ["/products/shoes-1.jpg", "/products/shoes-1-2.jpg"],
+  "category": "shoes",
+  "subcategory": "sport-shoes",
+  "rating": 4.6,
+  "reviewsCount": 67,
+  "colors": [
+    { "name": "أبيض", "hex": "#FFFFFF" },
+    { "name": "أسود", "hex": "#1A1A1A" }
+  ],
+  "sizes": ["38", "39", "40", "41", "42", "43"],
+  "stock": 32,
+  "brand": "ترف",
+  "sku": "p3",
+  "metaTitle": "حذاء رياضي أبيض عصري ومريح",
+  "metaDescription": "حذاء رياضي أبيض عصري ومريح للاستخدام اليومي بجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": ["حذاء رياضي", "كوتشي أبيض", "أحذية رياضية", "أحذية ترف"]
+}

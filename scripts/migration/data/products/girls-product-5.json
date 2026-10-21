@@ -1,0 +1,43 @@
+{
+  "id": "gp119",
+  "slug": "girls-product-5",
+  "name": "طقم كاجوال بناتي",
+  "description": "طقم كاجوال بناتي بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 109,
+  "tags": [
+    "regular"
+  ],
+  "image": "/products/kids-1.jpg",
+  "images": [
+    "/products/kids-1.jpg",
+    "/products/girls-b.png"
+  ],
+  "category": "girls",
+  "subcategory": "girls-sets",
+  "rating": 4.4,
+  "reviewsCount": 38,
+  "colors": [
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    },
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 20,
+  "brand": "ترف",
+  "sku": "gp119",
+  "metaTitle": "طقم كاجوال بناتي | متجر ترف",
+  "metaDescription": "طقم كاجوال بناتي بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "طقم كاجوال بناتي",
+    "girls"
+  ]
+}

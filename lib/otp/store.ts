@@ -2,7 +2,7 @@ import "server-only"
 import { randomBytes } from "node:crypto"
 import { and, desc, eq, gte, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
-import { customers, orders, otpCodes } from "@/lib/db/store"
+import { customerPhoneHistory, customers, orders, otpCodes } from "@/lib/db/store"
 import type { OtpPurpose } from "./provider"
 
 export type Customer = typeof customers.$inferSelect
@@ -125,4 +125,12 @@ export async function countRecentOtps(phone: string, purpose: OtpPurpose, window
       and(eq(otpCodes.phone, phone), eq(otpCodes.purpose, purpose), gte(otpCodes.createdAt, new Date(Date.now() - windowMs))),
     )
   return row?.n ?? 0
+}
+
+/** يحدّث هاتف العميل مع بقاء معرّفه وكل طلباته، ويسجّل التغيير في السجل (ذرّياً). */
+export async function updateCustomerPhone(customerId: string, from: string, to: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.update(customers).set({ phone: to }).where(eq(customers.id, customerId))
+    await tx.insert(customerPhoneHistory).values({ customerId, fromPhone: from, toPhone: to })
+  })
 }

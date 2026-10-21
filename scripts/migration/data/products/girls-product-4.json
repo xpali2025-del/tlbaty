@@ -1,0 +1,44 @@
+{
+  "id": "gp118",
+  "slug": "girls-product-4",
+  "name": "فستان مناسبات",
+  "description": "فستان مناسبات بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 94,
+  "tags": [
+    "offer"
+  ],
+  "image": "/products/girls-b.png",
+  "images": [
+    "/products/girls-b.png",
+    "/products/kids-1.jpg"
+  ],
+  "category": "girls",
+  "subcategory": "girls-dresses",
+  "rating": 4.3,
+  "reviewsCount": 31,
+  "colors": [
+    {
+      "name": "بني",
+      "hex": "#8B4513"
+    },
+    {
+      "name": "كحلي",
+      "hex": "#1F2A44"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 17,
+  "brand": "روان",
+  "sku": "gp118",
+  "metaTitle": "فستان مناسبات | متجر ترف",
+  "metaDescription": "فستان مناسبات بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "فستان مناسبات",
+    "girls"
+  ],
+  "oldPrice": 122
+}

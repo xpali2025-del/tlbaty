@@ -1,0 +1,43 @@
+{
+  "id": "gp110",
+  "slug": "men-product-3",
+  "name": "بنطلون كلاسيك",
+  "description": "بنطلون كلاسيك بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 112,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/shirt-1.jpg",
+  "images": [
+    "/products/shirt-1.jpg",
+    "/products/men-b.png"
+  ],
+  "category": "men",
+  "subcategory": "men-pants",
+  "rating": 4.2,
+  "reviewsCount": 24,
+  "colors": [
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    },
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 14,
+  "brand": "أناقة",
+  "sku": "gp110",
+  "metaTitle": "بنطلون كلاسيك | متجر ترف",
+  "metaDescription": "بنطلون كلاسيك بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "بنطلون كلاسيك",
+    "men"
+  ]
+}

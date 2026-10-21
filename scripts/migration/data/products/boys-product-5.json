@@ -1,0 +1,43 @@
+{
+  "id": "gp126",
+  "slug": "boys-product-5",
+  "name": "طقم كاجوال ولادي",
+  "description": "طقم كاجوال ولادي بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 109,
+  "tags": [
+    "regular"
+  ],
+  "image": "/products/kids-1.jpg",
+  "images": [
+    "/products/kids-1.jpg",
+    "/products/boys-b.png"
+  ],
+  "category": "boys",
+  "subcategory": "boys-sets",
+  "rating": 4.4,
+  "reviewsCount": 38,
+  "colors": [
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    },
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 20,
+  "brand": "ترف",
+  "sku": "gp126",
+  "metaTitle": "طقم كاجوال ولادي | متجر ترف",
+  "metaDescription": "طقم كاجوال ولادي بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "طقم كاجوال ولادي",
+    "boys"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "id": "gp142",
+  "slug": "shoes-product-7",
+  "name": "حذاء مناسبات",
+  "description": "حذاء مناسبات بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 299,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/shoes-1.jpg",
+  "images": [
+    "/products/shoes-1.jpg",
+    "/products/shoes-b.png"
+  ],
+  "category": "shoes",
+  "subcategory": "sport-shoes",
+  "rating": 4.6,
+  "reviewsCount": 52,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 26,
+  "brand": "أناقة",
+  "sku": "gp142",
+  "metaTitle": "حذاء مناسبات | متجر ترف",
+  "metaDescription": "حذاء مناسبات بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "حذاء مناسبات",
+    "shoes"
+  ]
+}

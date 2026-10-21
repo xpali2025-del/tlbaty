@@ -1,0 +1,43 @@
+{
+  "id": "gp131",
+  "slug": "bags-product-3",
+  "name": "حقيبة ظهر",
+  "description": "حقيبة ظهر بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 182,
+  "tags": [
+    "new"
+  ],
+  "image": "/products/bag-1.jpg",
+  "images": [
+    "/products/bag-1.jpg",
+    "/products/bag-b.png"
+  ],
+  "category": "bags",
+  "subcategory": "backpacks",
+  "rating": 4.2,
+  "reviewsCount": 24,
+  "colors": [
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    },
+    {
+      "name": "وردي",
+      "hex": "#E8A0B5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 14,
+  "brand": "أناقة",
+  "sku": "gp131",
+  "metaTitle": "حقيبة ظهر | متجر ترف",
+  "metaDescription": "حقيبة ظهر بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "حقيبة ظهر",
+    "bags"
+  ]
+}

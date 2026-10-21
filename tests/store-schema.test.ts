@@ -180,11 +180,11 @@ describe('notifications', () => {
   })
 })
 
-describe('legacy coexistence', () => {
-  it('keeps the interim public tables intact next to the store schema', async () => {
+describe('migration', () => {
+  it('creates every table in the store schema and nothing in public', async () => {
     const r = await db.execute(sql`select table_schema, count(*)::int as n from information_schema.tables where table_schema in ('public','store') group by 1 order by 1`)
     const counts = Object.fromEntries((r.rows as { table_schema: string; n: number }[]).map((x) => [x.table_schema, x.n]))
-    expect(counts.public).toBe(7)
+    expect(counts.public ?? 0).toBe(0)
     expect(counts.store).toBe(32)
   })
 })

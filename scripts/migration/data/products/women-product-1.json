@@ -1,0 +1,43 @@
+{
+  "id": "gp101",
+  "slug": "women-product-1",
+  "name": "فستان سهرة",
+  "description": "فستان سهرة بتصميم عصري وجودة عالية من متجر ترف.",
+  "price": 89,
+  "tags": [
+    "regular"
+  ],
+  "image": "/products/dress-1.jpg",
+  "images": [
+    "/products/dress-1.jpg",
+    "/products/women-b.png"
+  ],
+  "category": "women",
+  "subcategory": "dresses",
+  "rating": 4,
+  "reviewsCount": 10,
+  "colors": [
+    {
+      "name": "أسود",
+      "hex": "#1A1A1A"
+    },
+    {
+      "name": "بيج",
+      "hex": "#D8C3A5"
+    }
+  ],
+  "sizes": [
+    "S",
+    "M",
+    "L"
+  ],
+  "stock": 8,
+  "brand": "ترف",
+  "sku": "gp101",
+  "metaTitle": "فستان سهرة | متجر ترف",
+  "metaDescription": "فستان سهرة بتصميم عصري وجودة عالية. تسوقه الآن من متجر ترف بأفضل سعر.",
+  "keywords": [
+    "فستان سهرة",
+    "women"
+  ]
+}
