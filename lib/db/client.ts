@@ -10,7 +10,9 @@ const globalForDb = globalThis as unknown as { pg?: ReturnType<typeof postgres>;
 function getDb(): Db {
   if (!globalForDb.db) {
     // prepare:false is required for Supabase's transaction-mode pooler (port 6543).
-    const client = postgres(getServerEnv().DATABASE_URL, { prepare: false, max: 10 })
+    // Each serverless instance keeps a small pool: many instances x a large pool exhausts the database.
+    const max = Math.min(20, Math.max(1, Number(process.env.DB_POOL_MAX) || 5))
+    const client = postgres(getServerEnv().DATABASE_URL, { prepare: false, max, idle_timeout: 20, connect_timeout: 10 })
     globalForDb.pg = client
     globalForDb.db = drizzle(client, { schema })
   }
