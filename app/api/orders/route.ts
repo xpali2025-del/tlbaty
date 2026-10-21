@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getCoupons, getCurrencySettings, getPaymentAccountById, getShippingZones } from "@/lib/data"
 import { isDbConfigured } from "@/lib/db-cache"
 import { isProofStorageConfigured } from "@/lib/env"
-import { insertOrder, loadPricingProducts, ProofStorageError } from "@/lib/orders/create"
+import { insertOrder, loadPricingProducts, OutOfStockError, ProofStorageError } from "@/lib/orders/create"
 import { computeOrderPricing, priceChanged } from "@/lib/orders/pricing"
 import { normalizeInternationalPhone } from "@/lib/phone"
 import { getCurrentCustomer } from "@/lib/otp/session"
@@ -339,6 +339,9 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
+    if (error instanceof OutOfStockError) {
+      return fail("OUT_OF_STOCK", 409, `الكمية المطلوبة من "${error.productName}" غير متوفرة حالياً. عدّل الكمية أو أزل المنتج من السلة.`)
+    }
     console.error("orders save failed:", error instanceof Error ? error.message : "unknown")
     if (error instanceof ProofStorageError) {
       return fail("PAYMENT_PROOF_FAILED", 500, "تعذّر حفظ إثبات الحوالة. الرجاء المحاولة مرة أخرى.")

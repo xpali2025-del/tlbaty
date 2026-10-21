@@ -19,7 +19,7 @@ vi.mock('@/lib/storage/proofs', () => ({
   deletePaymentProof: proofs.del,
 }))
 
-const { insertOrder, loadPricingProducts, ProofStorageError } = await import('@/lib/orders/create')
+const { insertOrder, loadPricingProducts, OutOfStockError, ProofStorageError } = await import('@/lib/orders/create')
 const { computeOrderPricing } = await import('@/lib/orders/pricing')
 
 const seed = loadSeedData(path.resolve(__dirname, '../scripts/migration/data'))
@@ -44,7 +44,7 @@ beforeAll(async () => {
   await importCatalog(db, seed, { resolveImage: async (p) => p })
   customerId = (await db.insert(s.customers).values({ publicId: 'CUS_ORD', phone: '967781234567' }).returning())[0].id
 })
-beforeEach(() => vi.clearAllMocks())
+beforeEach(async () => { vi.clearAllMocks(); await db.update(s.products).set({ stock: 100 }) })
 
 describe('loadPricingProducts', () => {
   it('reads current prices straight from the database by product id', async () => {
@@ -90,7 +90,7 @@ describe('insertOrder', () => {
   })
 
   it('keeps the order readable after the product is deleted (snapshot + product_ref)', async () => {
-    const [p] = await db.insert(s.products).values({ productNumber: 'TMP-1', name: 'مؤقت', slug: 'tmp-1', categoryId: (await db.select().from(s.categories))[0].id, price: 300, description: 'd' }).returning()
+    const [p] = await db.insert(s.products).values({ productNumber: 'TMP-1', name: 'مؤقت', slug: 'tmp-1', categoryId: (await db.select().from(s.categories))[0].id, price: 300, description: 'd', stock: 50 }).returning()
     const created = await insertOrder({ customer: { id: customerId }, contact, pricing: await price(['TMP-1']), payment: cod })
     await db.delete(s.products).where(eq(s.products.id, p.id))
     const [item] = await db.select().from(s.orderItems).where(eq(s.orderItems.orderId, created.id))
@@ -142,5 +142,49 @@ describe('insertOrder', () => {
     pricing.lines[0].quantity = 0 // violates order_items_quantity_positive
     await expect(insertOrder({ customer: { id: customerId }, contact, pricing, payment: cod })).rejects.toThrow()
     expect([(await db.select({ n: count() }).from(s.orders))[0].n, (await db.select({ n: count() }).from(s.orderItems))[0].n]).toEqual(before)
+  })
+})
+
+describe('stock', () => {
+  const stockOf = async (productRef: string) => (await db.select().from(s.products).where(eq(s.products.productNumber, productRef)))[0].stock
+
+  it('decrements stock by the ordered quantity (summing lines of the same product)', async () => {
+    const id = seed.products[5].id
+    const map = await loadPricingProducts([id])
+    const r = computeOrderPricing({
+      items: [{ productId: id, size: 'M', color: 'أسود', quantity: 2 }, { productId: id, size: 'L', color: 'أسود', quantity: 3 }],
+      products: map, zones: [], city: 'صنعاء', shippingMethodName: 'شحن عادي', coupons: [], couponCode: '',
+      currencies: [{ code: 'YER', name: 'ريال', symbol: 'ر.ي', rate: 1 }], defaultCurrencyCode: 'YER', currencyCode: 'YER',
+    })
+    if (!r.ok) throw new Error(r.error)
+    await insertOrder({ customer: { id: customerId }, contact, pricing: r, payment: cod })
+    expect(await stockOf(id)).toBe(95)
+  })
+
+  it('refuses an order above stock and leaves everything untouched', async () => {
+    const [a, b] = [seed.products[6].id, seed.products[7].id]
+    await db.update(s.products).set({ stock: 1 }).where(eq(s.products.productNumber, b))
+    const ordersBefore = (await db.select().from(s.orders)).length
+    await expect(insertOrder({ customer: { id: customerId }, contact, pricing: await price([a, b]), payment: cod })).rejects.toBeInstanceOf(OutOfStockError)
+    expect(await stockOf(a)).toBe(100)
+    expect(await stockOf(b)).toBe(1)
+    expect((await db.select().from(s.orders)).length).toBe(ordersBefore)
+  })
+
+  it('never oversells the last units under concurrent orders', async () => {
+    const id = seed.products[8].id
+    await db.update(s.products).set({ stock: 4 }).where(eq(s.products.productNumber, id))
+    const pricing = await price([id]) // quantity 2 each
+    const results = await Promise.allSettled(Array.from({ length: 4 }, () => insertOrder({ customer: { id: customerId }, contact, pricing, payment: cod })))
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2)
+    expect(await stockOf(id)).toBe(0)
+  })
+
+  it('a failed proof upload does not consume stock', async () => {
+    const id = seed.products[9].id
+    proofs.put.mockRejectedValueOnce(new Error('r2 down'))
+    const transfer = { method: 'manual_transfer' as const, account: { providerName: 'x' } as never, senderName: 'س', reference: 'TRF-9911', proof }
+    await expect(insertOrder({ customer: { id: customerId }, contact, pricing: await price([id]), payment: transfer })).rejects.toBeInstanceOf(ProofStorageError)
+    expect(await stockOf(id)).toBe(100)
   })
 })

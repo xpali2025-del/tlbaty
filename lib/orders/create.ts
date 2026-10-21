@@ -1,6 +1,7 @@
 import "server-only"
 import { randomBytes, randomUUID } from "node:crypto"
-import { count, eq, inArray } from "drizzle-orm"
+import { revalidateTag } from "next/cache"
+import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { orderItems, orderPaymentProofs, orderPaymentStatusHistory, orders, products } from "@/lib/db/store"
 import { resolveImageUrl } from "@/lib/images"
@@ -8,10 +9,18 @@ import { buildProductNumber } from "@/lib/product-number"
 import { initialPaymentStatus, type PaymentAccountSnapshot, type PaymentMethod, type PaymentStatus } from "@/lib/payment"
 import type { PaymentProofPayload } from "@/lib/payment-proof"
 import { deletePaymentProof, newProofKey, putPaymentProof } from "@/lib/storage/proofs"
+import { CACHE_TAGS, productTag } from "@/lib/cache-tags"
 import { uniqueViolation } from "@/lib/manage-helpers"
 import type { PricingProduct, PricingResult } from "./pricing"
 
 export class ProofStorageError extends Error {}
+
+/** الكمية المطلوبة أكبر من المخزون المتاح؛ `productName` للعرض للعميل. */
+export class OutOfStockError extends Error {
+  constructor(readonly productName: string) {
+    super(`out of stock: ${productName}`)
+  }
+}
 
 /** المنتجات بالسعر الحالي من قاعدة البيانات مباشرة (بلا كاش) — مصدر السعر الوحيد للطلب. */
 export async function loadPricingProducts(productNumbers: string[]): Promise<Map<string, PricingProduct>> {
@@ -89,8 +98,9 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
     }
   }
 
+  const soldSlugs: string[] = []
   try {
-    return await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
       let duplicateTransferReference = false
       if (isTransfer && payment.reference) {
         const [{ n }] = await tx.select({ n: count() }).from(orders).where(eq(orders.transferReference, payment.reference))
@@ -152,6 +162,24 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
         .from(products)
         .where(inArray(products.productNumber, numbers))
       const uuidByNumber = new Map(live.map((p) => [p.number, p.id]))
+      // خصم المخزون ذرياً: UPDATE مشروط يقفل الصف، فلا يبيع طلبان متزامنان آخر قطعة.
+      // الترتيب الثابت بالرقم يمنع deadlock بين طلبين يشتركان في منتجات.
+      soldSlugs.length = 0
+      const wanted = new Map<string, { qty: number; name: string }>()
+      for (const l of pricing.lines) {
+        const prev = wanted.get(l.productId)
+        wanted.set(l.productId, { qty: (prev?.qty ?? 0) + l.quantity, name: l.name })
+      }
+      for (const [number, { qty, name }] of [...wanted].sort(([a], [b]) => a.localeCompare(b))) {
+        const updated = await tx
+          .update(products)
+          .set({ stock: sql`${products.stock} - ${qty}` })
+          .where(and(eq(products.productNumber, number), gte(products.stock, qty)))
+          .returning({ id: products.id, slug: products.slug })
+        if (updated.length === 0) throw new OutOfStockError(name)
+        soldSlugs.push(updated[0].slug)
+      }
+
       await tx.insert(orderItems).values(
         pricing.lines.map((l, position) => ({
           orderId,
@@ -192,8 +220,20 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
 
       return { id: orderId, orderNumber, paymentStatus }
     })
+    invalidateStock(soldSlugs)
+    return created
   } catch (error) {
     if (proofKey) await deletePaymentProof(proofKey).catch(() => {})
     throw error
+  }
+}
+
+/** صفحات المنتجات تعرض المخزون؛ نبطل كاش المنتجات المباعة فقط (لا كاش المتجر كله). */
+export function invalidateStock(slugs: string[]) {
+  try {
+    revalidateTag(CACHE_TAGS.products, { expire: 0 })
+    for (const slug of new Set(slugs)) revalidateTag(productTag(slug), { expire: 0 })
+  } catch {
+    // خارج سياق طلب Next (اختبارات/سكربتات): لا كاش لإبطاله.
   }
 }

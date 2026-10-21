@@ -60,7 +60,7 @@ beforeAll(async () => {
   await db.insert(s.coupons).values({ code: 'SAVE10', discount: 10, type: 'percent', minOrder: 0, description: 'd' })
   accountId = (await db.insert(s.paymentAccounts).values({ providerName: 'جيب', accountHolderName: 'متجر', accountNumber: '777000' }).returning())[0].id
 })
-beforeEach(() => vi.clearAllMocks())
+beforeEach(async () => { vi.clearAllMocks(); await db.update(s.products).set({ stock: 1000 }) })
 afterEach(() => { m.customer = m.customer && { ...m.customer } })
 
 describe('authentication and validation', () => {
@@ -99,6 +99,24 @@ describe('authentication and validation', () => {
     const f = new FormData()
     f.set('order', '[1,2')
     expect((await route.POST(new Request('http://x', { method: 'POST', body: f }))).status).toBe(400)
+  })
+})
+
+describe('stock', () => {
+  it('answers 409 OUT_OF_STOCK and stores nothing when the quantity is not available', async () => {
+    await db.update(s.products).set({ stock: 1 }).where(eq(s.products.productNumber, product.id))
+    const before = (await db.select().from(s.orders)).length
+    const res = await post(order({ items: [{ productId: product.id, size: 'M', color: 'أسود', quantity: 2, price: 59, name: product.name }] }))
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('OUT_OF_STOCK')
+    expect((await db.select().from(s.orders)).length).toBe(before)
+  })
+
+  it('decrements stock after a successful order', async () => {
+    const res = await post(order())
+    expect(res.status).toBe(200)
+    const [p] = await db.select().from(s.products).where(eq(s.products.productNumber, product.id))
+    expect(p.stock).toBe(998)
   })
 })
 

@@ -1,10 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
-import { couriers, orderPaymentProofs, orderPaymentStatusHistory, orderStatusHistory, orders } from "@/lib/db/store"
+import { couriers, orderItems, orderPaymentProofs, orderPaymentStatusHistory, orderStatusHistory, orders, products } from "@/lib/db/store"
 import { assertManageAuthenticated, getManageSessionUser } from "@/lib/manage-auth"
 import {
   canTransitionOrder,
@@ -72,6 +72,18 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
         .update(orders)
         .set({ status: next, updatedAt: now, ...(next === "delivered" ? { deliveredAt: now } : {}) })
         .where(eq(orders.id, orderId))
+      // إلغاء الطلب أو إرجاعه يعيد المخزون (الحالتان نهائيتان فلا يتكرر الإرجاع).
+      if (next === "cancelled" || next === "returned") {
+        const lines = await tx
+          .select({ productId: orderItems.productId, quantity: orderItems.quantity })
+          .from(orderItems)
+          .where(eq(orderItems.orderId, orderId))
+        const restore = new Map<string, number>()
+        for (const l of lines) if (l.productId) restore.set(l.productId, (restore.get(l.productId) ?? 0) + l.quantity)
+        for (const [productId, qty] of [...restore].sort(([a], [b]) => a.localeCompare(b))) {
+          await tx.update(products).set({ stock: sql`${products.stock} + ${qty}` }).where(eq(products.id, productId))
+        }
+      }
       await tx.insert(orderStatusHistory).values({
         orderId,
         fromStatus: from,

@@ -2,13 +2,14 @@ import "server-only"
 
 import { cookies } from "next/headers"
 import { createHmac, timingSafeEqual } from "node:crypto"
-import { verifyStoredUser } from "@/lib/manage-users"
+import { findUserByUsername, verifyStoredUser } from "@/lib/manage-users"
 
 // ============================================
 // حماية لوحة /manage عبر جلسة موقّعة تربطها باسم المستخدم.
 // - حساب المالك يُضبط عبر MANAGE_USERNAME (افتراضياً "odoo") و MANAGE_PASSWORD.
 // - يمكن إضافة مستخدمين إضافيين من داخل اللوحة (يُخزَّنون بكلمات مرور مُجزّأة).
-// - إذا لم تُضبط MANAGE_PASSWORD نُبقي اللوحة مفتوحة (وضع التطوير) مع تحذير.
+// - إذا لم تُضبط MANAGE_PASSWORD: اللوحة مفتوحة في التطوير فقط، ومغلقة تماماً في الإنتاج.
+// - الجلسة تنتهي بعد 7 أيام، وتُوقَّع بسر منفصل عن كلمة المرور إن وُجد MANAGE_SESSION_SECRET (أو SESSION_SECRET).
 // الكوكي HttpOnly وموقّعة بـ HMAC حتى لا يمكن تزويرها من المتصفح.
 // ============================================
 
@@ -24,8 +25,17 @@ function getUsername(): string {
   return process.env.MANAGE_USERNAME?.trim() || "odoo"
 }
 
-/** السر المستخدم لتوقيع الجلسات. تغييره أو تغيير كلمة المرور يُبطل الجلسات. */
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7
+
+/** الإنتاج بلا كلمة مرور: نرفض كل شيء بدل ترك اللوحة مفتوحة. */
+function failClosed(): boolean {
+  return getPassword() === null && process.env.NODE_ENV === "production"
+}
+
+/** السر المستخدم لتوقيع الجلسات. تغييره يُبطل كل الجلسات. */
 function getSecret(): string {
+  const dedicated = process.env.MANAGE_SESSION_SECRET?.trim() || process.env.SESSION_SECRET?.trim()
+  if (dedicated && dedicated.length >= 16) return dedicated
   return getPassword() ?? "manage-dev-secret"
 }
 
@@ -34,8 +44,8 @@ export function isManageProtected(): boolean {
   return getPassword() !== null
 }
 
-function signUser(username: string): string {
-  return createHmac("sha256", getSecret()).update(`user:${username}`).digest("hex")
+function signUser(username: string, expires: number): string {
+  return createHmac("sha256", getSecret()).update(`user:${username}:${expires}`).digest("hex")
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -53,7 +63,7 @@ export function getManageUsername(): string {
 /** تحقّق من كلمة مرور المالك المُدخلة. */
 export function verifyPassword(input: string): boolean {
   const password = getPassword()
-  if (!password) return true
+  if (!password) return !failClosed()
   return safeEqual(input, password)
 }
 
@@ -66,8 +76,8 @@ export async function authenticate(username: string, password: string): Promise<
   const uname = username.trim()
   if (!uname) return null
 
-  // وضع التطوير: لا كلمة مرور مضبوطة => السماح بالدخول.
-  if (!getPassword()) return uname
+  // وضع التطوير فقط: لا كلمة مرور مضبوطة => السماح بالدخول. في الإنتاج يُرفض كل دخول.
+  if (!getPassword()) return failClosed() ? null : uname
 
   // حساب المالك من متغيرات البيئة.
   if (safeEqual(uname.toLowerCase(), getUsername().toLowerCase()) && verifyPassword(password)) {
@@ -82,13 +92,14 @@ export async function authenticate(username: string, password: string): Promise<
 export async function createManageSession(username: string): Promise<void> {
   if (!getPassword()) return
   const store = await cookies()
-  const token = `${Buffer.from(username).toString("base64url")}.${signUser(username)}`
+  const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS
+  const token = `${Buffer.from(username).toString("base64url")}.${expires}.${signUser(username, expires)}`
   store.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: SESSION_TTL_SECONDS,
   })
 }
 
@@ -98,25 +109,35 @@ export async function destroyManageSession(): Promise<void> {
   store.delete(COOKIE_NAME)
 }
 
-/** يعيد اسم المستخدم الحالي من كوكي الجلسة إن كانت صالحة، أو null. */
+/** يعيد اسم المستخدم الحالي من كوكي الجلسة إن كانت صالحة وغير منتهية، أو null. */
 export async function getManageSessionUser(): Promise<string | null> {
+  if (failClosed()) return null
   if (!getPassword()) return getUsername()
   const store = await cookies()
   const token = store.get(COOKIE_NAME)?.value
-  if (!token || !token.includes(".")) return null
-  const [encoded, sig] = token.split(".")
+  const parts = token?.split(".") ?? []
+  if (parts.length !== 3) return null
+  const [encoded, expiresRaw, sig] = parts
+  const expires = Number(expiresRaw)
+  if (!Number.isInteger(expires) || expires < Math.floor(Date.now() / 1000)) return null
   let username: string
   try {
     username = Buffer.from(encoded, "base64url").toString("utf8")
   } catch {
     return null
   }
-  if (!username || !safeEqual(sig, signUser(username))) return null
+  if (!username || !safeEqual(sig, signUser(username, expires))) return null
+  // مستخدم مُخزَّن: يجب أن يبقى موجوداً ونشطاً (إيقافه يُنهي جلسته فوراً).
+  if (username.toLowerCase() !== getUsername().toLowerCase()) {
+    const stored = await findUserByUsername(username)
+    if (!stored || stored.active === false) return null
+  }
   return username
 }
 
 /** هل المستخدم الحالي مصرّح له بالدخول للوحة؟ */
 export async function isManageAuthenticated(): Promise<boolean> {
+  if (failClosed()) return false
   if (!getPassword()) return true
   return (await getManageSessionUser()) !== null
 }

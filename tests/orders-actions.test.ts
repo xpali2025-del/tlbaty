@@ -67,6 +67,24 @@ describe('updateOrderStatus', () => {
   })
 })
 
+describe('stock restore', () => {
+  it('returns stock when an order is cancelled, once only', async () => {
+    const [cat] = await db.insert(s.categories).values({ name: 'ق', slug: 'c-stock' }).returning()
+    const [p] = await db.insert(s.products).values({ productNumber: 'ST-1', name: 'منتج', slug: 'st-1', categoryId: cat.id, price: 5, description: 'd', stock: 7 }).returning()
+    const o = await order()
+    await db.insert(s.orderItems).values([
+      { orderId: o.id, position: 0, productId: p.id, name: 'منتج', quantity: 2, price: 5 },
+      { orderId: o.id, position: 1, productId: p.id, name: 'منتج', quantity: 1, price: 5 },
+      { orderId: o.id, position: 2, productId: null, name: 'محذوف', quantity: 4, price: 5 },
+    ])
+    expect((await A.updateOrderStatus(o.id, 'cancelled')).ok).toBe(true)
+    expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(10)
+    expect((await A.updateOrderStatus(o.id, 'cancelled')).ok).toBe(false)
+    expect((await A.updateOrderStatus(o.id, 'returned')).ok).toBe(false)
+    expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(10)
+  })
+})
+
 describe('assignCourier', () => {
   it('assigns many orders atomically and snapshots the courier', async () => {
     const [c] = await db.insert(s.couriers).values({ name: 'مندوب', phone: '700' }).returning()
