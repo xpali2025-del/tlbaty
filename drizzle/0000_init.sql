@@ -15,7 +15,6 @@ CREATE TYPE "store"."payment_status" AS ENUM('pending_on_delivery', 'pending_ver
 CREATE TYPE "store"."shipping_icon" AS ENUM('express', 'standard', 'pickup');--> statement-breakpoint
 CREATE TABLE "store"."brands" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"image_key" text,
@@ -27,13 +26,11 @@ CREATE TABLE "store"."brands" (
 	"keywords" text[] DEFAULT '{}'::text[] NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "brands_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "brands_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
 CREATE TABLE "store"."categories" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"image_key" text,
@@ -44,7 +41,6 @@ CREATE TABLE "store"."categories" (
 	"keywords" text[] DEFAULT '{}'::text[] NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "categories_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "categories_slug_unique" UNIQUE("slug"),
 	CONSTRAINT "categories_sort_nonneg" CHECK ("store"."categories"."sort_order" >= 0)
 );
@@ -68,7 +64,6 @@ CREATE TABLE "store"."product_images" (
 --> statement-breakpoint
 CREATE TABLE "store"."products" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"product_number" text NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
@@ -94,7 +89,6 @@ CREATE TABLE "store"."products" (
 	"keywords" text[] DEFAULT '{}'::text[] NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "products_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "products_product_number_unique" UNIQUE("product_number"),
 	CONSTRAINT "products_slug_unique" UNIQUE("slug"),
 	CONSTRAINT "products_price_nonneg" CHECK ("store"."products"."price" >= 0),
@@ -121,7 +115,6 @@ CREATE TABLE "store"."ad_categories" (
 --> statement-breakpoint
 CREATE TABLE "store"."ads" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"title" text NOT NULL,
 	"image_key" text NOT NULL,
 	"href" text,
@@ -130,13 +123,11 @@ CREATE TABLE "store"."ads" (
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "ads_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "ads_frequency_min" CHECK ("store"."ads"."frequency" >= 1)
 );
 --> statement-breakpoint
 CREATE TABLE "store"."coupons" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"code" text NOT NULL,
 	"discount" numeric(14, 2) NOT NULL,
 	"type" "store"."discount_type" DEFAULT 'fixed' NOT NULL,
@@ -144,7 +135,6 @@ CREATE TABLE "store"."coupons" (
 	"description" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "coupons_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "coupons_discount_nonneg" CHECK ("store"."coupons"."discount" >= 0),
 	CONSTRAINT "coupons_percent_max" CHECK ("store"."coupons"."type" <> 'percent' or "store"."coupons"."discount" <= 100),
 	CONSTRAINT "coupons_min_order_nonneg" CHECK ("store"."coupons"."min_order" >= 0)
@@ -161,20 +151,17 @@ CREATE TABLE "store"."currencies" (
 --> statement-breakpoint
 CREATE TABLE "store"."manage_users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"username" text NOT NULL,
 	"name" text,
 	"password_hash" text NOT NULL,
 	"role" "store"."manage_user_role" DEFAULT 'editor' NOT NULL,
 	"active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "manage_users_sanity_id_unique" UNIQUE("sanity_id")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "store"."payment_accounts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"provider_name" text NOT NULL,
 	"account_display_name" text,
 	"account_holder_name" text NOT NULL,
@@ -185,13 +172,11 @@ CREATE TABLE "store"."payment_accounts" (
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "payment_accounts_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "payment_accounts_sort_range" CHECK ("store"."payment_accounts"."sort_order" between 0 and 9999)
 );
 --> statement-breakpoint
 CREATE TABLE "store"."reviews" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"name" text NOT NULL,
 	"rating" smallint NOT NULL,
 	"comment" text NOT NULL,
@@ -199,7 +184,6 @@ CREATE TABLE "store"."reviews" (
 	"avatar_key" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "reviews_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "reviews_rating_range" CHECK ("store"."reviews"."rating" between 1 and 5)
 );
 --> statement-breakpoint
@@ -216,12 +200,10 @@ CREATE TABLE "store"."shipping_methods" (
 --> statement-breakpoint
 CREATE TABLE "store"."shipping_zones" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"governorate" text,
 	"is_default" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "shipping_zones_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "shipping_zones_target" CHECK ("store"."shipping_zones"."is_default" or "store"."shipping_zones"."governorate" is not null)
 );
 --> statement-breakpoint
@@ -255,7 +237,6 @@ CREATE TABLE "store"."site_settings" (
 --> statement-breakpoint
 CREATE TABLE "store"."slides" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"title" text NOT NULL,
 	"subtitle" text,
 	"cta" text,
@@ -263,8 +244,7 @@ CREATE TABLE "store"."slides" (
 	"image_key" text NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "slides_sanity_id_unique" UNIQUE("sanity_id")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "store"."auth_events" (
@@ -302,14 +282,12 @@ CREATE TABLE "store"."customer_sessions" (
 --> statement-breakpoint
 CREATE TABLE "store"."customers" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"public_id" text NOT NULL,
 	"phone" text NOT NULL,
 	"verified" boolean DEFAULT true NOT NULL,
 	"status" "store"."customer_status" DEFAULT 'active' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_login_at" timestamp with time zone,
-	CONSTRAINT "customers_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "customers_public_id_unique" UNIQUE("public_id"),
 	CONSTRAINT "customers_phone_unique" UNIQUE("phone")
 );
@@ -349,15 +327,13 @@ CREATE TABLE "store"."otp_codes" (
 --> statement-breakpoint
 CREATE TABLE "store"."couriers" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"name" text NOT NULL,
 	"phone" text,
 	"image_key" text,
 	"cities" text[] DEFAULT '{}'::text[] NOT NULL,
 	"status" "store"."courier_status" DEFAULT 'active' NOT NULL,
 	"admin_note" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "couriers_sanity_id_unique" UNIQUE("sanity_id")
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "store"."order_items" (
@@ -414,7 +390,6 @@ CREATE TABLE "store"."order_status_history" (
 --> statement-breakpoint
 CREATE TABLE "store"."orders" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"order_number" text NOT NULL,
 	"status" "store"."order_status" DEFAULT 'new' NOT NULL,
 	"customer_id" uuid,
@@ -454,7 +429,6 @@ CREATE TABLE "store"."orders" (
 	"duplicate_transfer_reference" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "orders_sanity_id_unique" UNIQUE("sanity_id"),
 	CONSTRAINT "orders_order_number_unique" UNIQUE("order_number"),
 	CONSTRAINT "orders_amounts_nonneg" CHECK ("store"."orders"."subtotal" >= 0 and "store"."orders"."total" >= 0 and "store"."orders"."discount" >= 0 and "store"."orders"."shipping_price" >= 0),
 	CONSTRAINT "orders_latitude_range" CHECK ("store"."orders"."latitude" is null or "store"."orders"."latitude" between -90 and 90),
@@ -472,7 +446,6 @@ CREATE TABLE "store"."notification_reads" (
 --> statement-breakpoint
 CREATE TABLE "store"."notifications" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"sanity_id" text,
 	"title" text NOT NULL,
 	"body" text,
 	"image_key" text,
@@ -483,8 +456,7 @@ CREATE TABLE "store"."notifications" (
 	"expires_at" timestamp with time zone,
 	"created_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "notifications_sanity_id_unique" UNIQUE("sanity_id")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "store"."product_colors" ADD CONSTRAINT "product_colors_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "store"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

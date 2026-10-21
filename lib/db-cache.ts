@@ -7,7 +7,7 @@ export function isDbConfigured(): boolean {
 }
 
 /**
- * قراءة مخزَّنة في Data Cache بوسوم (بديل sanityFetch).
+ * قراءة مخزَّنة في Data Cache بوسوم.
  * - بلا DATABASE_URL: تعيد fallback ولا تلمس القاعدة ولا تخزّن شيئاً.
  * - عند خطأ القاعدة بعد ضبطها: يُرمى الخطأ إلى Next.js حتى لا تُستبدل نسخة الكاش
  *   السليمة بقائمة فارغة أثناء إعادة التحقق.

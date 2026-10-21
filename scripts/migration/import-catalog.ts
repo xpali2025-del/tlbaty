@@ -7,7 +7,7 @@ import * as s from "../../lib/db/store"
 // ============================================
 // استيراد الكتالوج من ملفات JSON إلى جداول store (PostgreSQL).
 //
-// نفس قواعد scripts/migrate-to-sanity.mjs القديم: مفاتيح طبيعية ثابتة (آمن لإعادة التشغيل)،
+// الأقسام والماركات والمنتجات تُحدَّث بحسب slug (آمن لإعادة التشغيل)، والسلايدر والتقييمات والإعلانات تُضاف مرة واحدة فقط إن كان جدولها فارغاً، والكوبونات بحسب الكود،
 // ربط الماركة بالاسم، وتحويل وسوم new/bestseller إلى isNew/isBestseller مع إبقاء الوسوم.
 // الصور تُحلّ عبر resolveImage المحقونة (R2 أو مسار محلي)، فيبقى هذا الملف قابلاً للاختبار.
 // ============================================
@@ -134,9 +134,15 @@ export function validateSeed(data: SeedData): { errors: string[]; warnings: stri
 
 const PLACEHOLDER = "/placeholder.svg"
 
+ 
+async function hasRows(tx: PgDatabase<any, any, any>, table: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rows = await tx.select().from(table).limit(1)
+  return rows.length > 0
+}
+
 export type ImportOptions = {
-  /** يحوّل مسار صورة من البيانات إلى القيمة التي تُخزَّن (مفتاح R2 أو مسار محلي)، أو null إن فُقدت. */
-  resolveImage: (publicPath: string) => Promise<string | null>
+  /** يحوّل مسار صورة من البيانات إلى القيمة التي تُخزَّن (مفتاح R2 أو مسار محلي)، أو null إن فُقدت. الافتراضي: بلا صور. */
+  resolveImage?: (publicPath: string) => Promise<string | null>
   log?: (message: string) => void
 }
 
@@ -163,7 +169,7 @@ export async function importCatalog(
   const images = new Map<string, string | null>()
   const missingImages: string[] = []
   for (const p of collectImagePaths(data)) {
-    const value = await options.resolveImage(p)
+    const value = options.resolveImage ? await options.resolveImage(p) : null
     images.set(p, value)
     if (!value) missingImages.push(p)
   }
@@ -179,7 +185,6 @@ export async function importCatalog(
     const subcategoryIds = new Map<string, string>() // `${categorySlug}/${subSlug}`
     for (const [i, c] of data.categories.entries()) {
       const values = {
-        sanityId: `category-${c.slug}`,
         name: c.name,
         slug: c.slug,
         imageKey: img(c.image),
@@ -219,7 +224,6 @@ export async function importCatalog(
     const brandIdByName = new Map<string, string>()
     for (const [i, b] of data.brands.entries()) {
       const values = {
-        sanityId: `brand-${b.slug}`,
         name: b.name,
         slug: b.slug,
         imageKey: img(b.image),
@@ -244,7 +248,6 @@ export async function importCatalog(
     for (const [i, p] of data.products.entries()) {
       const tags = p.tags ?? []
       const values = {
-        sanityId: `product-${p.slug}`,
         productNumber: p.id,
         name: p.name,
         slug: p.slug,
@@ -291,9 +294,9 @@ export async function importCatalog(
     log(`المنتجات: ${counts.products}`)
 
     // 5) السلايدر
+    const slidesExisted = await hasRows(tx, s.slides)
     for (const [i, sl] of data.slides.entries()) {
       const values = {
-        sanityId: `slide-${sl.id}`,
         title: sl.title,
         subtitle: sl.subtitle ?? null,
         cta: sl.cta ?? null,
@@ -301,41 +304,40 @@ export async function importCatalog(
         imageKey: requiredImg(sl.image),
         sortOrder: i,
       }
-      await tx.insert(s.slides).values(values).onConflictDoUpdate({ target: s.slides.sanityId, set: values })
+      if (!slidesExisted) await tx.insert(s.slides).values(values)
     }
     counts.slides = data.slides.length
 
     // 6) الكوبونات
     for (const c of data.coupons) {
       const values = {
-        sanityId: `coupon-${c.code.toLowerCase()}`,
         code: c.code,
         discount: c.discount,
         type: c.type,
         minOrder: c.minOrder ?? 0,
         description: c.description,
       }
-      await tx.insert(s.coupons).values(values).onConflictDoUpdate({ target: s.coupons.sanityId, set: values })
+      await tx.insert(s.coupons).values(values).onConflictDoNothing()
     }
     counts.coupons = data.coupons.length
 
     // 7) التقييمات
+    const reviewsExisted = await hasRows(tx, s.reviews)
     for (const r of data.reviews) {
       const values = {
-        sanityId: `review-${r.id}`,
         name: r.name,
         rating: r.rating,
         comment: r.comment,
         reviewDate: r.date,
       }
-      await tx.insert(s.reviews).values(values).onConflictDoUpdate({ target: s.reviews.sanityId, set: values })
+      if (!reviewsExisted) await tx.insert(s.reviews).values(values)
     }
     counts.reviews = data.reviews.length
 
     // 8) الإعلانات ("all" تعني كل الأقسام ⇒ بلا روابط)
+    const adsExisted = await hasRows(tx, s.ads)
     for (const [i, a] of data.ads.entries()) {
       const values = {
-        sanityId: `ad-${a.id}`,
         title: a.title,
         imageKey: requiredImg(a.image),
         href: a.href ?? null,
@@ -343,12 +345,8 @@ export async function importCatalog(
         frequency: a.frequency ?? 6,
         sortOrder: a.order ?? i,
       }
-      const [row] = await tx
-        .insert(s.ads)
-        .values(values)
-        .onConflictDoUpdate({ target: s.ads.sanityId, set: values })
-        .returning({ id: s.ads.id })
-      await tx.delete(s.adCategories).where(eq(s.adCategories.adId, row.id))
+      if (adsExisted) continue
+      const [row] = await tx.insert(s.ads).values(values).returning({ id: s.ads.id })
       const links = (a.categories ?? [])
         .filter((slug) => slug !== "all")
         .map((slug) => categoryIds.get(slug))

@@ -371,7 +371,7 @@ describe('auth API routes', () => {
     }
   })
 
-  it('keeps the audit table queryable by ip index (sanity)', async () => {
+  it('keeps the audit table queryable by ip index', async () => {
     const r = await db.execute(sql`select indexname from pg_indexes where schemaname = 'store' and indexname = 'auth_events_ip_idx'`)
     expect(r.rows).toHaveLength(1)
   })

@@ -6,7 +6,6 @@ export const store = pgSchema('store')
 
 export const pk = () => uuid('id').primaryKey().defaultRandom()
 /** Original `_id`, kept so the data migration is idempotent and references can be remapped. */
-export const sanityId = () => text('sanity_id').unique()
 export const timestamps = () => ({
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

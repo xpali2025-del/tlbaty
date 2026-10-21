@@ -1,12 +1,11 @@
 import { sql } from 'drizzle-orm'
 import { check, index, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { pk, sanityId, store, timestamps } from './common'
+import { pk, store, timestamps } from './common'
 import { customers } from './customers'
 import { notificationPriority, notificationStatus } from './enums'
 
 export const notifications = store.table('notifications', {
   id: pk(),
-  sanityId: sanityId(),
   title: text('title').notNull(),
   body: text('body'),
   imageKey: text('image_key'),

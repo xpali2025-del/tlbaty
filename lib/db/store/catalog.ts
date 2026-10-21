@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import {
   boolean, check, index, integer, numeric, real, text, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
-import { pk, sanityId, store, timestamps } from './common'
+import { pk, store, timestamps } from './common'
 
 const money = (name: string) => numeric(name, { precision: 14, scale: 2, mode: 'number' })
 const seo = () => ({
@@ -13,7 +13,6 @@ const seo = () => ({
 
 export const categories = store.table('categories', {
   id: pk(),
-  sanityId: sanityId(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   imageKey: text('image_key'),
@@ -34,7 +33,6 @@ export const subcategories = store.table('subcategories', {
 
 export const brands = store.table('brands', {
   id: pk(),
-  sanityId: sanityId(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   imageKey: text('image_key'),
@@ -47,7 +45,6 @@ export const brands = store.table('brands', {
 
 export const products = store.table('products', {
   id: pk(),
-  sanityId: sanityId(),
   /** Human-facing product number ( `productId`). */
   productNumber: text('product_number').notNull().unique(),
   name: text('name').notNull(),

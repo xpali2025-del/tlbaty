@@ -265,7 +265,7 @@ describe('image URLs', () => {
   it('resolves R2 keys, keeps local paths and URLs, and falls back to the placeholder', () => {
     expect(resolveImageUrl('products/a.jpg')).toBe('https://cdn.example.com/products/a.jpg')
     expect(resolveImageUrl('/products/a.jpg')).toBe('/products/a.jpg')
-    expect(resolveImageUrl('https://cdn.sanity.io/x.jpg')).toBe('https://cdn.sanity.io/x.jpg')
+    expect(resolveImageUrl('https://other.example.com/x.jpg')).toBe('https://other.example.com/x.jpg')
     expect(resolveImageUrl(null)).toBe('/placeholder.svg')
     expect(resolveOptionalImageUrl(undefined)).toBeUndefined()
     const base = process.env.R2_PUBLIC_URL

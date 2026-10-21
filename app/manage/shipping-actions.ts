@@ -9,7 +9,7 @@ import { revalidateStore, uniqueViolation, uuidParam } from "@/lib/manage-helper
 import { BASE_CURRENCY_CODE } from "@/lib/currency"
 import { YEMEN_GOVERNORATES } from "@/lib/yemen-governorates"
 
-// إدارة العملات وطرق الشحن حسب المحافظة (كانت تُدار من Sanity Studio فقط).
+// إدارة العملات وطرق الشحن حسب المحافظة.
 // أسعار المنتجات مخزّنة بالعملة الأساسية YER، لذلك لا تُحذف وسعرها 1 دائماً.
 
 const currencySchema = z.object({

@@ -1,5 +1,5 @@
 {
-  "id": "299bf82e-0301-4659-b77a-d35a4a865bf0",
+  "id": "9743e3e3-9f8a-4bc3-9dac-8c9f35228fce",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "name": {
           "name": "name",
@@ -114,13 +108,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "brands_sanity_id_unique": {
-          "name": "brands_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        },
         "brands_slug_unique": {
           "name": "brands_slug_unique",
           "nullsNotDistinct": false,
@@ -143,12 +130,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "name": {
           "name": "name",
@@ -219,13 +200,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "categories_sanity_id_unique": {
-          "name": "categories_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        },
         "categories_slug_unique": {
           "name": "categories_slug_unique",
           "nullsNotDistinct": false,
@@ -422,12 +396,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "product_number": {
           "name": "product_number",
@@ -721,13 +689,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "products_sanity_id_unique": {
-          "name": "products_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        },
         "products_product_number_unique": {
           "name": "products_product_number_unique",
           "nullsNotDistinct": false,
@@ -945,12 +906,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "title": {
           "name": "title",
           "type": "text",
@@ -1025,15 +980,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "ads_sanity_id_unique": {
-          "name": "ads_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "ads_frequency_min": {
@@ -1053,12 +1000,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "code": {
           "name": "code",
@@ -1127,15 +1068,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "coupons_sanity_id_unique": {
-          "name": "coupons_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "coupons_discount_nonneg": {
@@ -1213,12 +1146,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "username": {
           "name": "username",
           "type": "text",
@@ -1286,15 +1213,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "manage_users_sanity_id_unique": {
-          "name": "manage_users_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1309,12 +1228,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "provider_name": {
           "name": "provider_name",
@@ -1401,15 +1314,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "payment_accounts_sanity_id_unique": {
-          "name": "payment_accounts_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "payment_accounts_sort_range": {
@@ -1429,12 +1334,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "name": {
           "name": "name",
@@ -1500,15 +1399,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "reviews_sanity_id_unique": {
-          "name": "reviews_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "reviews_rating_range": {
@@ -1631,12 +1522,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "governorate": {
           "name": "governorate",
           "type": "text",
@@ -1701,15 +1586,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "shipping_zones_sanity_id_unique": {
-          "name": "shipping_zones_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "shipping_zones_target": {
@@ -1915,12 +1792,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "title": {
           "name": "title",
           "type": "text",
@@ -1992,15 +1863,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "slides_sanity_id_unique": {
-          "name": "slides_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2394,12 +2257,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "public_id": {
           "name": "public_id",
           "type": "text",
@@ -2445,13 +2302,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "customers_sanity_id_unique": {
-          "name": "customers_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        },
         "customers_public_id_unique": {
           "name": "customers_public_id_unique",
           "nullsNotDistinct": false,
@@ -2760,12 +2610,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -2832,15 +2676,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "couriers_sanity_id_unique": {
-          "name": "couriers_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -3313,12 +3149,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "order_number": {
           "name": "order_number",
           "type": "text",
@@ -3709,13 +3539,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "orders_sanity_id_unique": {
-          "name": "orders_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        },
         "orders_order_number_unique": {
           "name": "orders_order_number_unique",
           "nullsNotDistinct": false,
@@ -3892,12 +3715,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sanity_id": {
-          "name": "sanity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "title": {
           "name": "title",
           "type": "text",
@@ -4012,15 +3829,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "notifications_sanity_id_unique": {
-          "name": "notifications_sanity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sanity_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

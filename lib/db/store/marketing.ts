@@ -3,14 +3,13 @@ import {
   boolean, check, date, index, integer, numeric, primaryKey, smallint, text, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import { categories } from './catalog'
-import { pk, sanityId, store, timestamps } from './common'
+import { pk, store, timestamps } from './common'
 import { discountType, linkPlacement, manageUserRole, shippingIcon } from './enums'
 
 const money = (name: string) => numeric(name, { precision: 14, scale: 2, mode: 'number' })
 
 export const coupons = store.table('coupons', {
   id: pk(),
-  sanityId: sanityId(),
   code: text('code').notNull(),
   discount: money('discount').notNull(),
   type: discountType('type').notNull().default('fixed'),
@@ -26,7 +25,6 @@ export const coupons = store.table('coupons', {
 
 export const ads = store.table('ads', {
   id: pk(),
-  sanityId: sanityId(),
   title: text('title').notNull(),
   imageKey: text('image_key').notNull(),
   href: text('href'),
@@ -46,7 +44,6 @@ export const adCategories = store.table('ad_categories', {
 
 export const slides = store.table('slides', {
   id: pk(),
-  sanityId: sanityId(),
   title: text('title').notNull(),
   subtitle: text('subtitle'),
   cta: text('cta'),
@@ -59,7 +56,6 @@ export const slides = store.table('slides', {
 /** Site-level testimonials (the `review` type is not tied to a product). */
 export const reviews = store.table('reviews', {
   id: pk(),
-  sanityId: sanityId(),
   name: text('name').notNull(),
   rating: smallint('rating').notNull(),
   comment: text('comment').notNull(),
@@ -73,7 +69,6 @@ export const reviews = store.table('reviews', {
 
 export const paymentAccounts = store.table('payment_accounts', {
   id: pk(),
-  sanityId: sanityId(),
   providerName: text('provider_name').notNull(),
   accountDisplayName: text('account_display_name'),
   accountHolderName: text('account_holder_name').notNull(),
@@ -90,7 +85,6 @@ export const paymentAccounts = store.table('payment_accounts', {
 
 export const manageUsers = store.table('manage_users', {
   id: pk(),
-  sanityId: sanityId(),
   username: text('username').notNull(),
   name: text('name'),
   passwordHash: text('password_hash').notNull(),
@@ -137,7 +131,6 @@ export const siteLinks = store.table('site_links', {
 
 export const shippingZones = store.table('shipping_zones', {
   id: pk(),
-  sanityId: sanityId(),
   governorate: text('governorate'),
   isDefault: boolean('is_default').notNull().default(false),
   ...timestamps(),

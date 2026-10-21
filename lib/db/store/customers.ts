@@ -1,13 +1,12 @@
 import { sql } from 'drizzle-orm'
 import { boolean, check, index, integer, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { pk, sanityId, store } from './common'
+import { pk, store } from './common'
 import { authEventType, customerStatus, otpPurpose } from './enums'
 
 const at = (name: string) => timestamp(name, { withTimezone: true })
 
 export const customers = store.table('customers', {
   id: pk(),
-  sanityId: sanityId(),
   /** Legacy public customer identifier ( `customerId`). */
   publicId: text('public_id').notNull().unique(),
   /** International digits without + (e.g. 967781234567); phone + OTP is the login identity. */

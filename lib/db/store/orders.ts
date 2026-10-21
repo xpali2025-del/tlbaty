@@ -3,7 +3,7 @@ import {
   boolean, check, doublePrecision, index, integer, jsonb, numeric, real, text, timestamp, uuid,
 } from 'drizzle-orm/pg-core'
 import { products } from './catalog'
-import { pk, sanityId, store } from './common'
+import { pk, store } from './common'
 import { customers } from './customers'
 import { courierStatus, orderStatus, paymentMethod, paymentStatus } from './enums'
 
@@ -12,7 +12,6 @@ const at = (name: string) => timestamp(name, { withTimezone: true })
 
 export const couriers = store.table('couriers', {
   id: pk(),
-  sanityId: sanityId(),
   name: text('name').notNull(),
   phone: text('phone'),
   imageKey: text('image_key'),
@@ -24,7 +23,6 @@ export const couriers = store.table('couriers', {
 
 export const orders = store.table('orders', {
   id: pk(),
-  sanityId: sanityId(),
   orderNumber: text('order_number').notNull().unique(),
   status: orderStatus('status').notNull().default('new'),
 

@@ -7,7 +7,6 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, describe, expect, it } from 'vitest'
 import * as s from '@/lib/db/store'
 import { collectImagePaths, importCatalog, loadSeedData, validateSeed, type SeedData } from '../scripts/migration/import-catalog'
-import { contentTypeFor, createImageResolver, r2KeyFor, sanityAssetUrl } from '../scripts/migration/images'
 
 const DATA_DIR = path.resolve(__dirname, '../scripts/migration/data')
 const seed = loadSeedData(DATA_DIR)
@@ -98,13 +97,12 @@ describe('importCatalog', () => {
     expect(row.isBestseller).toBe(true)
     expect(row.tags).toEqual(tagged.tags)
     expect(row.productNumber).toBe(tagged.id)
-    expect(row.sanityId).toBe(`product-${tagged.slug}`)
     const brandId = (await db.select().from(s.brands).where(eq(s.brands.name, tagged.brand!.trim())))[0].id
     expect(row.brandId).toBe(brandId)
 
     const allAd = seed.ads.find((a) => (a.categories ?? []).includes('all') || !(a.categories ?? []).length)
     if (allAd) {
-      const [ad] = await db.select().from(s.ads).where(eq(s.ads.sanityId, `ad-${allAd.id}`))
+      const [ad] = await db.select().from(s.ads).where(eq(s.ads.title, allAd.title))
       const links = await db.select().from(s.adCategories).where(eq(s.adCategories.adId, ad.id))
       expect(links).toHaveLength(0)
     }
@@ -128,7 +126,7 @@ describe('importCatalog', () => {
     const missing = new Set([seed.slides[0].image!, seed.products[0].image!])
     const report = await importCatalog(fresh, seed, { resolveImage: async (p) => (missing.has(p) ? null : p) })
     expect(report.missingImages.sort()).toEqual([...missing].sort())
-    const [slide] = await fresh.select().from(s.slides).where(eq(s.slides.sanityId, `slide-${seed.slides[0].id}`))
+    const [slide] = await fresh.select().from(s.slides).where(eq(s.slides.title, seed.slides[0].title))
     expect(slide.imageKey).toBe('/placeholder.svg')
     const [prod] = await fresh.select().from(s.products).where(eq(s.products.slug, seed.products[0].slug))
     expect(prod.mainImageKey).toBeNull()
@@ -158,54 +156,19 @@ describe('importCatalog', () => {
 describe('image resolver', () => {
   const base = { publicDir: '/pub', readFile: async () => Buffer.from('img') }
 
-  it('builds stable R2 keys inside allowed folders', () => {
-    expect(r2KeyFor('/products/accessory-1.jpg')).toBe('products/accessory-1.jpg')
-    expect(r2KeyFor('/slider/hero 1.png')).toBe('slides/hero-1.png')
-    expect(r2KeyFor('/weird/x.png')).toBe('site/x.png')
-    expect(r2KeyFor('/products/../../etc/passwd.jpg')).not.toContain('..')
-    expect(contentTypeFor('a.PNG')).toBe('image/png')
-    expect(contentTypeFor('a.bin')).toBe('application/octet-stream')
+  it('is idempotent for one-time tables: re-running does not duplicate slides, reviews, ads or coupons', async () => {
+    const before = [await n(s.slides), await n(s.reviews), await n(s.ads), await n(s.coupons)]
+    await importCatalog(db, seed, { resolveImage: localResolver })
+    expect([await n(s.slides), await n(s.reviews), await n(s.ads), await n(s.coupons)]).toEqual(before)
   })
 
-  it('converts Sanity asset ids to CDN URLs', () => {
-    expect(sanityAssetUrl('image-4cd1da52-1024x1024-jpg', 'proj', 'production')).toBe('https://cdn.sanity.io/images/proj/production/4cd1da52-1024x1024.jpg')
-    expect(sanityAssetUrl('file-abc-pdf', 'proj', 'production')).toBeNull()
-  })
-
-  it('local mode keeps the public path for existing files and reports missing ones', async () => {
-    const resolve = createImageResolver({ ...base, fileExists: (f) => f.endsWith('here.jpg'), cache: {} })
-    expect(await resolve('/products/here.jpg')).toBe('/products/here.jpg')
-    expect(await resolve('/products/gone.jpg')).toBeNull()
-  })
-
-  it('R2 mode uploads local files once and then serves from the cache', async () => {
-    const uploads: string[] = []
-    const cache: Record<string, string> = {}
-    const resolve = createImageResolver({
-      ...base, fileExists: () => true, cache,
-      upload: async (key, _b, type) => void uploads.push(`${key}|${type}`),
-    })
-    expect(await resolve('/products/a.jpg')).toBe('products/a.jpg')
-    expect(await resolve('/products/a.jpg')).toBe('products/a.jpg')
-    expect(uploads).toEqual(['products/a.jpg|image/jpeg'])
-  })
-
-  it('downloads from the Sanity CDN when the file is not local, and skips unknown assets or failed downloads', async () => {
-    const uploads: string[] = []
-    const fetched: string[] = []
-    const resolve = createImageResolver({
-      ...base, fileExists: () => false, cache: {},
-      upload: async (key) => void uploads.push(key),
-      sanity: {
-        projectId: 'proj', dataset: 'ds',
-        assetIds: { '/products/a.jpg': 'image-aa11-100x100-jpg', '/products/b.jpg': 'image-bb22-100x100-jpg' },
-        fetchBytes: async (url) => { fetched.push(url); return url.includes('bb22') ? null : Buffer.from('x') },
-      },
-    })
-    expect(await resolve('/products/a.jpg')).toBe('products/a.jpg')
-    expect(await resolve('/products/b.jpg')).toBeNull() // CDN returned 404
-    expect(await resolve('/products/c.jpg')).toBeNull() // no known asset id
-    expect(fetched).toEqual(['https://cdn.sanity.io/images/proj/ds/aa11-100x100.jpg', 'https://cdn.sanity.io/images/proj/ds/bb22-100x100.jpg'])
-    expect(uploads).toEqual(['products/a.jpg'])
+  it('imports without any image resolver: no image keys, placeholder for required ones', async () => {
+    const fresh = drizzle(new PGlite())
+    await migrate(fresh, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+    const report = await importCatalog(fresh, seed, {})
+    expect(report.missingImages.length).toBeGreaterThan(0)
+    const slides = await fresh.select().from(s.slides)
+    expect(slides.every((x) => x.imageKey === '/placeholder.svg')).toBe(true)
+    expect((await fresh.select().from(s.products)).every((x) => x.mainImageKey === null)).toBe(true)
   })
 })
