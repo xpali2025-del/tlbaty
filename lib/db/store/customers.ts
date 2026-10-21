@@ -8,7 +8,7 @@ const at = (name: string) => timestamp(name, { withTimezone: true })
 export const customers = store.table('customers', {
   id: pk(),
   sanityId: sanityId(),
-  /** Legacy public customer identifier (Sanity `customerId`). */
+  /** Legacy public customer identifier ( `customerId`). */
   publicId: text('public_id').notNull().unique(),
   /** International digits without + (e.g. 967781234567); phone + OTP is the login identity. */
   phone: text('phone').notNull().unique(),

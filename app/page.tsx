@@ -102,7 +102,7 @@ export default async function HomePage() {
         {/* إعلان بعد العروض */}
         {renderAd()}
 
-        {/* 7. قسم لكل تصنيف — 6 منتجات من كل قسم (بدون استعلام إضافي من Sanity) */}
+        {/* 7. قسم لكل تصنيف — 6 منتجات من كل قسم (بدون استعلام إضافي من قاعدة البيانات) */}
         {/* نقتطع لأول 6 منتجات فقط قبل التمرير لتقليل حجم بيانات الصفحة */}
         {categories.map((category, index) => {
           const categoryProducts = allProducts

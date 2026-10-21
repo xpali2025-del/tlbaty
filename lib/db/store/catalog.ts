@@ -48,7 +48,7 @@ export const brands = store.table('brands', {
 export const products = store.table('products', {
   id: pk(),
   sanityId: sanityId(),
-  /** Human-facing product number (Sanity `productId`). */
+  /** Human-facing product number ( `productId`). */
   productNumber: text('product_number').notNull().unique(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),

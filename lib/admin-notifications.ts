@@ -1,72 +1,46 @@
 import "server-only"
 
-import { notificationsAdminReadClient } from "@/sanity/notifications/client"
-import { getNotificationsConfigReport, type NotificationsConfigReport } from "@/sanity/notifications/env"
-import { notificationImageUrl } from "@/sanity/notifications/image"
-import { sanitizeInternalLink } from "@/sanity/notifications/internal-link"
-import { ADMIN_NOTIFICATIONS } from "@/sanity/notifications/queries"
-import {
-  NOTIFICATION_STATUSES,
-  type AdminNotification,
-  type NotificationPriority,
-  type NotificationStats,
-  type NotificationStatus,
-} from "@/sanity/notifications/types"
+import { desc } from "drizzle-orm"
+import { db } from "@/lib/db/client"
+import { notifications } from "@/lib/db/store"
+import { resolveOptionalImageUrl } from "@/lib/images"
+import { sanitizeInternalLink } from "@/lib/notification-link"
+import type {
+  AdminNotification,
+  NotificationStats,
+} from "@/lib/notification-types"
 
-// ============================================
-// طبقة قراءة الإشعارات للوحة /manage
-//
-// - تقرأ من مشروع الإشعارات المستقل بعميل بلا CDN (no-store)
-//   حتى تعرض اللوحة آخر حالة فوراً بعد كل حفظ أو نشر.
-// - تشمل المسودات والمؤرشف (بخلاف استعلام العملاء).
-// - لا تلمس مشروع المحتوى ولا مشروع الطلبات إطلاقاً.
-// ============================================
+// طبقة قراءة الإشعارات للوحة /manage: تشمل المسودات والمؤرشف وبلا كاش.
 
-type RawAdminNotification = {
-  _id?: string
-  title?: string
-  body?: string
-  imageUrl?: string | null
-  imageRef?: string | null
-  link?: string | null
-  status?: string
-  priority?: string
-  publishedAt?: string | null
-  expiresAt?: string | null
-  createdBy?: string | null
-  createdAt?: string | null
-  updatedAt?: string | null
+export type NotificationsConfigReport = {
+  ready: boolean
+  readReady: boolean
+  missing: string[]
 }
 
-function normalizeStatus(value: string | undefined): NotificationStatus {
-  return NOTIFICATION_STATUSES.includes(value as NotificationStatus)
-    ? (value as NotificationStatus)
-    : "draft"
+export function getNotificationsConfigReport(): NotificationsConfigReport {
+  const ready = Boolean(process.env.DATABASE_URL)
+  return { ready, readReady: ready, missing: ready ? [] : ["DATABASE_URL"] }
 }
 
-function normalizePriority(value: string | undefined): NotificationPriority {
-  return value === "important" ? "important" : "normal"
-}
+type Row = typeof notifications.$inferSelect
 
-function toAdminNotification(raw: RawAdminNotification): AdminNotification | null {
-  const id = typeof raw._id === "string" ? raw._id : ""
-  if (!id) return null
-
+function toAdminNotification(row: Row): AdminNotification {
   return {
-    _id: id,
-    title: typeof raw.title === "string" ? raw.title : "",
-    body: typeof raw.body === "string" ? raw.body : "",
-    imageUrl: notificationImageUrl(raw.imageUrl, 320),
-    imageRef: typeof raw.imageRef === "string" ? raw.imageRef : null,
-    // نعرض الرابط في اللوحة فقط إن كان صالحاً، وإلا نعرض «رابط غير صالح».
-    link: sanitizeInternalLink(raw.link),
-    status: normalizeStatus(raw.status),
-    priority: normalizePriority(raw.priority),
-    publishedAt: raw.publishedAt ?? null,
-    expiresAt: raw.expiresAt ?? null,
-    createdBy: raw.createdBy ?? null,
-    createdAt: raw.createdAt ?? null,
-    updatedAt: raw.updatedAt ?? null,
+    _id: row.id,
+    title: row.title,
+    body: row.body ?? "",
+    imageUrl: resolveOptionalImageUrl(row.imageKey) ?? null,
+    imageRef: row.imageKey,
+    // نعرض الرابط في اللوحة فقط إن كان صالحاً.
+    link: sanitizeInternalLink(row.link),
+    status: row.status,
+    priority: row.priority,
+    publishedAt: row.publishedAt?.toISOString() ?? null,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   }
 }
 
@@ -74,7 +48,7 @@ export type AdminNotificationsResult = {
   notifications: AdminNotification[]
   stats: NotificationStats
   config: NotificationsConfigReport
-  /** خطأ قراءة (شبكة/صلاحيات) — تعرضه اللوحة مع زر إعادة المحاولة. */
+  /** خطأ قراءة — تعرضه اللوحة مع زر إعادة المحاولة. */
   loadError: string | null
 }
 
@@ -98,30 +72,24 @@ function buildStats(items: AdminNotification[]): NotificationStats {
  */
 export async function getAdminNotifications(): Promise<AdminNotificationsResult> {
   const config = getNotificationsConfigReport()
-
-  if (!notificationsAdminReadClient) {
+  if (!config.ready) {
     return { notifications: [], stats: emptyStats(), config, loadError: null }
   }
 
   try {
-    const raw = await notificationsAdminReadClient.fetch<RawAdminNotification[]>(
-      ADMIN_NOTIFICATIONS,
-      {},
-      { cache: "no-store" },
-    )
-    const notifications = raw
-      .map(toAdminNotification)
-      .filter((n): n is AdminNotification => n !== null)
-
-    return { notifications, stats: buildStats(notifications), config, loadError: null }
+    const rows = await db
+      .select()
+      .from(notifications)
+      .orderBy(desc(notifications.publishedAt), desc(notifications.createdAt))
+    const items = rows.map(toAdminNotification)
+    return { notifications: items, stats: buildStats(items), config, loadError: null }
   } catch (error) {
-    // لا نطبع التوكن ولا أي إعداد حسّاس — رسالة الخطأ فقط.
-    console.error("[v0] getAdminNotifications failed:", error instanceof Error ? error.message : error)
+    console.error("getAdminNotifications failed:", error instanceof Error ? error.message : error)
     return {
       notifications: [],
       stats: emptyStats(),
       config,
-      loadError: "تعذّر جلب الإشعارات من مشروع الإشعارات. تحقّق من الاتصال وصلاحيات التوكن ثم أعد المحاولة.",
+      loadError: "تعذّر جلب الإشعارات من قاعدة البيانات. تحقّق من الاتصال ثم أعد المحاولة.",
     }
   }
 }

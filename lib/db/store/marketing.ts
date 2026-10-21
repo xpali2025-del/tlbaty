@@ -56,7 +56,7 @@ export const slides = store.table('slides', {
   ...timestamps(),
 }, (t) => [index('slides_sort_idx').on(t.sortOrder)])
 
-/** Site-level testimonials (the Sanity `review` type is not tied to a product). */
+/** Site-level testimonials (the `review` type is not tied to a product). */
 export const reviews = store.table('reviews', {
   id: pk(),
   sanityId: sanityId(),
@@ -99,7 +99,7 @@ export const manageUsers = store.table('manage_users', {
   ...timestamps(),
 }, (t) => [uniqueIndex('manage_users_username_lower_idx').on(sql`lower(${t.username})`)])
 
-/** Singleton row (id = 1) for the Sanity `siteSettings` document. */
+/** Singleton row (id = 1) for the `siteSettings` document. */
 export const siteSettings = store.table('site_settings', {
   id: smallint('id').primaryKey().default(1),
   name: text('name'),

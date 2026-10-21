@@ -29,7 +29,7 @@ const MAX_PROOF_DIMENSION = 2200
 const PROOF_WEBP_QUALITY = 82
 
 export type PaymentProofPayload = {
-  /** البيانات المشفّرة الجاهزة للرفع إلى Sanity. */
+  /** البيانات المشفّرة الجاهزة للرفع إلى قاعدة البيانات. */
   ciphertext: Buffer
   /** IV بصيغة Base64 — يُحفظ داخل الطلب. */
   iv: string

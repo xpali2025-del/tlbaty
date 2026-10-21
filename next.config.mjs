@@ -5,8 +5,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
     remotePatterns: [
-      // Legacy Sanity CDN images; removed once the data and images are migrated to R2.
-      { protocol: 'https', hostname: 'cdn.sanity.io' },
       ...(r2Url ? [{ protocol: r2Url.protocol.replace(':', ''), hostname: r2Url.hostname }] : []),
     ],
   },

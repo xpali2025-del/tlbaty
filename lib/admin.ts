@@ -8,11 +8,14 @@ import {
   brands,
   categories,
   coupons,
+  currencies,
   paymentAccounts,
   productColors,
   productImages,
   products,
   reviews,
+  shippingMethods,
+  shippingZones,
   siteSettings,
   slides,
   subcategories,
@@ -164,7 +167,7 @@ export type AdminPaymentAccount = {
   sortOrder: number
   createdAt?: string
   updatedAt?: string
-  /** عدد الطلبات لا يُحسب هنا لأن الطلبات في مشروع Sanity مستقل. */
+  /** عدد الطلبات لا يُحسب هنا لأن الطلبات في قاعدة البيانات. */
 }
 
 // ---------- الاستعلامات ----------
@@ -370,3 +373,32 @@ export const getAdminPaymentAccounts = () =>
       updatedAt: iso(a.updatedAt),
     })),
   )
+
+// ---------- الشحن والعملات ----------
+
+export type AdminShippingMethod = { name: string; description: string; price: number; icon: "express" | "standard" | "pickup" }
+export type AdminShippingZone = { _id: string; governorate: string; isDefault: boolean; methods: AdminShippingMethod[] }
+export type AdminCurrency = { code: string; name: string; symbol: string; rate: number }
+export type AdminShipping = { zones: AdminShippingZone[]; currencies: AdminCurrency[]; defaultCurrency: string }
+
+export const getAdminShipping = () =>
+  adminFetch<AdminShipping>({ zones: [], currencies: [], defaultCurrency: "YER" }, async () => {
+    const [zones, methods, rates, [settings]] = await Promise.all([
+      db.select().from(shippingZones).orderBy(desc(shippingZones.isDefault), asc(shippingZones.governorate)),
+      db.select().from(shippingMethods).orderBy(asc(shippingMethods.sortOrder), asc(shippingMethods.name)),
+      db.select().from(currencies).orderBy(asc(currencies.sortOrder), asc(currencies.code)),
+      db.select({ defaultCurrency: siteSettings.defaultCurrency }).from(siteSettings).limit(1),
+    ])
+    return {
+      zones: zones.map((z) => ({
+        _id: z.id,
+        governorate: z.governorate ?? "",
+        isDefault: z.isDefault,
+        methods: methods
+          .filter((m) => m.zoneId === z.id)
+          .map((m) => ({ name: m.name, description: m.description ?? "", price: m.price, icon: m.icon })),
+      })),
+      currencies: rates.map((c) => ({ code: c.code, name: c.name, symbol: c.symbol, rate: c.rate })),
+      defaultCurrency: settings?.defaultCurrency ?? "YER",
+    }
+  })

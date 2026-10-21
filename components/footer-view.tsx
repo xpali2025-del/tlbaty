@@ -45,7 +45,7 @@ export function FooterView({ categories }: { categories: FooterLink[] }) {
             </ul>
           </div>
 
-          {/* الأقسام - ديناميكية من Sanity */}
+          {/* الأقسام - ديناميكية من قاعدة البيانات */}
           <div>
             <h3 className="font-bold text-lg mb-4 text-footer-foreground">الأقسام</h3>
             <ul className="space-y-2 text-sm">

@@ -6,7 +6,7 @@ import { Bell, BellOff, CheckCheck, ChevronLeft, Loader2, RefreshCw, Star } from
 
 import { SafeImage } from "@/components/safe-image"
 import { useNotifications } from "@/components/notifications-provider"
-import type { PublicNotification } from "@/sanity/notifications/types"
+import type { PublicNotification } from "@/lib/notification-types"
 
 // ============================================
 // شاشة الإشعارات للعملاء

@@ -19,7 +19,4 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      # TEMPORARY: all current findings come from the sanity packages (see `pnpm audit --prod`).
-      # Remove continue-on-error when Sanity is deleted so this gate blocks again.
       - run: pnpm audit --prod
-        continue-on-error: true

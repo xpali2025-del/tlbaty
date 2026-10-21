@@ -17,7 +17,7 @@ const PREFIX = "TJ"
  */
 export function buildProductNumber(productId: unknown): string {
   if (typeof productId !== "string") return ""
-  // معرّفات Sanity قد تحتوي شرطات أو بادئة drafts. نأخذ الحروف والأرقام فقط.
+  // معرّفات قديمة قد تحتوي شرطات أو بادئة drafts. نأخذ الحروف والأرقام فقط.
   const clean = productId.replace(/^drafts\./, "").replace(/[^a-zA-Z0-9]/g, "")
   if (!clean) return ""
   return `${PREFIX}-${clean.slice(-8).toUpperCase()}`

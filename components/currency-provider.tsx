@@ -9,7 +9,7 @@ import {
 } from "@/lib/currency"
 
 interface CurrencyContextType {
-  /** كل العملات المتاحة (من إعدادات Sanity) */
+  /** كل العملات المتاحة (من إعدادات المتجر) */
   currencies: Currency[]
   /** العملة المختارة حالياً */
   currency: Currency

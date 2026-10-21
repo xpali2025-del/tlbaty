@@ -15,7 +15,7 @@ const config = [
       '@next/next/no-html-link-for-pages': 'warn',
     },
   },
-  { ignores: ['.next/**', 'drizzle/**', 'node_modules/**', 'worker/**/node_modules/**', 'sanity/**'] },
+  { ignores: ['.next/**', 'drizzle/**', 'node_modules/**', 'worker/**/node_modules/**'] },
 ]
 
 export default config

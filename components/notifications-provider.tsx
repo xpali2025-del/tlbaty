@@ -16,7 +16,7 @@ import {
   pruneReadIds,
   saveReadIds,
 } from "@/lib/notifications-read-state"
-import type { NotificationSummaryItem } from "@/sanity/notifications/types"
+import type { NotificationSummaryItem } from "@/lib/notification-types"
 
 // ============================================
 // مزوّد حالة الإشعارات

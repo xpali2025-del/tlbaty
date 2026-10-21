@@ -57,7 +57,7 @@ export type AdminNotification = {
   title: string
   body: string
   imageUrl: string | null
-  /** مرجع أصل الصورة — لازم للإبقاء على الصورة عند التعديل بدون رفع جديد. */
+  /** مفتاح الصورة في R2 — يبقى كما هو عند التعديل بدون رفع جديد. */
   imageRef: string | null
   link: string | null
   status: NotificationStatus

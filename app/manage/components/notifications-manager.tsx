@@ -34,7 +34,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import type { AdminNotificationsResult } from "@/lib/admin-notifications"
-import { sanitizeInternalLink } from "@/sanity/notifications/internal-link"
+import { uploadFormImages } from "@/lib/storage/upload-client"
+import { sanitizeInternalLink } from "@/lib/notification-link"
 import {
   NOTIFICATION_LIMITS,
   NOTIFICATION_PRIORITY_LABELS,
@@ -43,7 +44,7 @@ import {
   type NotificationActionResult,
   type NotificationPriority,
   type NotificationStatus,
-} from "@/sanity/notifications/types"
+} from "@/lib/notification-types"
 import {
   archiveNotification,
   deleteNotification,
@@ -137,14 +138,12 @@ export function NotificationsManager({ data }: { data: AdminNotificationsResult 
             <h2 className="font-bold">مشروع الإشعارات غير مهيأ بعد</h2>
           </div>
           <p className="text-sm text-muted-foreground">
-            الإشعارات تُحفظ في مشروع Sanity ثالث مستقل تماماً عن مشروع المنتجات ومشروع الطلبات. أضف
-            المتغيرات التالية في إعدادات المشروع ثم أعد تحميل الصفحة:
+            الإشعارات تُحفظ في قاعدة بيانات PostgreSQL. أضف المتغير التالي في إعدادات المشروع ثم أعد تحميل الصفحة:
           </p>
           <ul className="flex flex-col gap-1.5">
             {config.missing.map((name) => (
               <li
                 key={name}
-                // break-all يمنع خروج أسماء المتغيرات الطويلة عن حدود الشاشة الصغيرة
                 className="rounded-md border bg-background px-3 py-2 font-mono text-[11px] break-all"
                 dir="ltr"
               >
@@ -152,18 +151,6 @@ export function NotificationsManager({ data }: { data: AdminNotificationsResult 
               </li>
             ))}
           </ul>
-          <div className="rounded-md border bg-background p-3 text-xs text-muted-foreground">
-            <p className="mb-1 font-bold text-foreground">خطوات سريعة</p>
-            <ol className="flex list-decimal flex-col gap-1 ps-4">
-              <li>أنشئ مشروعاً جديداً في sanity.io/manage مخصصاً للإشعارات فقط.</li>
-              <li>انسخ Project ID الخاص به إلى المتغير العام للإشعارات.</li>
-              <li>
-                أنشئ API Token بصلاحية Editor <span dir="ltr">(Read + Write)</span> من هذا المشروع
-                وحده، وضعه في متغير التوكن الخادمي.
-              </li>
-              <li>لا تستخدم توكن المنتجات ولا توكن الطلبات هنا إطلاقاً.</li>
-            </ol>
-          </div>
         </Card>
       </div>
     )
@@ -467,7 +454,13 @@ function NotificationFormDialog({
     else form.delete("expiresAt")
 
     startTransition(async () => {
-      const result = await saveNotification(notification?._id ?? null, form)
+      let result: NotificationActionResult
+      try {
+        await uploadFormImages(form, [{ name: "image", folder: "notifications", keyName: "imageKey" }])
+        result = await saveNotification(notification?._id ?? null, form)
+      } catch (err) {
+        result = { ok: false, error: err instanceof Error ? err.message : "تعذّر رفع الصورة" }
+      }
       if (result.ok) {
         toast.success(result.message)
         onOpenChange(false)

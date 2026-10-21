@@ -9,6 +9,7 @@ import {
   getAdminReviews,
   getAdminAds,
   getAdminSettings,
+  getAdminShipping,
   getAdminPaymentAccounts,
 } from "@/lib/admin"
 import { getAdminOrdersPage, getAdminOrderStats } from "@/lib/admin-orders"
@@ -34,6 +35,7 @@ export default async function ManagePage() {
     reviews,
     ads,
     settings,
+    shipping,
     ordersPage,
     orderStats,
     couriers,
@@ -50,6 +52,7 @@ export default async function ManagePage() {
       getAdminReviews(),
       getAdminAds(),
       getAdminSettings(),
+      getAdminShipping(),
       // الدفعة الأولى فقط من الطلبات — الباقي يُحمَّل عند الطلب.
       getAdminOrdersPage({ status: "all", sort: "newest" }, 0),
       getAdminOrderStats(),
@@ -70,6 +73,7 @@ export default async function ManagePage() {
       reviews={reviews}
       ads={ads}
       settings={settings}
+      shipping={shipping}
       ordersPage={ordersPage}
       orderStats={orderStats}
       couriers={couriers}

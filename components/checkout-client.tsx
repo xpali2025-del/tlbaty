@@ -594,7 +594,7 @@ export function CheckoutClient({
       .join("\n")
 
     // نفتح تبويباً فارغاً الآن (ضمن نقرة المستخدم) لتفادي حظر النوافذ المنبثقة،
-    // ثم نوجّهه إلى واتساب فقط بعد نجاح حفظ الطلب في Sanity.
+    // ثم نوجّهه إلى واتساب فقط بعد نجاح حفظ الطلب في قاعدة البيانات.
     const waWindow = typeof window !== "undefined" ? window.open("", "_blank") : null
 
     const openWhatsApp = (orderNumber: string) => {

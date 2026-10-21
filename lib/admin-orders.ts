@@ -54,7 +54,7 @@ export type AdminOrder = {
   orderNumber?: string
   /** حالة موحّدة دائماً — الحالات القديمة مترجمة، والمفقودة تصبح "new". */
   status: OrderStatus
-  /** القيمة الأصلية المحفوظة في Sanity، للتشخيص وسجل الحالات. */
+  /** القيمة الأصلية المحفوظة في قاعدة البيانات، للتشخيص وسجل الحالات. */
   rawStatus?: string
   customerId?: string
   customerName?: string

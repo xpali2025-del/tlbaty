@@ -81,7 +81,7 @@ export default async function ProductPage({
     : undefined
   const brandSlug = brandMatch?.slug
 
-  // روابط صور Sanity مطلقة أصلاً — لا نضيف الدومين إلا للمسارات المحلية
+  // روابط صور مطلقة أصلاً — لا نضيف الدومين إلا للمسارات المحلية
   const toAbsoluteUrl = (src: string) => (src.startsWith("http") ? src : `${SITE_CONFIG.url}${src}`)
 
   // JSON-LD للمنتج (مهم جداً للـ SEO)

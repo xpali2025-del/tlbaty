@@ -11,6 +11,7 @@ import {
   Star,
   Megaphone,
   Settings,
+  Truck,
   LogOut,
   ExternalLink,
   Boxes,
@@ -31,6 +32,7 @@ import type {
   AdminReview,
   AdminAd,
   AdminSettings,
+  AdminShipping,
   AdminPaymentAccount,
 } from "@/lib/admin"
 import type { OrderStats, OrdersPage } from "@/lib/admin-orders"
@@ -45,6 +47,7 @@ import { SlidesManager } from "./components/slides-manager"
 import { CouponsManager } from "./components/coupons-manager"
 import { ReviewsManager } from "./components/reviews-manager"
 import { AdsManager } from "./components/ads-manager"
+import { ShippingManager } from "./components/shipping-manager"
 import { SettingsManager } from "./components/settings-manager"
 import { OrdersManager } from "./components/orders-manager"
 import { CouriersManager } from "./components/couriers-manager"
@@ -65,6 +68,7 @@ type TabId =
   | "reviews"
   | "ads"
   | "users"
+  | "shipping"
   | "settings"
 
 type DashboardProps = {
@@ -76,6 +80,7 @@ type DashboardProps = {
   reviews: AdminReview[]
   ads: AdminAd[]
   settings: AdminSettings
+  shipping: AdminShipping
   /** الدفعة الأولى من الطلبات فقط — الباقي يُحمَّل من الخادم عند الحاجة. */
   ordersPage: OrdersPage
   orderStats: OrderStats
@@ -113,6 +118,7 @@ export function Dashboard(props: DashboardProps) {
     { id: "reviews", label: "آراء العملاء", icon: Star, count: props.reviews.length },
     { id: "ads", label: "الإعلانات", icon: Megaphone, count: props.ads.length },
     { id: "users", label: "المستخدمون", icon: Users, count: props.users.length },
+    { id: "shipping", label: "الشحن والعملات", icon: Truck },
     { id: "settings", label: "إعدادات الموقع", icon: Settings },
   ]
 
@@ -215,6 +221,7 @@ export function Dashboard(props: DashboardProps) {
         {tab === "reviews" && <ReviewsManager reviews={props.reviews} />}
         {tab === "ads" && <AdsManager ads={props.ads} categories={props.categories} />}
         {tab === "users" && <UsersManager users={props.users} currentUser={props.currentUser} />}
+        {tab === "shipping" && <ShippingManager data={props.shipping} />}
         {tab === "settings" && <SettingsManager settings={props.settings} />}
       </main>
     </div>

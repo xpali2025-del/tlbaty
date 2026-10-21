@@ -144,7 +144,7 @@ export const STORE_FEATURES = [
 
 // روابط التنقل في الفوتر
 // ملاحظة: أقسام الفوتر (categories) لم تعد ثابتة هنا، بل تُجلب
-// ديناميكياً من Sanity عبر getFooterCategories() لتفادي روابط 404
+// ديناميكياً من قاعدة البيانات عبر getFooterCategories() لتفادي روابط 404
 // عند حذف قسم أو تغيير سلاجه.
 export const FOOTER_LINKS = {
   important: [
