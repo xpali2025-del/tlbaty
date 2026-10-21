@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getChallengeForBrowser } from "@/lib/otp/chat-login"
-import { maskLocalPhone } from "@/lib/phone"
+import { maskPhone } from "@/lib/phone"
 
 export const runtime = "nodejs"
 
@@ -9,5 +9,5 @@ export async function GET() {
   const challenge = await getChallengeForBrowser()
   if (!challenge) return NextResponse.json({ state: "expired" })
   if (!challenge.claimedAt || !challenge.phone) return NextResponse.json({ state: "waiting" })
-  return NextResponse.json({ state: "claimed", phoneMasked: maskLocalPhone(challenge.phone) })
+  return NextResponse.json({ state: "claimed", phoneMasked: maskPhone(challenge.phone) })
 }

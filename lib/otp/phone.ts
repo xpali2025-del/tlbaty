@@ -9,6 +9,9 @@ export {
   normalizeAndValidateLocalPhone,
   isValidLocalPhone,
   maskLocalPhone,
+  normalizeInternationalPhone,
+  maskPhone,
+  SUPPORTED_COUNTRIES,
   toEnglishDigits,
   LOCAL_PHONE_LENGTH,
 } from "@/lib/phone"

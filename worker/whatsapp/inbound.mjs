@@ -3,16 +3,28 @@
 // Replying to a message the customer started is far less ban-prone than messaging cold.
 
 const TOKEN_PATTERN = /\b[ABCDEFGHJKMNPQRSTVWXYZ23456789]{6}\b/
-const YEMEN_NUMBER = /^967(\d{9})$/
 
-/** Local 9-digit Yemeni number from a WhatsApp contact number, or null (other countries unsupported). */
-export function toLocalPhone(contactNumber) {
-  const m = YEMEN_NUMBER.exec(String(contactNumber ?? '').replace(/\D/g, ''))
-  return m ? m[1] : null
+// Must match SUPPORTED_COUNTRIES in the app's lib/phone.ts (tests/phone-agreement.test.ts checks it).
+const MOBILE_RULES = {
+  967: /^7\d{8}$/, // Yemen
+  966: /^5\d{8}$/, // Saudi Arabia
 }
 
 /**
- * `claim({ phone, token })` calls the app and resolves to `{ ok, text?, error?, retryAfter? }`.
+ * International digits (no '+') from a WhatsApp contact number, or null when the country is
+ * not allowed or the number is not a valid mobile there.
+ */
+export function toInternationalPhone(contactNumber, allowedCountryCodes = Object.keys(MOBILE_RULES)) {
+  const digits = String(contactNumber ?? '').replace(/\D/g, '')
+  for (const code of allowedCountryCodes) {
+    const rule = MOBILE_RULES[code]
+    if (rule && digits.startsWith(code) && rule.test(digits.slice(code.length))) return digits
+  }
+  return null
+}
+
+/**
+ * `claim({ phone, token })` (phone in international digits) calls the app and resolves to `{ ok, text?, error?, retryAfter? }`.
  * `reply(message, text)` answers inside the customer's chat. Both are injected for testing.
  * Anything that is not a plain 1:1 message with a token is ignored silently (no auto-replies to
  * strangers, groups or status updates), and each sender is throttled.
@@ -23,6 +35,7 @@ export function createInboundHandler({
   getContactNumber,
   senderCooldownMs = 30_000,
   now = Date.now,
+  allowedCountryCodes = Object.keys(MOBILE_RULES),
 }) {
   const lastSeen = new Map()
 
@@ -33,7 +46,7 @@ export function createInboundHandler({
     const token = TOKEN_PATTERN.exec(message.body.toUpperCase())?.[0]
     if (!token) return
 
-    const phone = toLocalPhone(await getContactNumber(message))
+    const phone = toInternationalPhone(await getContactNumber(message), allowedCountryCodes)
     if (!phone) return
 
     const t = now()

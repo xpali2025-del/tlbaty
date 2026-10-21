@@ -8,7 +8,7 @@ import { whatsappProvider } from "./providers/whatsapp"
 export type OtpPurpose = "login" | "change_phone"
 
 export type SendOtpInput = {
-  /** الرقم المحلي الموحّد (9 أرقام). المزوّد يضيف كود الدولة إن لزم. */
+  /** الرقم بالصيغة الدولية بلا + (مثل 967781234567 أو 966512345678). */
   phone: string
   /** الرمز الصريح — يُمرَّر للإرسال فقط ولا يُحفظ في أي مكان. */
   code: string

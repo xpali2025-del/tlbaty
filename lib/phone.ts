@@ -115,3 +115,45 @@ export function customerKey(input: { customerId?: string; phone?: string }): str
   const phone = normalizeStoredPhone(input.phone)
   return phone ? `tel:${phone}` : null
 }
+
+// ============================================
+// الصيغة الدولية (E.164 بلا +) — المعتمدة لتسجيل الدخول وللبيانات الجديدة.
+//
+// تدعم اليمن (967) والسعودية (966). الأرقام الدولية لا تلتبس بين الدول، وتسمح بإضافة
+// دول لاحقاً بسطر واحد في SUPPORTED_COUNTRIES. الدوال المحلية أعلاه (9 أرقام يمنية)
+// تبقى لقراءة البيانات القديمة وتحويلها عند الترحيل فقط.
+//
+// ملاحظة: يجب أن تطابق قواعد worker/whatsapp/inbound.mjs (يتحقق منه tests/phone-agreement.test.ts).
+// ============================================
+
+export const SUPPORTED_COUNTRIES = [
+  { code: "967", name: "اليمن", mobile: /^7\d{8}$/ },
+  { code: "966", name: "السعودية", mobile: /^5\d{8}$/ },
+] as const
+
+/**
+ * يوحّد أي إدخال إلى الصيغة الدولية بلا + (967781234567 / 966512345678) أو يعيد null.
+ * يقبل: +967 78 123 4567، 00967…، 0781234567، 781234567، 05xxxxxxxx، أرقاماً عربية.
+ * الرقم المحلي بلا كود دولة يُنسب بحسب بادئته: 7 يمني، 5 سعودي. غير ذلك يُرفض.
+ */
+export function normalizeInternationalPhone(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null
+  let digits = toEnglishDigits(String(value)).replace(/\D/g, "")
+  if (digits.startsWith("00")) digits = digits.slice(2)
+
+  for (const c of SUPPORTED_COUNTRIES) {
+    if (digits.startsWith(c.code) && c.mobile.test(digits.slice(c.code.length))) return digits
+  }
+  const local = digits.replace(/^0+/, "")
+  for (const c of SUPPORTED_COUNTRIES) {
+    if (c.mobile.test(local)) return `${c.code}${local}`
+  }
+  return null
+}
+
+/** إخفاء جزئي للصيغة الدولية: 967781234567 ← +967 78•••••67 */
+export function maskPhone(international: string): string {
+  const country = SUPPORTED_COUNTRIES.find((c) => international.startsWith(c.code))
+  const national = country ? international.slice(country.code.length) : international
+  return `${country ? `+${country.code} ` : ""}${maskLocalPhone(national)}`
+}

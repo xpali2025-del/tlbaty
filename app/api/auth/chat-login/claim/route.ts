@@ -4,7 +4,7 @@ import { isAuthConfigured } from "@/lib/otp/config"
 import { logAuthEvent } from "@/lib/otp/audit"
 import { issueOtpForReply } from "@/lib/otp/generate"
 import { consumeSendAttempt } from "@/lib/otp/rate-limit"
-import { isValidLocalPhone } from "@/lib/phone"
+import { normalizeInternationalPhone } from "@/lib/phone"
 
 export const runtime = "nodejs"
 
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   }
   const phone = typeof body.phone === "string" ? body.phone : ""
   const token = typeof body.token === "string" ? body.token.toUpperCase() : ""
-  if (!isValidLocalPhone(phone)) return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 })
+  if (!phone || normalizeInternationalPhone(phone) !== phone) return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 })
   if (!TOKEN_PATTERN.test(token)) return NextResponse.json({ ok: false, error: "INVALID_TOKEN" }, { status: 400 })
 
   // رمز غير معروف أو مستخدم أو منتهٍ: نرفض قبل أن نستهلك حصة الإرسال لهذا الرقم.

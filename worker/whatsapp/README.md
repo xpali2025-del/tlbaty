@@ -11,7 +11,7 @@ process because it needs a persistent browser session; it cannot run on Vercel/s
 
 ## Setup
 1. On a small always-on host (VPS/Docker) with Node 20+: `cd worker/whatsapp && npm install`.
-2. Set `WHATSAPP_WORKER_TOKEN` (random, 32+ chars; must equal the app's value), optionally `HOST`, `PORT` (default `127.0.0.1:3100`), `WWEBJS_DATA_PATH`.
+2. Set `WHATSAPP_WORKER_TOKEN` (random, 32+ chars; must equal the app's value), optionally `ALLOWED_COUNTRY_CODES`, `HOST`, `PORT` (default `127.0.0.1:3100`), `WWEBJS_DATA_PATH`.
 3. `npm start`, scan the QR printed in the terminal (WhatsApp > Linked devices). The session persists in `WWEBJS_DATA_PATH` (keep it private and backed up).
 4. Run it under a supervisor (pm2/systemd/Docker `restart: always`); the process exits on disconnect so it restarts.
 5. Expose it to the app over HTTPS only (reverse proxy or a Cloudflare Tunnel), then set in the app: `WHATSAPP_WORKER_URL`, `WHATSAPP_WORKER_TOKEN`, `OTP_PROVIDER=whatsapp`, `SESSION_SECRET`.
@@ -22,10 +22,10 @@ message (`رمز الدخول: K7M2QX`), and the bot replies with the login code
 read from WhatsApp itself, so it cannot be spoofed, and the bot only answers people who wrote first.
 - App: set `WHATSAPP_BOT_NUMBER` (international digits, e.g. `967777000000`) and `WHATSAPP_WORKER_TOKEN`.
 - Worker: set `APP_CLAIM_URL=https://<app>/api/auth/chat-login/claim` (uses the same `WHATSAPP_WORKER_TOKEN` as a Bearer token).
-- Only Yemeni (`967`) senders are accepted; groups, status updates, messages without a token and repeat senders inside 30s are ignored silently.
+- Only senders from allowed countries are accepted (`ALLOWED_COUNTRY_CODES`, default `967,966`: Yemen and Saudi Arabia mobiles); groups, status updates, messages without a token and repeat senders inside 30s are ignored silently.
 
 ## API
-- `POST /send` with `Authorization: Bearer <token>` and JSON `{ "phone": "781234567", "text": "..." }` (9-digit Yemeni local number; `967` is added).
+- `POST /send` with `Authorization: Bearer <token>` and JSON `{ "phone": "967781234567", "text": "..." }` (international digits without `+`; Yemen `967` + `7xxxxxxxx`, Saudi Arabia `966` + `5xxxxxxxx`).
   Responses: `200 ok`, `400` invalid input, `401` bad token, `422 NOT_ON_WHATSAPP`, `502 SEND_FAILED`, `503 NOT_READY`.
 - `GET /health` -> `{ ok, ready }`.
 

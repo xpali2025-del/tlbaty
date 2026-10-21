@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { resolveSession, touchSession } from "@/lib/otp/session"
 import { countOrdersByCustomerId } from "@/lib/otp/store"
-import { maskLocalPhone } from "@/lib/phone"
+import { maskPhone } from "@/lib/phone"
 
 export const runtime = "nodejs"
 
@@ -19,7 +19,7 @@ export async function GET() {
     customer: {
       customerId: customer.publicId,
       phone: customer.phone,
-      phoneMasked: maskLocalPhone(customer.phone),
+      phoneMasked: maskPhone(customer.phone),
       createdAt: customer.createdAt,
       lastLogin: customer.lastLoginAt,
       ordersCount,

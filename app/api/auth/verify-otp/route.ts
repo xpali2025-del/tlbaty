@@ -5,7 +5,7 @@ import { consumeVerifyAttempt } from "@/lib/otp/rate-limit"
 import { getClientContext } from "@/lib/otp/request-context"
 import { completeLogin } from "@/lib/otp/login"
 import { verifyOtp } from "@/lib/otp/verify"
-import { normalizeAndValidateLocalPhone } from "@/lib/phone"
+import { normalizeInternationalPhone } from "@/lib/phone"
 
 export const runtime = "nodejs"
 
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "INVALID_JSON" }, { status: 400 })
   }
 
-  const phone = normalizeAndValidateLocalPhone(body.phone)
+  const phone = normalizeInternationalPhone(body.phone)
   if (!phone) return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 })
   const code = cleanCode(body.code)
   if (!code) return NextResponse.json({ ok: false, error: "INVALID_CODE" }, { status: 400 })

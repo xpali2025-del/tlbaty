@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
+import { maskPhone } from '@/lib/phone'
 
 process.env.SESSION_SECRET = 'test-secret-with-more-than-16-chars'
 process.env.WHATSAPP_WORKER_TOKEN = 'w'.repeat(32)
@@ -32,7 +33,7 @@ const post = (body: unknown, headers: Record<string, string> = {}) =>
 const asWorker = { authorization: `Bearer ${'w'.repeat(32)}` }
 
 let seq = 0
-const phone = () => `71${String(2000000 + ++seq)}`
+const phone = () => `9677${String(20000000 + ++seq)}`
 
 async function startFlow() {
   const res = await start.POST(post({}))
@@ -104,6 +105,8 @@ describe('claim (called by the WhatsApp worker)', () => {
   it('rejects bad input, unknown tokens and expired challenges without issuing codes', async () => {
     const p = phone()
     expect((await claim.POST(post({ phone: '123', token: 'ABCDEF' }, asWorker))).status).toBe(400)
+    expect((await claim.POST(post({ phone: '781234567', token: 'ABCDEF' }, asWorker))).status).toBe(400) // not international
+    expect((await claim.POST(post({ phone: '971501234567', token: 'ABCDEF' }, asWorker))).status).toBe(400) // unsupported country
     expect((await claim.POST(post({ phone: p, token: 'bad' }, asWorker))).status).toBe(400)
     expect((await claim.POST(post({ phone: p, token: 'ABCDEF' }, asWorker))).status).toBe(404)
 
@@ -126,6 +129,18 @@ describe('claim (called by the WhatsApp worker)', () => {
   })
 })
 
+describe('Saudi customers', () => {
+  it('log in through the same flow with a +966 number', async () => {
+    const { data } = await startFlow()
+    const saudi = '966512345678'
+    const { text } = await (await claim.POST(post({ phone: saudi, token: data.token }, asWorker))).json()
+    expect(await (await status.GET()).json()).toEqual({ state: 'claimed', phoneMasked: '+966 51•••••78' })
+    expect((await verify.POST(post({ code: codeFrom(text) }))).status).toBe(200)
+    const me = await (await import('@/app/api/auth/me/route')).GET()
+    expect((await me.json()).customer.phone).toBe(saudi)
+  })
+})
+
 describe('status and verify (the browser side)', () => {
   it('walks waiting -> claimed -> verified, then creates the customer and session once', async () => {
     const { data } = await startFlow()
@@ -135,7 +150,7 @@ describe('status and verify (the browser side)', () => {
     const p = phone()
     const { text } = await (await claim.POST(post({ phone: p, token: data.token }, asWorker))).json()
     const code = codeFrom(text)
-    expect(await (await status.GET()).json()).toEqual({ state: 'claimed', phoneMasked: `${p.slice(0, 2)}•••••${p.slice(-2)}` })
+    expect(await (await status.GET()).json()).toEqual({ state: 'claimed', phoneMasked: maskPhone(p) })
 
     const bad = await verify.POST(post({ code: wrongCode(code) }))
     expect(await bad.json()).toMatchObject({ ok: false, error: 'INVALID_CODE', remaining: 4 })
@@ -166,8 +181,8 @@ describe('status and verify (the browser side)', () => {
     const { data } = await startFlow()
     const p = phone()
     const { text } = await (await claim.POST(post({ phone: p, token: data.token }, asWorker))).json()
-    await verify.POST(post({ code: codeFrom(text), phone: '777777777' }))
-    expect(await db.select().from(s.customers).where(eq(s.customers.phone, '777777777'))).toHaveLength(0)
+    await verify.POST(post({ code: codeFrom(text), phone: '967777777777' }))
+    expect(await db.select().from(s.customers).where(eq(s.customers.phone, '967777777777'))).toHaveLength(0)
     expect(await db.select().from(s.customers).where(eq(s.customers.phone, p))).toHaveLength(1)
   })
 

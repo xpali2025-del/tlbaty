@@ -36,7 +36,7 @@ const logoutRoute = await import('@/app/api/auth/logout/route')
 
 const ctx = { ip: '1.2.3.4', userAgent: 'vitest' }
 let phoneSeq = 0
-const nextPhone = () => `77${String(1000000 + ++phoneSeq)}`
+const nextPhone = () => `9677${String(10000000 + ++phoneSeq)}`
 
 /** Sends an OTP through the real flow and returns the plaintext code the dev provider logged. */
 async function sendAndCapture(phone: string) {
@@ -142,20 +142,20 @@ describe('WhatsApp provider', () => {
   it('posts the phone and message to the worker with a bearer token', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{"ok":true}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    expect(await whatsappProvider.send({ phone: '781234567', code: '123456', purpose: 'login' })).toEqual({ ok: true, provider: 'whatsapp' })
+    expect(await whatsappProvider.send({ phone: '967781234567', code: '123456', purpose: 'login' })).toEqual({ ok: true, provider: 'whatsapp' })
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('https://wa.example.com/send')
     expect(init.headers.Authorization).toBe(`Bearer ${'x'.repeat(32)}`)
     const body = JSON.parse(init.body)
-    expect(body.phone).toBe('781234567')
+    expect(body.phone).toBe('967781234567')
     expect(body.text).toContain('123456')
   })
 
   it('reports failure on HTTP errors and network errors without leaking the code', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 422 })))
-    expect(await whatsappProvider.send({ phone: '781234567', code: '123456', purpose: 'login' })).toEqual({ ok: false, provider: 'whatsapp', errorCode: 'HTTP_422' })
+    expect(await whatsappProvider.send({ phone: '967781234567', code: '123456', purpose: 'login' })).toEqual({ ok: false, provider: 'whatsapp', errorCode: 'HTTP_422' })
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom 123456')))
-    const res = await whatsappProvider.send({ phone: '781234567', code: '123456', purpose: 'login' })
+    const res = await whatsappProvider.send({ phone: '967781234567', code: '123456', purpose: 'login' })
     expect(res).toEqual({ ok: false, provider: 'whatsapp', errorCode: 'SEND_FAILED' })
   })
 })
@@ -195,7 +195,7 @@ describe('message variation (ban-risk mitigation)', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     try {
-      await whatsappProvider.send({ phone: '781234567', code: '654321', purpose: 'login' })
+      await whatsappProvider.send({ phone: '967781234567', code: '654321', purpose: 'login' })
       expect(JSON.parse(fetchMock.mock.calls[0][1].body).text).toMatch(/\d{2}:\d{2}:\d{2}/)
     } finally {
       delete process.env.WHATSAPP_WORKER_URL
@@ -303,7 +303,7 @@ describe('sessions', () => {
 
 describe('auth API routes', () => {
   it('runs send -> verify -> me -> logout end to end and audits each step', async () => {
-    const phone = '781234567'
+    const phone = '967781234567'
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const sent = await sendRoute.POST(json({ phone: '+967 781 234 567' }))
     const code = log.mock.calls.map((c) => String(c[0])).find((l) => l.includes(`code for ${phone}`))!.split(': ')[1]
@@ -321,7 +321,7 @@ describe('auth API routes', () => {
     const me = await (await meRoute.GET()).json()
     expect(me.authenticated).toBe(true)
     expect(me.customer.phone).toBe(phone)
-    expect(me.customer.phoneMasked).toBe('78•••••67')
+    expect(me.customer.phoneMasked).toBe('+967 78•••••67')
 
     await logoutRoute.POST(json({}))
     expect((await (await meRoute.GET()).json()).authenticated).toBe(false)
@@ -330,15 +330,29 @@ describe('auth API routes', () => {
     expect(events).toEqual(expect.arrayContaining(['otp_sent', 'otp_failed', 'otp_verified', 'account_created', 'login']))
   })
 
+  it('logs a Saudi customer in with a number typed in any format', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect((await sendRoute.POST(json({ phone: '٠٥١٢٣٤٥٦٧٨' }))).status).toBe(200) // Arabic digits, local format
+    const code = log.mock.calls.map((c) => String(c[0])).find((l) => l.includes('code for 966512345678'))!.split(': ')[1]
+    log.mockRestore()
+    const ok = await verifyRoute.POST(json({ phone: '+966 51 234 5678', code }))
+    expect(ok.status).toBe(200)
+    const me = await (await meRoute.GET()).json()
+    expect(me.customer.phone).toBe('966512345678')
+    expect(me.customer.phoneMasked).toBe('+966 51•••••78')
+  })
+
   it('validates input and refuses blocked accounts', async () => {
     expect((await sendRoute.POST(json({ phone: '123' }))).status).toBe(400)
     expect((await verifyRoute.POST(json({ phone: '781234560', code: '' }))).status).toBe(400)
+    expect((await sendRoute.POST(json({ phone: '971501234567' }))).status).toBe(400) // unsupported country
+    expect((await sendRoute.POST(json({ phone: '07123456' }))).status).toBe(400) // too short after the trunk zero
     expect((await sendRoute.POST(new Request('http://localhost/api', { method: 'POST', body: 'not json' }))).status).toBe(400)
 
-    const phone = '781234561'
+    const phone = '967781234561'
     await db.insert(s.customers).values({ publicId: 'CUS_BLOCKED00001', phone, status: 'blocked' })
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    await sendRoute.POST(json({ phone }))
+    await sendRoute.POST(json({ phone: '0781234561' })) // typed locally, stored internationally
     const code = log.mock.calls.map((c) => String(c[0])).find((l) => l.includes(`code for ${phone}`))!.split(': ')[1]
     log.mockRestore()
     expect((await verifyRoute.POST(json({ phone, code }))).status).toBe(403)

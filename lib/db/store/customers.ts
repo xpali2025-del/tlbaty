@@ -10,7 +10,7 @@ export const customers = store.table('customers', {
   sanityId: sanityId(),
   /** Legacy public customer identifier (Sanity `customerId`). */
   publicId: text('public_id').notNull().unique(),
-  /** Normalized phone number; phone + OTP is the login identity. */
+  /** International digits without + (e.g. 967781234567); phone + OTP is the login identity. */
   phone: text('phone').notNull().unique(),
   verified: boolean('verified').notNull().default(true),
   status: customerStatus('status').notNull().default('active'),

@@ -13,6 +13,8 @@ const host = process.env.HOST ?? '127.0.0.1'
 const port = Number(process.env.PORT ?? 3100)
 const dataPath = process.env.WWEBJS_DATA_PATH ?? './.wwebjs_auth'
 
+const allowedCountryCodes = (process.env.ALLOWED_COUNTRY_CODES ?? '967,966').split(',').map((c) => c.trim()).filter(Boolean)
+
 let ready = false
 
 const client = new Client({
@@ -61,6 +63,7 @@ const handler = createHandler({
   token,
   sendMessage,
   isReady: () => ready,
+  allowedCountryCodes,
   recipientCooldownMs: intEnv('WORKER_RECIPIENT_COOLDOWN_MS', 60_000),
   maxPerHour: intEnv('WORKER_MAX_PER_HOUR', 60),
   maxPerDay: intEnv('WORKER_MAX_PER_DAY', 300),
@@ -71,6 +74,7 @@ http.createServer(handler).listen(port, host, () => console.log(`worker listenin
 const claimUrl = process.env.APP_CLAIM_URL
 if (claimUrl) {
   const onMessage = createInboundHandler({
+    allowedCountryCodes,
     getContactNumber: async (message) => (await message.getContact()).number,
     claim: async ({ phone, token }) => {
       const res = await fetch(claimUrl, {

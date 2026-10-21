@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 
 const MAX_BODY_BYTES = 4096
 const MAX_TEXT_LENGTH = 500
-const YEMEN_DIAL_CODE = '967'
+const DEFAULT_COUNTRY_CODES = ['967', '966']
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
@@ -31,7 +31,7 @@ async function readJson(req) {
 }
 
 /**
- * Builds the HTTP handler. `sendMessage(chatPhone, text)` is injected so the logic can be
+ * Builds the HTTP handler. `sendMessage(internationalPhone, text)` is injected so the logic can be
  * tested without WhatsApp; `isReady()` reports whether the WhatsApp session is connected.
  * Sends are serialised with a minimum gap (+ jitter) to look less like a bot to WhatsApp.
  * Request bodies are never logged: they contain one-time codes.
@@ -50,6 +50,7 @@ export function createHandler({
   maxPerDay = 300,
   breakerThreshold = 5,
   breakerPauseMs = 10 * 60_000,
+  allowedCountryCodes = DEFAULT_COUNTRY_CODES,
 }) {
   if (!token || token.length < 16) throw new Error('WHATSAPP_WORKER_TOKEN must be at least 16 characters')
 
@@ -73,6 +74,9 @@ export function createHandler({
     return null
   }
 
+  // International digits without '+': an allowed country code followed by a 9-digit national number.
+  const phonePattern = new RegExp(`^(?:${allowedCountryCodes.join('|')})\\d{9}$`)
+
   let queue = Promise.resolve()
   const enqueue = (task) => {
     const run = queue.then(task, task)
@@ -95,7 +99,7 @@ export function createHandler({
       const body = await readJson(req)
       const phone = typeof body?.phone === 'string' ? body.phone : ''
       const text = typeof body?.text === 'string' ? body.text : ''
-      if (!/^\d{9}$/.test(phone)) return json(res, 400, { ok: false, error: 'INVALID_PHONE' })
+      if (!phonePattern.test(phone)) return json(res, 400, { ok: false, error: 'INVALID_PHONE' })
       if (!text || text.length > MAX_TEXT_LENGTH) return json(res, 400, { ok: false, error: 'INVALID_TEXT' })
 
       const limited = limitReason(phone)
@@ -108,7 +112,7 @@ export function createHandler({
       if (lastSentTo.size > 5000) lastSentTo.clear()
 
       try {
-        await enqueue(() => sendMessage(`${YEMEN_DIAL_CODE}${phone}`, text))
+        await enqueue(() => sendMessage(phone, text))
       } catch (err) {
         const notOn = err instanceof Error && err.message === 'NOT_ON_WHATSAPP'
         if (!notOn && ++consecutiveFailures >= breakerThreshold) {
