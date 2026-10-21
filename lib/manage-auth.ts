@@ -3,6 +3,7 @@ import "server-only"
 import { cookies } from "next/headers"
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { findUserByUsername, verifyStoredUser } from "@/lib/manage-users"
+import { SCREENS, SCREEN_LABELS, type Screen } from "@/lib/permissions"
 
 // ============================================
 // حماية لوحة /manage عبر جلسة موقّعة تربطها باسم المستخدم.
@@ -109,10 +110,22 @@ export async function destroyManageSession(): Promise<void> {
   store.delete(COOKIE_NAME)
 }
 
-/** يعيد اسم المستخدم الحالي من كوكي الجلسة إن كانت صالحة وغير منتهية، أو null. */
-export async function getManageSessionUser(): Promise<string | null> {
+export type ManageContext = {
+  username: string
+  /** حساب المالك (من متغيرات البيئة) أو وضع التطوير: كل الصلاحيات ولا يمكن تعديله من اللوحة. */
+  isOwner: boolean
+  permissions: Screen[]
+  role: "owner" | "admin" | "manager" | "editor" | "operator"
+}
+
+function ownerContext(): ManageContext {
+  return { username: getUsername(), isOwner: true, permissions: [...SCREENS], role: "owner" }
+}
+
+/** هوية المستخدم الحالي وصلاحياته من كوكي الجلسة (وقاعدة البيانات للمستخدمين المخزَّنين)، أو null. */
+export async function getManageContext(): Promise<ManageContext | null> {
   if (failClosed()) return null
-  if (!getPassword()) return getUsername()
+  if (!getPassword()) return ownerContext()
   const store = await cookies()
   const token = store.get(COOKIE_NAME)?.value
   const parts = token?.split(".") ?? []
@@ -127,26 +140,43 @@ export async function getManageSessionUser(): Promise<string | null> {
     return null
   }
   if (!username || !safeEqual(sig, signUser(username, expires))) return null
-  // مستخدم مُخزَّن: يجب أن يبقى موجوداً ونشطاً (إيقافه يُنهي جلسته فوراً).
-  if (username.toLowerCase() !== getUsername().toLowerCase()) {
-    const stored = await findUserByUsername(username)
-    if (!stored || stored.active === false) return null
-  }
-  return username
+  if (username.toLowerCase() === getUsername().toLowerCase()) return ownerContext()
+  // مستخدم مُخزَّن: يجب أن يبقى موجوداً ونشطاً، وتُقرأ صلاحياته من القاعدة في كل طلب
+  // (تعديل الصلاحيات أو الإيقاف يسري فوراً بلا انتظار انتهاء الجلسة).
+  const stored = await findUserByUsername(username)
+  if (!stored || stored.active === false) return null
+  return { username: stored.username, isOwner: false, permissions: stored.permissions, role: stored.role }
+}
+
+/** يعيد اسم المستخدم الحالي إن كانت الجلسة صالحة، أو null. */
+export async function getManageSessionUser(): Promise<string | null> {
+  return (await getManageContext())?.username ?? null
 }
 
 /** هل المستخدم الحالي مصرّح له بالدخول للوحة؟ */
 export async function isManageAuthenticated(): Promise<boolean> {
-  if (failClosed()) return false
-  if (!getPassword()) return true
-  return (await getManageSessionUser()) !== null
+  return (await getManageContext()) !== null
 }
 
-/** يرمي خطأً إذا لم يكن المستخدم مصرّحاً له — يُستدعى قبل كل عملية كتابة. */
-export async function assertManageAuthenticated(): Promise<void> {
-  if (!(await isManageAuthenticated())) {
-    throw new Error("غير مصرّح. سجّل الدخول للوحة الإدارة أولاً.")
+/** يرمي خطأً إذا لم يكن المستخدم مسجّلاً دخوله. للإجراءات المشتركة بين كل المستخدمين فقط (مثل رفع الصور). */
+export async function assertManageAuthenticated(): Promise<ManageContext> {
+  const ctx = await getManageContext()
+  if (!ctx) throw new Error("غير مصرّح. سجّل الدخول للوحة الإدارة أولاً.")
+  return ctx
+}
+
+/** يرمي خطأً ما لم يملك المستخدم صلاحية الشاشة — يُستدعى في بداية كل إجراء كتابة. */
+export async function assertManagePermission(screen: Screen): Promise<ManageContext> {
+  const ctx = await assertManageAuthenticated()
+  if (!ctx.permissions.includes(screen)) {
+    throw new Error(`ليست لديك صلاحية: ${SCREEN_LABELS[screen]}`)
   }
+  return ctx
+}
+
+/** هل يملك المستخدم الحالي صلاحية الشاشة؟ (للصفحات: إعادة توجيه بدل رمي خطأ). */
+export async function hasManagePermission(screen: Screen): Promise<boolean> {
+  return Boolean((await getManageContext())?.permissions.includes(screen))
 }
 
 // أسماء بديلة تستخدمها صفحات اللوحة.

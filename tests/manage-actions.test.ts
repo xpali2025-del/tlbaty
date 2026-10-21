@@ -14,12 +14,12 @@ const mocks = vi.hoisted(() => ({
   revalidateTag: vi.fn(),
   revalidatePath: vi.fn(),
   deleteImageObject: vi.fn(async (_key?: string | null) => {}),
-  auth: vi.fn(async () => {}),
+  auth: vi.fn(async (): Promise<unknown> => ({ username: 'tester', isOwner: true, permissions: [], role: 'owner' })),
 }))
 
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: mocks.revalidateTag, revalidatePath: mocks.revalidatePath }))
-vi.mock('@/lib/manage-auth', () => ({ assertManageAuthenticated: mocks.auth, getManageSessionUser: async () => 'tester' }))
+vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageUsername: () => 'odoo', getManageSessionUser: async () => 'tester' }))
 vi.mock('@/lib/storage/r2', () => ({ deleteImageObject: mocks.deleteImageObject, createImageUpload: vi.fn(async (type: string, size: number, folder: string) => ({ uploadUrl: `https://r2/${folder}/${type}/${size}`, objectKey: `${folder}/new.png` })) }))
 vi.mock('ai', () => ({ generateText: vi.fn(async () => ({ text: 'Women Dress Nike!' })) }))
 

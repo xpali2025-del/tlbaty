@@ -5,7 +5,7 @@ CREATE TYPE "store"."courier_status" AS ENUM('active', 'suspended');--> statemen
 CREATE TYPE "store"."customer_status" AS ENUM('active', 'blocked');--> statement-breakpoint
 CREATE TYPE "store"."discount_type" AS ENUM('percent', 'fixed');--> statement-breakpoint
 CREATE TYPE "store"."link_placement" AS ENUM('nav', 'footer');--> statement-breakpoint
-CREATE TYPE "store"."manage_user_role" AS ENUM('admin', 'editor');--> statement-breakpoint
+CREATE TYPE "store"."manage_user_role" AS ENUM('admin', 'manager', 'editor', 'operator');--> statement-breakpoint
 CREATE TYPE "store"."notification_priority" AS ENUM('normal', 'important');--> statement-breakpoint
 CREATE TYPE "store"."notification_status" AS ENUM('draft', 'published', 'archived');--> statement-breakpoint
 CREATE TYPE "store"."order_status" AS ENUM('new', 'confirmed', 'processing', 'ready', 'assigned', 'on_the_way', 'delivered', 'failed', 'cancelled', 'returned');--> statement-breakpoint
@@ -33,6 +33,8 @@ CREATE TABLE "store"."categories" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
+	"code" text,
+	"product_seq" integer DEFAULT 0 NOT NULL,
 	"image_key" text,
 	"description" text,
 	"sort_order" integer DEFAULT 0 NOT NULL,
@@ -42,6 +44,7 @@ CREATE TABLE "store"."categories" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "categories_slug_unique" UNIQUE("slug"),
+	CONSTRAINT "categories_code_unique" UNIQUE("code"),
 	CONSTRAINT "categories_sort_nonneg" CHECK ("store"."categories"."sort_order" >= 0)
 );
 --> statement-breakpoint
@@ -81,6 +84,8 @@ CREATE TABLE "store"."products" (
 	"sku" text,
 	"badge" text,
 	"tags" text[] DEFAULT '{}'::text[] NOT NULL,
+	"search_text" text DEFAULT '' NOT NULL,
+	"image_palette" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"rating" real DEFAULT 5 NOT NULL,
 	"reviews_count" integer DEFAULT 0 NOT NULL,
@@ -155,6 +160,7 @@ CREATE TABLE "store"."manage_users" (
 	"name" text,
 	"password_hash" text NOT NULL,
 	"role" "store"."manage_user_role" DEFAULT 'editor' NOT NULL,
+	"permissions" text[] DEFAULT '{}'::text[] NOT NULL,
 	"active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -230,6 +236,14 @@ CREATE TABLE "store"."site_settings" (
 	"instagram" text,
 	"facebook" text,
 	"tiktok" text,
+	"x" text,
+	"youtube" text,
+	"snapchat" text,
+	"telegram" text,
+	"name_en" text,
+	"secondary_phone" text,
+	"cod_enabled" boolean DEFAULT true NOT NULL,
+	"transfer_enabled" boolean DEFAULT true NOT NULL,
 	"copyright" text,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "site_settings_singleton" CHECK ("store"."site_settings"."id" = 1)

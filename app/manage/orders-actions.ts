@@ -5,7 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
 import { couriers, orderItems, orderPaymentProofs, orderPaymentStatusHistory, orderStatusHistory, orders, products } from "@/lib/db/store"
-import { assertManageAuthenticated, getManageSessionUser } from "@/lib/manage-auth"
+import { assertManagePermission, getManageSessionUser } from "@/lib/manage-auth"
 import {
   canTransitionOrder,
   isOrderStatus,
@@ -53,7 +53,7 @@ function revalidateOrders() {
 
 export async function updateOrderStatus(id: string, next: OrderStatus, note?: string): Promise<OrderActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("orders")
     const orderId = idSchema.parse(id)
     const adminNote = noteSchema.parse(note ?? "")
     if (!isOrderStatus(next)) throw new Error("حالة طلب غير صالحة.")
@@ -101,7 +101,7 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
 
 export async function assignCourier(orderIds: string[], courierId: string): Promise<OrderActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("orders")
     const ids = idsSchema.parse(orderIds)
     const cid = z.string().trim().uuid("معرّف المندوب غير صالح").parse(courierId)
 
@@ -136,7 +136,7 @@ export async function assignCourier(orderIds: string[], courierId: string): Prom
 
 export async function unassignCourier(id: string): Promise<OrderActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("orders")
     const orderId = idSchema.parse(id)
     await db
       .update(orders)
@@ -156,7 +156,7 @@ export async function updatePaymentStatus(
   next: PaymentStatus,
   options?: { reason?: string; note?: string },
 ) {
-  await assertManageAuthenticated()
+  await assertManagePermission("orders")
   const orderId = idSchema.parse(id)
   const admin = (await getManageSessionUser()) ?? "مدير"
   if (!isPaymentStatus(next)) throw new Error("حالة دفع غير صالحة.")
@@ -203,7 +203,7 @@ export async function updatePaymentStatus(
 
 /** يحذف الطلب مع بنوده وسجلاته، ويحذف ملف إثبات الدفع المشفَّر من التخزين الخاص أيضاً. */
 export async function deleteOrder(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("orders")
   const orderId = idSchema.parse(id)
   const [proof] = await db.select().from(orderPaymentProofs).where(eq(orderPaymentProofs.orderId, orderId)).limit(1)
   const deleted = await db.delete(orders).where(and(eq(orders.id, orderId))).returning({ id: orders.id })
@@ -212,7 +212,7 @@ export async function deleteOrder(id: string) {
 }
 
 export async function fetchOrdersPage(filters: OrderFilters, page: number): Promise<OrdersPage> {
-  await assertManageAuthenticated()
+  await assertManagePermission("orders")
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 0
   return getAdminOrdersPage(filters ?? {}, safePage, ORDERS_PAGE_SIZE)
 }

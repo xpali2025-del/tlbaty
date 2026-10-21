@@ -1,6 +1,6 @@
 {
-  "id": "94d45005-5976-4e5f-b657-e72b2ed57e01",
-  "prevId": "9743e3e3-9f8a-4bc3-9dac-8c9f35228fce",
+  "id": "9cbd958b-4c60-4f44-a1c4-979e9b8ba6b3",
+  "prevId": "b07cfd0b-86b7-4699-be09-acdefea6e274",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -143,6 +143,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "product_seq": {
+          "name": "product_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "image_key": {
           "name": "image_key",
           "type": "text",
@@ -204,6 +217,13 @@
           "name": "categories_slug_unique",
           "columns": [
             "slug"
+          ],
+          "nullsNotDistinct": false
+        },
+        "categories_code_unique": {
+          "name": "categories_code_unique",
+          "columns": [
+            "code"
           ],
           "nullsNotDistinct": false
         }
@@ -503,6 +523,20 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::text[]"
+        },
+        "search_text": {
+          "name": "search_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "image_palette": {
+          "name": "image_palette",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "sort_order": {
           "name": "sort_order",
@@ -1172,6 +1206,13 @@
           "notNull": true,
           "default": "'editor'"
         },
+        "permissions": {
+          "name": "permissions",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
         "active": {
           "name": "active",
           "type": "boolean",
@@ -1753,6 +1794,56 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "x": {
+          "name": "x",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "youtube": {
+          "name": "youtube",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "snapchat": {
+          "name": "snapchat",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telegram": {
+          "name": "telegram",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "secondary_phone": {
+          "name": "secondary_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cod_enabled": {
+          "name": "cod_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "transfer_enabled": {
+          "name": "transfer_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "copyright": {
           "name": "copyright",
@@ -3890,7 +3981,9 @@
       "schema": "store",
       "values": [
         "admin",
-        "editor"
+        "manager",
+        "editor",
+        "operator"
       ]
     },
     "store.notification_priority": {

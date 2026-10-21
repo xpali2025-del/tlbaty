@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm"
 import { CACHE_TAGS } from "@/lib/cache-tags"
 import { db } from "@/lib/db/client"
 import { paymentAccounts } from "@/lib/db/store"
-import { assertManageAuthenticated } from "@/lib/manage-auth"
+import { assertManagePermission } from "@/lib/manage-auth"
 import { newImageKey, removeObjects, uuidParam } from "@/lib/manage-helpers"
 
 function str(form: FormData, key: string, max = 300): string | undefined {
@@ -31,7 +31,7 @@ function revalidatePaymentAccounts() {
 }
 
 export async function savePaymentAccount(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("payment-accounts")
 
   const providerName = str(form, "providerName", 80)
   const accountHolderName = str(form, "accountHolderName", 120)
@@ -69,14 +69,14 @@ export async function savePaymentAccount(id: string | null, form: FormData) {
 }
 
 export async function togglePaymentAccount(id: string, isActive: boolean) {
-  await assertManageAuthenticated()
+  await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   await db.update(paymentAccounts).set({ isActive: Boolean(isActive), updatedAt: new Date() }).where(eq(paymentAccounts.id, accountId))
   revalidatePaymentAccounts()
 }
 
 export async function updatePaymentAccountOrder(id: string, sortOrder: number) {
-  await assertManageAuthenticated()
+  await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   const value = Number.isFinite(sortOrder) ? Math.min(9999, Math.max(0, Math.round(sortOrder))) : 0
   await db.update(paymentAccounts).set({ sortOrder: value, updatedAt: new Date() }).where(eq(paymentAccounts.id, accountId))
@@ -84,7 +84,7 @@ export async function updatePaymentAccountOrder(id: string, sortOrder: number) {
 }
 
 export async function deletePaymentAccount(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   const [existing] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, accountId)).limit(1)
   if (!existing) return
@@ -94,7 +94,7 @@ export async function deletePaymentAccount(id: string) {
 }
 
 export async function removePaymentAccountImage(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   const [existing] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, accountId)).limit(1)
   if (!existing) return

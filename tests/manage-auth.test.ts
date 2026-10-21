@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const jar = new Map<string, string>()
-const stored = vi.hoisted(() => ({ user: null as null | { username: string; active: boolean } }))
+const stored = vi.hoisted(() => ({ user: null as null | { username: string; active: boolean; role: string; permissions: string[] } }))
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (k: string) => (jar.has(k) ? { value: jar.get(k) } : undefined),
@@ -73,13 +73,30 @@ describe('manage auth', () => {
 
   it('ends the session of a stored user once disabled or deleted', async () => {
     vi.stubEnv('MANAGE_PASSWORD', 'owner-pass')
-    stored.user = { username: 'sara', active: true }
+    stored.user = { username: 'sara', active: true, role: 'editor', permissions: ['products'] }
     expect(await A.authenticate('sara', 'pw')).toBe('sara')
     await A.createManageSession('sara')
     expect(await A.getManageSessionUser()).toBe('sara')
-    stored.user = { username: 'sara', active: false }
+    stored.user = { username: 'sara', active: false, role: 'editor', permissions: ['products'] }
     expect(await A.getManageSessionUser()).toBeNull()
     stored.user = null
     expect(await A.isManageAuthenticated()).toBe(false)
+  })
+
+  it('derives permissions: owner has every screen, stored users only theirs, changes apply immediately', async () => {
+    vi.stubEnv('MANAGE_PASSWORD', 'owner-pass')
+    await A.createManageSession('odoo')
+    expect(await A.getManageContext()).toMatchObject({ isOwner: true, role: 'owner' })
+    await expect(A.assertManagePermission('users')).resolves.toBeTruthy()
+
+    stored.user = { username: 'sara', active: true, role: 'editor', permissions: ['products'] }
+    await A.createManageSession('sara')
+    expect(await A.getManageContext()).toMatchObject({ isOwner: false, permissions: ['products'] })
+    await expect(A.assertManagePermission('products')).resolves.toBeTruthy()
+    await expect(A.assertManagePermission('settings')).rejects.toThrow('ليست لديك صلاحية')
+    expect(await A.hasManagePermission('orders')).toBe(false)
+    stored.user.permissions = ['orders']
+    await expect(A.assertManagePermission('products')).rejects.toThrow()
+    expect(await A.hasManagePermission('orders')).toBe(true)
   })
 })

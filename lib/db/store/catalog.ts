@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
-  boolean, check, index, integer, numeric, real, text, uniqueIndex, uuid,
+  boolean, check, index, integer, jsonb, numeric, real, text, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import { pk, store, timestamps } from './common'
 
@@ -15,6 +15,10 @@ export const categories = store.table('categories', {
   id: pk(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
+  /** Short code that prefixes product codes (e.g. DR -> DR-012). */
+  code: text('code').unique(),
+  /** Last number handed out for this category; never reused, so codes stay stable. */
+  productSeq: integer('product_seq').notNull().default(0),
   imageKey: text('image_key'),
   description: text('description'),
   sortOrder: integer('sort_order').notNull().default(0),
@@ -64,6 +68,10 @@ export const products = store.table('products', {
   badge: text('badge'),
   /** Legacy merchandising tags (new / bestseller / offer / regular); the storefront lists use them. */
   tags: text('tags').array().notNull().default(sql`'{}'::text[]`),
+  /** Normalized text (name, brand, category, colors, code, keywords) the storefront search matches against. */
+  searchText: text('search_text').notNull().default(''),
+  /** Dominant colors of the main image, [{ hex, weight }], used by search-by-image. */
+  imagePalette: jsonb('image_palette').$type<{ hex: string; weight: number }[]>().notNull().default(sql`'[]'::jsonb`),
   sortOrder: integer('sort_order').notNull().default(0),
   rating: real('rating').notNull().default(5),
   reviewsCount: integer('reviews_count').notNull().default(0),

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
-import { isManageAuthed, getManageSessionUser } from "@/lib/manage-auth"
+import { getManageContext } from "@/lib/manage-auth"
+import { ROLE_LABELS, type Screen } from "@/lib/permissions"
 import {
   getAdminProducts,
   getAdminCategories,
@@ -12,9 +13,9 @@ import {
   getAdminShipping,
   getAdminPaymentAccounts,
 } from "@/lib/admin"
-import { getAdminOrdersPage, getAdminOrderStats } from "@/lib/admin-orders"
+import { EMPTY_ORDER_STATS, getAdminOrdersPage, getAdminOrderStats } from "@/lib/admin-orders"
 import { getAdminCouriers } from "@/lib/admin-couriers"
-import { getAdminNotifications } from "@/lib/admin-notifications"
+import { EMPTY_ADMIN_NOTIFICATIONS, getAdminNotifications } from "@/lib/admin-notifications"
 import { getAdminUsers } from "@/lib/manage-users"
 import { Dashboard } from "./dashboard"
 
@@ -22,10 +23,15 @@ import { Dashboard } from "./dashboard"
 // وبيانات الإدارة تُجلب بـ no-store، فتظل اللوحة خارج استراتيجية On-Demand Revalidation.
 
 export default async function ManagePage() {
-  if (!(await isManageAuthed())) {
+  const ctx = await getManageContext()
+  if (!ctx) {
     redirect("/manage/login")
   }
+  const can = (screen: Screen) => ctx.permissions.includes(screen)
+  // لا نستعلم ولا نرسل للمتصفح إلا بيانات الشاشات المسموحة (أسرع وأكثر أماناً).
+  const need = <T,>(allowed: boolean, empty: T, load: () => Promise<T>) => (allowed ? load() : Promise.resolve(empty))
 
+  const wantsCategories = can("products") || can("categories") || can("ads")
   const [
     products,
     categories,
@@ -42,25 +48,23 @@ export default async function ManagePage() {
     users,
     paymentAccounts,
     notifications,
-    currentUser,
   ] = await Promise.all([
-      getAdminProducts(),
-      getAdminCategories(),
-      getAdminBrands(),
-      getAdminSlides(),
-      getAdminCoupons(),
-      getAdminReviews(),
-      getAdminAds(),
-      getAdminSettings(),
-      getAdminShipping(),
-      // الدفعة الأولى فقط من الطلبات — الباقي يُحمَّل عند الطلب.
-      getAdminOrdersPage({ status: "all", sort: "newest" }, 0),
-      getAdminOrderStats(),
-      getAdminCouriers(),
-    getAdminUsers(),
-    getAdminPaymentAccounts(),
-    getAdminNotifications(),
-    getManageSessionUser(),
+    need(can("products"), [], getAdminProducts),
+    need(wantsCategories, [], getAdminCategories),
+    need(can("products") || can("brands"), [], getAdminBrands),
+    need(can("slides"), [], getAdminSlides),
+    need(can("coupons"), [], getAdminCoupons),
+    need(can("reviews"), [], getAdminReviews),
+    need(can("ads"), [], getAdminAds),
+    need(can("settings"), null, getAdminSettings),
+    need(can("shipping"), { zones: [], currencies: [], defaultCurrency: "YER" }, getAdminShipping),
+    // الدفعة الأولى فقط من الطلبات — الباقي يُحمَّل عند الطلب.
+    need(can("orders"), { orders: [], total: 0, hasMore: false }, () => getAdminOrdersPage({ status: "all", sort: "newest" }, 0)),
+    need(can("orders"), EMPTY_ORDER_STATS, getAdminOrderStats),
+    need(can("orders") || can("couriers"), [], getAdminCouriers),
+    need(can("users"), [], getAdminUsers),
+    need(can("payment-accounts"), [], getAdminPaymentAccounts),
+    need(can("notifications"), EMPTY_ADMIN_NOTIFICATIONS, getAdminNotifications),
   ])
 
   return (
@@ -80,7 +84,9 @@ export default async function ManagePage() {
       users={users}
       paymentAccounts={paymentAccounts}
       notifications={notifications}
-      currentUser={currentUser}
+      currentUser={ctx.username}
+      permissions={ctx.permissions}
+      roleLabel={ctx.role === "owner" ? "المالك" : ROLE_LABELS[ctx.role]}
     />
   )
 }

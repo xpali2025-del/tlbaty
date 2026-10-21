@@ -11,7 +11,7 @@ export const paymentStatus = store.enum('payment_status', [
 export const discountType = store.enum('discount_type', ['percent', 'fixed'])
 export const courierStatus = store.enum('courier_status', ['active', 'suspended'])
 export const customerStatus = store.enum('customer_status', ['active', 'blocked'])
-export const manageUserRole = store.enum('manage_user_role', ['admin', 'editor'])
+export const manageUserRole = store.enum('manage_user_role', ['admin', 'manager', 'editor', 'operator'])
 export const otpPurpose = store.enum('otp_purpose', ['login', 'change_phone'])
 export const authEventType = store.enum('auth_event_type', [
   'otp_sent', 'otp_resent', 'otp_verified', 'otp_failed', 'otp_expired', 'rate_limited',

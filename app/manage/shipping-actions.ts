@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
 import { currencies, shippingMethods, shippingZones, siteSettings } from "@/lib/db/store"
-import { assertManageAuthenticated } from "@/lib/manage-auth"
+import { assertManagePermission } from "@/lib/manage-auth"
 import { revalidateStore, uniqueViolation, uuidParam } from "@/lib/manage-helpers"
 import { BASE_CURRENCY_CODE } from "@/lib/currency"
 import { YEMEN_GOVERNORATES } from "@/lib/yemen-governorates"
@@ -20,7 +20,7 @@ const currencySchema = z.object({
 })
 
 export async function saveCurrencies(list: unknown, defaultCode: unknown): Promise<void> {
-  await assertManageAuthenticated()
+  await assertManagePermission("shipping")
   const parsed = z.array(currencySchema).min(1, "أضف عملة واحدة على الأقل").max(20).parse(list)
   const codes = parsed.map((c) => c.code)
   if (new Set(codes).size !== codes.length) throw new Error("رمز العملة مكرر")
@@ -58,7 +58,7 @@ const zoneSchema = z.object({
 })
 
 export async function saveShippingZone(id: string | null, input: unknown): Promise<void> {
-  await assertManageAuthenticated()
+  await assertManagePermission("shipping")
   const zone = zoneSchema.parse(input)
   const governorate = zone.isDefault ? null : zone.governorate
   if (!zone.isDefault) {
@@ -95,7 +95,7 @@ export async function saveShippingZone(id: string | null, input: unknown): Promi
 }
 
 export async function deleteShippingZone(id: string): Promise<void> {
-  await assertManageAuthenticated()
+  await assertManagePermission("shipping")
   await db.delete(shippingZones).where(eq(shippingZones.id, uuidParam(id)))
   revalidateStore()
 }

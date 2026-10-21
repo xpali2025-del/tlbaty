@@ -22,6 +22,7 @@ import {
   Bike,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import type { Screen } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import type {
   AdminProduct,
@@ -89,15 +90,16 @@ type DashboardProps = {
   paymentAccounts: AdminPaymentAccount[]
   notifications: AdminNotificationsResult
   currentUser: string | null
+  /** الشاشات المسموحة لهذا المستخدم (البيانات الأخرى لا تُرسل للمتصفح أصلاً). */
+  permissions: Screen[]
+  roleLabel: string
 }
 
 export function Dashboard(props: DashboardProps) {
   const router = useRouter()
-  const [tab, setTab] = useState<TabId>("orders")
-
-  const nav: { id: TabId; label: string; icon: typeof Package; count?: number }[] = [
+  const nav: { id: TabId; label: string; icon: typeof Package; count?: number }[] = ([
     { id: "orders", label: "الطلبات", icon: ClipboardList, count: props.orderStats.total },
-    { id: "couriers", label: "إدارة المناديب", icon: Bike, count: props.couriers.length },
+    { id: "couriers", label: "المناديب والتوزيع", icon: Bike, count: props.couriers.length },
     {
       id: "notifications",
       label: "الإشعارات",
@@ -120,7 +122,8 @@ export function Dashboard(props: DashboardProps) {
     { id: "users", label: "المستخدمون", icon: Users, count: props.users.length },
     { id: "shipping", label: "الشحن والعملات", icon: Truck },
     { id: "settings", label: "إعدادات الموقع", icon: Settings },
-  ]
+  ] as { id: TabId; label: string; icon: typeof Package; count?: number }[]).filter((item) => props.permissions.includes(item.id))
+  const [tab, setTab] = useState<TabId>(nav[0]?.id ?? "orders")
 
   return (
     <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col lg:flex-row">
@@ -132,7 +135,7 @@ export function Dashboard(props: DashboardProps) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">لوحة الإدارة</p>
-            <p className="truncate text-xs text-muted-foreground">لوحة تحكم المتجر</p>
+            <p className="truncate text-xs text-muted-foreground">{props.currentUser ? `${props.currentUser} · ${props.roleLabel}` : "لوحة تحكم المتجر"}</p>
           </div>
         </div>
 
@@ -201,6 +204,7 @@ export function Dashboard(props: DashboardProps) {
 
       {/* المحتوى */}
       <main className="flex-1 p-4 lg:p-6">
+        {nav.length === 0 && <p className="text-sm text-muted-foreground">لا توجد شاشات مسموحة لحسابك. تواصل مع مدير النظام.</p>}
         {tab === "orders" && (
           <OrdersManager
             initialPage={props.ordersPage}

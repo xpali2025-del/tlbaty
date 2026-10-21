@@ -18,7 +18,8 @@ import {
   slides,
   subcategories,
 } from "@/lib/db/store"
-import { assertManageAuthenticated, getManageSessionUser } from "@/lib/manage-auth"
+import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
+import { isRole, normalizePermissions, ROLE_PRESETS, type Role } from "@/lib/permissions"
 import {
   bool,
   englishSlug,
@@ -57,7 +58,7 @@ export async function generateProductSlug(input: {
   product?: string
   brand?: string
 }): Promise<string> {
-  await assertManageAuthenticated()
+  await assertManagePermission("products")
 
   const parts = [input.category, input.product, input.brand].map((p) => (p ?? "").trim()).filter(Boolean)
   if (!parts.length) return ""
@@ -95,7 +96,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/
 // ---------- المنتجات ----------
 
 export async function saveProduct(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("products")
 
   const name = str(form, "name")
   const categoryRaw = str(form, "categoryId")
@@ -221,7 +222,7 @@ export async function saveProduct(id: string | null, form: FormData) {
 }
 
 export async function deleteProduct(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("products")
   const productId = uuidParam(id)
   const [existing] = await db.select().from(products).where(eq(products.id, productId)).limit(1)
   if (!existing) return
@@ -232,7 +233,7 @@ export async function deleteProduct(id: string) {
 }
 
 export async function toggleProductFlag(id: string, field: "isNew" | "isBestseller", value: boolean) {
-  await assertManageAuthenticated()
+  await assertManagePermission("products")
   if (field !== "isNew" && field !== "isBestseller") throw new Error("حقل غير مدعوم")
   const productId = uuidParam(id)
   const [existing] = await db.select().from(products).where(eq(products.id, productId)).limit(1)
@@ -247,7 +248,7 @@ export async function toggleProductFlag(id: string, field: "isNew" | "isBestsell
 // ---------- الأقسام ----------
 
 export async function saveCategory(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("categories")
 
   const name = str(form, "name")
   if (!name) throw new Error("اسم القسم مطلوب")
@@ -308,7 +309,7 @@ export async function saveCategory(id: string | null, form: FormData) {
 }
 
 export async function deleteCategory(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("categories")
   const categoryId = uuidParam(id)
   const [{ n }] = await db.select({ n: count() }).from(products).where(eq(products.categoryId, categoryId))
   if (n > 0) {
@@ -324,7 +325,7 @@ export async function deleteCategory(id: string) {
 // ---------- الماركات ----------
 
 export async function saveBrand(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("brands")
 
   const name = str(form, "name")
   if (!name) throw new Error("اسم البراند مطلوب")
@@ -363,7 +364,7 @@ export async function saveBrand(id: string | null, form: FormData) {
 }
 
 export async function deleteBrand(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("brands")
   const brandId = uuidParam(id)
   const [existing] = await db.select().from(brands).where(eq(brands.id, brandId)).limit(1)
   if (!existing) return
@@ -375,7 +376,7 @@ export async function deleteBrand(id: string) {
 // ---------- السلايدر ----------
 
 export async function saveSlide(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("slides")
 
   const title = str(form, "title")
   if (!title) throw new Error("عنوان السلايد مطلوب")
@@ -407,7 +408,7 @@ export async function saveSlide(id: string | null, form: FormData) {
 }
 
 export async function deleteSlide(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("slides")
   const slideId = uuidParam(id)
   const [existing] = await db.select().from(slides).where(eq(slides.id, slideId)).limit(1)
   if (!existing) return
@@ -419,7 +420,7 @@ export async function deleteSlide(id: string) {
 // ---------- الكوبونات ----------
 
 export async function saveCoupon(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("coupons")
 
   const code = str(form, "code")
   const discount = num(form, "discount")
@@ -456,7 +457,7 @@ export async function saveCoupon(id: string | null, form: FormData) {
 }
 
 export async function deleteCoupon(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("coupons")
   await db.delete(coupons).where(eq(coupons.id, uuidParam(id)))
   revalidateStore()
 }
@@ -464,7 +465,7 @@ export async function deleteCoupon(id: string) {
 // ---------- التقييمات ----------
 
 export async function saveReview(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("reviews")
 
   const name = str(form, "name")
   const comment = str(form, "comment")
@@ -499,7 +500,7 @@ export async function saveReview(id: string | null, form: FormData) {
 }
 
 export async function deleteReview(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("reviews")
   const reviewId = uuidParam(id)
   const [existing] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1)
   if (!existing) return
@@ -511,7 +512,7 @@ export async function deleteReview(id: string) {
 // ---------- الإعلانات ----------
 
 export async function saveAd(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("ads")
 
   const title = str(form, "title")
   if (!title) throw new Error("اسم الإعلان مطلوب")
@@ -555,13 +556,13 @@ export async function saveAd(id: string | null, form: FormData) {
 }
 
 export async function toggleAdActive(id: string, value: boolean) {
-  await assertManageAuthenticated()
+  await assertManagePermission("ads")
   await db.update(ads).set({ active: Boolean(value), updatedAt: new Date() }).where(eq(ads.id, uuidParam(id)))
   revalidateStore()
 }
 
 export async function deleteAd(id: string) {
-  await assertManageAuthenticated()
+  await assertManagePermission("ads")
   const adId = uuidParam(id)
   const [existing] = await db.select().from(ads).where(eq(ads.id, adId)).limit(1)
   if (!existing) return
@@ -573,7 +574,7 @@ export async function deleteAd(id: string) {
 // ---------- إعدادات المتجر (صف واحد) ----------
 
 export async function saveSettings(_id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  await assertManagePermission("settings")
 
   const logoKey = newImageKey(form, "logoKey")
   const values = {
@@ -606,12 +607,14 @@ export async function saveSettings(_id: string | null, form: FormData) {
 // ---------- مستخدمو اللوحة ----------
 
 export async function saveUser(id: string | null, form: FormData) {
-  await assertManageAuthenticated()
+  const actor = await assertManagePermission("users")
 
   const username = str(form, "username")
   const password = str(form, "password")
   const name = str(form, "name")
-  const role = str(form, "role") === "admin" ? "admin" : "editor"
+  const roleRaw = str(form, "role")
+  const role: Role = isRole(roleRaw) ? roleRaw : "editor"
+  const permissions = normalizePermissions(json<unknown>(form, "permissions", ROLE_PRESETS[role]))
   const active = bool(form, "active")
   const userId = id ? uuidParam(id) : null
 
@@ -619,13 +622,28 @@ export async function saveUser(id: string | null, form: FormData) {
   if (!/^[a-zA-Z0-9._-]{3,}$/.test(username)) {
     throw new Error("اسم المستخدم يجب أن يكون 3 أحرف على الأقل (أحرف/أرقام إنجليزية بدون مسافات)")
   }
+  // اسم المالك محجوز: وإلا لأخذ مستخدم مخزَّن بنفس الاسم صلاحيات المالك الكاملة.
+  if (username.toLowerCase() === getManageUsername().toLowerCase()) {
+    throw new Error("اسم المستخدم محجوز لحساب المالك، اختر اسماً آخر")
+  }
+  // لا يمنح المستخدم غيره صلاحية لا يملكها هو (إلا المالك).
+  if (!actor.isOwner) {
+    const missing = permissions.filter((p) => !actor.permissions.includes(p))
+    if (missing.length) throw new Error("لا يمكنك منح صلاحيات لا تملكها أنت")
+  }
 
   const existing = await findUserByUsername(username)
   if (existing && existing._id !== userId) {
     throw new Error("اسم المستخدم مُستخدم بالفعل، اختر اسماً آخر")
   }
 
-  const base = { username, name: name ?? null, role, active, updatedAt: new Date() } as const
+  if (userId && actor.username.toLowerCase() === username.toLowerCase()) {
+    // تعديل الشخص لنفسه: لا يُسقط صلاحية المستخدمين ولا يعطّل حسابه فيقفل اللوحة على نفسه.
+    if (!permissions.includes("users")) throw new Error("لا يمكنك سحب صلاحية إدارة المستخدمين من حسابك")
+    if (!active) throw new Error("لا يمكنك تعطيل حسابك")
+  }
+
+  const base = { username, name: name ?? null, role, permissions, active, updatedAt: new Date() } as const
 
   try {
     if (userId) {
@@ -650,14 +668,22 @@ export async function saveUser(id: string | null, form: FormData) {
 }
 
 export async function deleteUser(id: string) {
-  await assertManageAuthenticated()
-  await db.delete(manageUsers).where(eq(manageUsers.id, uuidParam(id)))
+  const actor = await assertManagePermission("users")
+  const userId = uuidParam(id)
+  const [target] = await db.select({ username: manageUsers.username }).from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
+  if (!target) return
+  if (target.username.toLowerCase() === actor.username.toLowerCase()) throw new Error("لا يمكنك حذف حسابك")
+  await db.delete(manageUsers).where(eq(manageUsers.id, userId))
   revalidateManage()
 }
 
 export async function toggleUserActive(id: string, value: boolean) {
-  await assertManageAuthenticated()
-  await db.update(manageUsers).set({ active: Boolean(value), updatedAt: new Date() }).where(eq(manageUsers.id, uuidParam(id)))
+  const actor = await assertManagePermission("users")
+  const userId = uuidParam(id)
+  const [target] = await db.select({ username: manageUsers.username }).from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
+  if (!target) throw new Error("المستخدم غير موجود")
+  if (!value && target.username.toLowerCase() === actor.username.toLowerCase()) throw new Error("لا يمكنك تعطيل حسابك")
+  await db.update(manageUsers).set({ active: Boolean(value), updatedAt: new Date() }).where(eq(manageUsers.id, userId))
   revalidateManage()
 }
 

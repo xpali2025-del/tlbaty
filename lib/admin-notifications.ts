@@ -93,3 +93,11 @@ export async function getAdminNotifications(): Promise<AdminNotificationsResult>
     }
   }
 }
+
+/** نتيجة فارغة لمن لا يملك صلاحية الإشعارات (لا استعلام ولا بيانات). */
+export const EMPTY_ADMIN_NOTIFICATIONS: AdminNotificationsResult = {
+  notifications: [],
+  stats: { total: 0, published: 0, draft: 0, archived: 0 },
+  config: { ready: true, readReady: true, missing: [] },
+  loadError: null,
+}

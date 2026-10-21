@@ -5,6 +5,7 @@ import { asc, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
 import { manageUsers } from "@/lib/db/store"
+import { normalizePermissions, type Role, type Screen } from "@/lib/permissions"
 
 // ============================================
 // إدارة مستخدمي لوحة التحكم (/manage)
@@ -16,7 +17,8 @@ export type AdminUser = {
   _id: string
   username: string
   name?: string
-  role: "admin" | "editor"
+  role: Role
+  permissions: Screen[]
   active: boolean
 }
 
@@ -48,6 +50,7 @@ const toAdminUser = (u: typeof manageUsers.$inferSelect): AdminUser => ({
   username: u.username,
   name: u.name ?? undefined,
   role: u.role,
+  permissions: normalizePermissions(u.permissions),
   active: u.active,
 })
 

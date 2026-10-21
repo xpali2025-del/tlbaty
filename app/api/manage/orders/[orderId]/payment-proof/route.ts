@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
 import { orderPaymentProofs } from "@/lib/db/store"
-import { isManageAuthenticated } from "@/lib/manage-auth"
+import { hasManagePermission } from "@/lib/manage-auth"
 import { decryptPaymentProof } from "@/lib/payment-proof"
 import { getPaymentProof } from "@/lib/storage/proofs"
 
@@ -29,7 +29,7 @@ const json = (body: Record<string, unknown>, status: number) =>
  * يقرأ الملف المشفَّر من التخزين الخاص ويفك تشفيره على الخادم؛ لا يوجد أي رابط عام للملف.
  */
 export async function GET(req: Request, { params }: { params: Promise<{ orderId: string }> }) {
-  if (!(await isManageAuthenticated())) {
+  if (!(await hasManagePermission("orders"))) {
     return json({ ok: false, error: "UNAUTHORIZED", message: "غير مصرّح." }, 401)
   }
 

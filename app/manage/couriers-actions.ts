@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
 import { couriers, orders } from "@/lib/db/store"
-import { assertManageAuthenticated } from "@/lib/manage-auth"
+import { assertManagePermission } from "@/lib/manage-auth"
 import { COURIER_STATUSES } from "@/lib/courier"
 import { newImageKey, removeObjects } from "@/lib/manage-helpers"
 
@@ -69,7 +69,7 @@ function parseForm(form: FormData) {
 
 export async function createCourier(form: FormData): Promise<CourierActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("couriers")
     const data = parseForm(form)
     const imageKey = newImageKey(form, "imageKey")
     await db.insert(couriers).values({
@@ -87,7 +87,7 @@ export async function createCourier(form: FormData): Promise<CourierActionResult
 
 export async function updateCourier(id: string, form: FormData): Promise<CourierActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("couriers")
     const courierId = idSchema.parse(id)
     const data = parseForm(form)
     const imageKey = newImageKey(form, "imageKey")
@@ -114,7 +114,7 @@ export async function updateCourier(id: string, form: FormData): Promise<Courier
 
 export async function setCourierStatus(id: string, status: "active" | "suspended"): Promise<CourierActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("couriers")
     const courierId = idSchema.parse(id)
     if (!COURIER_STATUSES.includes(status)) throw new Error("حالة مندوب غير صالحة.")
     const updated = await db.update(couriers).set({ status }).where(eq(couriers.id, courierId)).returning({ id: couriers.id })
@@ -126,7 +126,7 @@ export async function setCourierStatus(id: string, status: "active" | "suspended
 
 export async function deleteCourier(id: string): Promise<CourierActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("couriers")
     const courierId = idSchema.parse(id)
 
     // مرتبط بطلب إن وُجد ربط حيّ أو لقطة محفوظة باسمه.

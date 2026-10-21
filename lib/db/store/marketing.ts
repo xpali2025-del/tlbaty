@@ -89,6 +89,8 @@ export const manageUsers = store.table('manage_users', {
   name: text('name'),
   passwordHash: text('password_hash').notNull(),
   role: manageUserRole('role').notNull().default('editor'),
+  /** Screens this user may open and change (see lib/permissions.ts). Empty = no access. */
+  permissions: text('permissions').array().notNull().default(sql`'{}'::text[]`),
   active: boolean('active').notNull().default(true),
   ...timestamps(),
 }, (t) => [uniqueIndex('manage_users_username_lower_idx').on(sql`lower(${t.username})`)])
@@ -109,6 +111,14 @@ export const siteSettings = store.table('site_settings', {
   instagram: text('instagram'),
   facebook: text('facebook'),
   tiktok: text('tiktok'),
+  x: text('x'),
+  youtube: text('youtube'),
+  snapchat: text('snapchat'),
+  telegram: text('telegram'),
+  nameEn: text('name_en'),
+  secondaryPhone: text('secondary_phone'),
+  codEnabled: boolean('cod_enabled').notNull().default(true),
+  transferEnabled: boolean('transfer_enabled').notNull().default(true),
   copyright: text('copyright'),
   updatedAt: timestamps().updatedAt,
 }, (t) => [check('site_settings_singleton', sql`${t.id} = 1`)])

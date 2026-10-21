@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: mocks.revalidateTag, revalidatePath: mocks.revalidatePath }))
-vi.mock('@/lib/manage-auth', () => ({ assertManageAuthenticated: mocks.auth, getManageSessionUser: async () => 'tester' }))
+vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageUsername: () => 'odoo', getManageSessionUser: async () => 'tester' }))
 vi.mock('@/lib/storage/r2', () => ({ deleteImageObject: mocks.deleteImageObject }))
 
 process.env.DATABASE_URL = 'postgres://test'

@@ -10,7 +10,7 @@ const db = drizzle(new PGlite())
 const auth = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
-vi.mock('@/lib/manage-auth', () => ({ assertManageAuthenticated: auth, getManageSessionUser: async () => 'm' }))
+vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: auth, assertManagePermission: auth, assertManageAuthenticated: auth, getManageUsername: () => 'odoo', getManageUsername: () => 'odoo', getManageSessionUser: async () => 'm' }))
 
 const A = await import('@/app/manage/shipping-actions')
 const { getAdminShipping } = await import('@/lib/admin')

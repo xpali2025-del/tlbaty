@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
 import { notifications } from "@/lib/db/store"
-import { assertManageAuthenticated, getManageSessionUser } from "@/lib/manage-auth"
+import { assertManagePermission, getManageSessionUser } from "@/lib/manage-auth"
 import { newImageKey, removeObjects, uuidParam } from "@/lib/manage-helpers"
 import { sanitizeInternalLink } from "@/lib/notification-link"
 import {
@@ -20,7 +20,7 @@ import { NOTIFICATION_TAGS } from "@/lib/notifications"
 // إجراءات الإشعارات في لوحة /manage
 //
 // قواعد أمنية ثابتة في كل إجراء:
-//   1. التحقق من جلسة مدير اللوحة أولاً (assertManageAuthenticated).
+//   1. التحقق من جلسة مدير اللوحة أولاً (assertManagePermission).
 //   2. التحقق من كل البيانات بـ Zod — لا نثق ببيانات الواجهة إطلاقاً.
 //   3. الصورة تصل كمفتاح R2 مرفوع مسبقاً من المتصفح (يُتحقق من مجلده).
 //   4. لا نطبع أي إعداد حسّاس في السجلات.
@@ -126,7 +126,7 @@ export async function saveNotification(
   form: FormData,
 ): Promise<NotificationActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("notifications")
 
     const parsed = notificationSchema.safeParse({
       title: form.get("title") ?? "",
@@ -180,7 +180,7 @@ export async function saveNotification(
 /** نشر إشعار موجود الآن (يجعله ظاهراً للعملاء فوراً). */
 export async function publishNotification(id: string): Promise<NotificationActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("notifications")
     const notificationId = uuidParam(id, "معرّف الإشعار غير صالح")
     const now = new Date()
 
@@ -206,7 +206,7 @@ export async function publishNotification(id: string): Promise<NotificationActio
 
 async function setStatus(id: string, status: "draft" | "archived", message: string): Promise<NotificationActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("notifications")
     const notificationId = uuidParam(id, "معرّف الإشعار غير صالح")
     const updated = await db
       .update(notifications)
@@ -232,7 +232,7 @@ export async function archiveNotification(id: string): Promise<NotificationActio
 /** حذف الإشعار وصورته من R2 (نفس المفتاح لا يُشارَك بين إشعارين لأن كل رفع بمفتاح جديد). */
 export async function deleteNotification(id: string): Promise<NotificationActionResult> {
   return run(async () => {
-    await assertManageAuthenticated()
+    await assertManagePermission("notifications")
     const notificationId = uuidParam(id, "معرّف الإشعار غير صالح")
     const [existing] = await db.select().from(notifications).where(eq(notifications.id, notificationId)).limit(1)
     if (!existing) throw new Error("الإشعار غير موجود.")

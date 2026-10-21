@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ArrowRight } from "lucide-react"
-import { isManageAuthed } from "@/lib/manage-auth"
+import { hasManagePermission } from "@/lib/manage-auth"
 import { getAdminPaymentAccounts } from "@/lib/admin"
 import { PaymentAccountsManager } from "../components/payment-accounts-manager"
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 // صفحة مستقلة لإدارة حسابات الدفع، إضافة إلى تبويب «حسابات الدفع» داخل اللوحة.
 // التحقق من الجلسة يتم هنا وأيضاً داخل كل Server Action (وليس على مستوى الواجهة فقط).
 export default async function ManagePaymentAccountsPage() {
-  if (!(await isManageAuthed())) {
+  if (!(await hasManagePermission("payment-accounts"))) {
     redirect("/manage/login")
   }
 

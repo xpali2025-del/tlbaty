@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { AdminUser } from "@/lib/manage-users"
+import { ROLES, ROLE_LABELS, ROLE_PRESETS, SCREENS, SCREEN_LABELS, type Role, type Screen } from "@/lib/permissions"
 import { saveUser, deleteUser, toggleUserActive } from "../actions"
 import { DeleteButton, SectionHeader } from "./shared"
 
@@ -94,13 +95,11 @@ export function UsersManager({
                   <p className="font-semibold" dir="ltr">
                     {u.username}
                   </p>
-                  <Badge variant={u.role === "admin" ? "default" : "secondary"}>
-                    {u.role === "admin" ? "مدير" : "محرّر"}
-                  </Badge>
+                  <Badge variant={u.role === "admin" ? "default" : "secondary"}>{ROLE_LABELS[u.role]}</Badge>
                   {isSelf ? <Badge variant="outline">أنت</Badge> : null}
                 </div>
                 <p className="truncate text-xs text-muted-foreground">
-                  {u.name || "بدون اسم معروض"}
+                  {u.name || "بدون اسم معروض"} · {u.permissions.length} شاشة
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -143,7 +142,8 @@ function UserDialog({
   onOpenChange: (v: boolean) => void
   user: AdminUser | null
 }) {
-  const [role, setRole] = useState<"admin" | "editor">(user?.role ?? "editor")
+  const [role, setRole] = useState<Role>(user?.role ?? "editor")
+  const [permissions, setPermissions] = useState<Screen[]>(user?.permissions ?? [...ROLE_PRESETS.editor])
   const [active, setActive] = useState<boolean>(user?.active ?? true)
   const [isPending, startTransition] = useTransition()
 
@@ -151,6 +151,7 @@ function UserDialog({
     e.preventDefault()
     const form = new FormData(e.currentTarget)
     form.set("role", role)
+    form.set("permissions", JSON.stringify(permissions))
     form.set("active", active ? "true" : "false")
     startTransition(async () => {
       try {
@@ -165,7 +166,7 @@ function UserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-w-md">
+      <DialogContent dir="rtl" className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{user ? "تعديل المستخدم" : "مستخدم جديد"}</DialogTitle>
           <DialogDescription>
@@ -210,13 +211,22 @@ function UserDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>الصلاحية</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as "admin" | "editor")}>
+              <Select
+                value={role}
+                onValueChange={(v) => {
+                  setRole(v as Role)
+                  setPermissions([...ROLE_PRESETS[v as Role]]) // الدور يملأ الصلاحيات الافتراضية ويمكن تعديلها بعده
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">مدير</SelectItem>
-                  <SelectItem value="editor">محرّر</SelectItem>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -227,6 +237,26 @@ function UserDialog({
                 <span className="text-sm text-muted-foreground">{active ? "مفعّل" : "معطّل"}</span>
               </div>
             </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>الشاشات المسموحة</Label>
+            <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+              {SCREENS.map((screen) => (
+                <label key={screen} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={permissions.includes(screen)}
+                    onChange={(e) =>
+                      setPermissions((prev) => (e.target.checked ? [...prev, screen] : prev.filter((p) => p !== screen)))
+                    }
+                  />
+                  {SCREEN_LABELS[screen]}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              تُفرض الصلاحيات على الخادم في كل عملية، لا بإخفاء الشاشة فقط. حساب المالك (من متغيرات البيئة) يملك كل الصلاحيات دائماً.
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
