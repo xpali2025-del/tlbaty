@@ -90,3 +90,16 @@ describe('proof retention setting', () => {
   })
 })
 
+describe('login bot number setting', () => {
+  it('saves digits only, tolerates formatting, clears when empty and rejects garbage', async () => {
+    await A.saveSettings(null, form({ name: 'x', ...both, loginBotNumber: '+967 777-000 000' }))
+    expect((await db.select().from(s.siteSettings))[0].loginBotNumber).toBe('967777000000')
+    for (const bad of ['abc', '12345', '9677770000001234567']) {
+      await expect(A.saveSettings(null, form({ name: 'x', ...both, loginBotNumber: bad }))).rejects.toThrow('رقم بوت الدخول')
+    }
+    expect((await db.select().from(s.siteSettings))[0].loginBotNumber).toBe('967777000000')
+    await A.saveSettings(null, form({ name: 'x', ...both }))
+    expect((await db.select().from(s.siteSettings))[0].loginBotNumber).toBeNull()
+  })
+})
+

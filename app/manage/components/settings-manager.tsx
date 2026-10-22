@@ -1,6 +1,6 @@
 "use client"
 
-import { useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { AdminSettings } from "@/lib/admin"
 import { SITE_CONFIG } from "@/lib/site"
-import { saveSettings } from "../actions"
+import { fetchWhatsappStatus, saveSettings } from "../actions"
+import type { WhatsappStatus } from "@/lib/whatsapp-status"
 import { ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 
@@ -146,6 +147,22 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">بوت واتساب لتسجيل دخول العملاء</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Field label="رقم البوت (أرقام دولية بلا + مثل 967777000000)">
+              <Input name="loginBotNumber" defaultValue={settings?.loginBotNumber ?? ""} dir="ltr" inputMode="numeric" placeholder="اتركه فارغاً لاستعمال WHATSAPP_BOT_NUMBER" />
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              هذا الرقم الذي يراسله العميل للدخول. عند حظر الرقم: اربط رقماً جديداً في خدمة البوت (امسح QR)، ثم اكتبه هنا واحفظ، فيسري فوراً دون إعادة نشر.
+              تغيير الرقم هنا لا يغيّر الرقم المربوط فعلياً في خدمة البوت.
+            </p>
+            <WhatsappStatusPanel />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base">صور إثبات الدفع</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -201,6 +218,88 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex flex-col gap-2">
       <Label>{label}</Label>
       {children}
+    </div>
+  )
+}
+
+
+const WORKER_LABELS: Record<WhatsappStatus["worker"], { text: string; cls: string; hint: string }> = {
+  ready: { text: "متصل ويعمل", cls: "bg-emerald-500/15 text-emerald-700", hint: "" },
+  not_ready: {
+    text: "الخدمة تعمل لكن واتساب غير مربوط",
+    cls: "bg-amber-500/15 text-amber-700",
+    hint: "انتهت الجلسة أو أُلغي الربط أو حُظر الرقم. أعد ربط الرقم (امسح QR من جديد) أو بدّل الرقم.",
+  },
+  unreachable: {
+    text: "لا يمكن الوصول إلى خدمة البوت",
+    cls: "bg-destructive/15 text-destructive",
+    hint: "الخدمة متوقفة أو الرابط WHATSAPP_WORKER_URL خاطئ. تأكد أنها تعمل على خادمها.",
+  },
+  unconfigured: {
+    text: "خدمة البوت غير مضبوطة",
+    cls: "bg-muted text-muted-foreground",
+    hint: "اضبط WHATSAPP_WORKER_URL و WHATSAPP_WORKER_TOKEN في بيئة الموقع.",
+  },
+}
+
+/** حالة البوت الحيّة: متصل؟ آخر دخول ناجح؟ تكشف الحظر قبل أن يشتكي العملاء. */
+function WhatsappStatusPanel() {
+  const [status, setStatus] = useState<WhatsappStatus | null>(null)
+  const [error, setError] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  const check = () =>
+    startTransition(async () => {
+      try {
+        setStatus(await fetchWhatsappStatus())
+        setError(false)
+      } catch {
+        setError(true)
+      }
+    })
+
+  useEffect(() => {
+    check()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const label = status ? WORKER_LABELS[status.worker] : null
+  const fmt = (iso: string | null) =>
+    iso ? new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short", numberingSystem: "latn" }).format(new Date(iso)) : "لم يحدث بعد"
+  return (
+    <div className="rounded-lg border p-3 text-sm" aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-bold">حالة البوت</span>
+        <Button type="button" size="sm" variant="outline" onClick={check} disabled={pending}>
+          {pending ? "جارٍ الفحص…" : "فحص الآن"}
+        </Button>
+      </div>
+      {error && <p className="mt-2 text-destructive">تعذّر فحص الحالة.</p>}
+      {status && label && (
+        <dl className="mt-3 grid gap-1.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-muted-foreground">الاتصال</dt>
+            <dd><span className={`rounded-full px-2 py-0.5 font-bold ${label.cls}`}>{label.text}</span></dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-muted-foreground">رقم البوت المعتمد</dt>
+            <dd dir="ltr" className="font-mono">
+              {status.botNumber ?? "غير مضبوط"}
+              {status.botNumber ? ` (${status.botNumberSource === "settings" ? "من الإعدادات" : "من المتغير"})` : ""}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-muted-foreground">آخر دخول ناجح عبر البوت</dt>
+            <dd>{fmt(status.lastLoginAt)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-muted-foreground">عمليات دخول آخر 24 ساعة</dt>
+            <dd>{status.logins24h}</dd>
+          </div>
+          {label.hint && <p className="mt-1 text-muted-foreground">{label.hint}</p>}
+          {!status.botNumber && <p className="mt-1 text-destructive">لا يوجد رقم بوت: زر الدخول بواتساب لن يعمل. اكتب الرقم أعلاه.</p>}
+        </dl>
+      )}
     </div>
   )
 }

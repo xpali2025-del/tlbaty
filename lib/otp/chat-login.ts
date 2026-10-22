@@ -3,7 +3,7 @@ import { randomBytes, randomInt, timingSafeEqual } from "node:crypto"
 import { and, eq, gt, isNull } from "drizzle-orm"
 import { cookies } from "next/headers"
 import { db } from "@/lib/db/client"
-import { loginChallenges } from "@/lib/db/store"
+import { loginChallenges, siteSettings } from "@/lib/db/store"
 import { hashSessionToken } from "./hash"
 
 export const CHALLENGE_COOKIE = "login_challenge"
@@ -22,9 +22,25 @@ function randomToken(): string {
   return out
 }
 
-/** رابط wa.me برسالة جاهزة تحمل رمز الطلب. رقم البوت من WHATSAPP_BOT_NUMBER (أرقام دولية فقط). */
-export function buildChatLink(token: string): string | null {
-  const number = (process.env.WHATSAPP_BOT_NUMBER ?? "").replace(/\D/g, "")
+/**
+ * رقم بوت الدخول: من إعدادات الموقع (لوحة الإدارة، يتغير فوراً عند الحظر) وإلا من WHATSAPP_BOT_NUMBER.
+ * يُقرأ من القاعدة مباشرة (لا كاش) فيسري التغيير على أول عميل بعد الحفظ.
+ */
+export async function getBotNumber(): Promise<{ number: string | null; source: "settings" | "env" | "none" }> {
+  try {
+    const [row] = await db.select({ n: siteSettings.loginBotNumber }).from(siteSettings).limit(1)
+    const saved = (row?.n ?? "").replace(/\D/g, "")
+    if (saved.length >= 8) return { number: saved, source: "settings" }
+  } catch {
+    // القاعدة غير متاحة: نرجع للمتغير حتى لا يتعطل الدخول بسبب قراءة الإعداد.
+  }
+  const env = (process.env.WHATSAPP_BOT_NUMBER ?? "").replace(/\D/g, "")
+  return env.length >= 8 ? { number: env, source: "env" } : { number: null, source: "none" }
+}
+
+/** رابط wa.me برسالة جاهزة تحمل رمز الطلب (رقم البوت أرقام دولية فقط). */
+export function buildChatLink(token: string, botNumber: string | null): string | null {
+  const number = (botNumber ?? "").replace(/\D/g, "")
   if (number.length < 8) return null
   return `https://wa.me/${number}?text=${encodeURIComponent(`رمز الدخول: ${token}`)}`
 }

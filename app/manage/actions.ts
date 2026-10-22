@@ -630,6 +630,10 @@ export async function saveSettings(_id: string | null, form: FormData) {
   const codEnabled = bool(form, "codEnabled")
   const transferEnabled = bool(form, "transferEnabled")
   const walletEnabled = bool(form, "walletEnabled")
+  // رقم بوت واتساب للدخول: أرقام دولية فقط (8 إلى 15)، والفارغ يعني استعمال متغير البيئة.
+  const botRaw = (str(form, "loginBotNumber") ?? "").replace(/[\s+()-]/g, "")
+  if (botRaw && !/^[0-9]{8,15}$/.test(botRaw)) throw new Error("رقم بوت الدخول: أرقام دولية فقط بلا رموز (مثل 967777000000)")
+  const loginBotNumber = botRaw || null
   // حذف صور الإثبات تلقائياً: غير مفعّل افتراضياً؛ عند التفعيل المدة بين 7 و365 يوماً.
   let proofRetentionDays: number | null = null
   if (bool(form, "proofRetentionEnabled")) {
@@ -662,6 +666,7 @@ export async function saveSettings(_id: string | null, form: FormData) {
     transferEnabled,
     walletEnabled,
     proofRetentionDays,
+    loginBotNumber,
     updatedAt: new Date(),
   }
 
@@ -788,4 +793,11 @@ export async function toggleUserActive(id: string, value: boolean) {
 /** اسم المستخدم الحالي — يُستخدم لمنع المستخدم من حذف حسابه أثناء الجلسة. */
 export async function getCurrentManageUser(): Promise<string | null> {
   return getManageSessionUser()
+}
+
+/** حالة بوت واتساب للدخول (للوحة الإعدادات). */
+export async function fetchWhatsappStatus() {
+  await assertManagePermission("settings")
+  const { getWhatsappStatus } = await import("@/lib/whatsapp-status")
+  return getWhatsappStatus()
 }
