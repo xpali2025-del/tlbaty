@@ -4,6 +4,7 @@ import { Header } from "@/components/header"
 import { getCurrentCustomer } from "@/lib/otp/session"
 import { countOrdersForCustomer } from "@/lib/otp/customer-orders"
 import { AccountActions } from "@/components/auth/account-actions"
+import { MarketingConsent } from "@/components/auth/marketing-consent"
 import { Phone, Hash, CalendarClock, LogIn, Package } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -84,6 +85,10 @@ export default async function AccountPage() {
           >
             رصيدي
           </Link>
+        </div>
+
+        <div className="mt-6">
+          <MarketingConsent initial={customer.marketingOptIn} />
         </div>
 
         <AccountActions />

@@ -13,6 +13,9 @@ export const customers = store.table('customers', {
   phone: text('phone').notNull().unique(),
   verified: boolean('verified').notNull().default(true),
   status: customerStatus('status').notNull().default('active'),
+  /** Customer agreed to receive promotional messages (cart/wishlist reminders, offers). Off by default; changed only by the customer. */
+  marketingOptIn: boolean('marketing_opt_in').notNull().default(false),
+  marketingOptInUpdatedAt: at('marketing_opt_in_updated_at'),
   createdAt: at('created_at').notNull().defaultNow(),
   lastLoginAt: at('last_login_at'),
 })

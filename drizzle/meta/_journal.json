@@ -71,6 +71,13 @@
       "when": 1792637725519,
       "tag": "0009_product_variants",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792639396571,
+      "tag": "0010_marketing_opt_in",
+      "breakpoints": true
     }
   ]
 }
