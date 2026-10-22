@@ -11,6 +11,7 @@ import {
   currencies,
   paymentAccounts,
   productColors,
+  productVariants,
   productImages,
   products,
   reviews,
@@ -93,10 +94,17 @@ async function loadProducts(where?: SQL): Promise<Product[]> {
 
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.uuid)
-  const [images, colors] = await Promise.all([
+  const [images, colors, variants] = await Promise.all([
     db.select().from(productImages).where(inArray(productImages.productId, ids)).orderBy(asc(productImages.sortOrder)),
     db.select().from(productColors).where(inArray(productColors.productId, ids)).orderBy(asc(productColors.sortOrder)),
+    db.select().from(productVariants).where(inArray(productVariants.productId, ids)),
   ])
+  const variantsByProduct = new Map<string, { color: string; size: string; stock: number }[]>()
+  for (const v of variants) {
+    const list = variantsByProduct.get(v.productId) ?? []
+    list.push({ color: v.color, size: v.size, stock: v.stock })
+    variantsByProduct.set(v.productId, list)
+  }
   const imagesByProduct = new Map<string, string[]>()
   for (const img of images) {
     const list = imagesByProduct.get(img.productId) ?? []
@@ -115,6 +123,7 @@ async function loadProducts(where?: SQL): Promise<Product[]> {
     image: resolveImageUrl(mainImageKey),
     images: imagesByProduct.get(uuid) ?? [],
     colors: colorsByProduct.get(uuid) ?? [],
+    variantStock: variantsByProduct.get(uuid),
     subcategory: nullToUndefined(subcategory),
     brand: nullToUndefined(brand),
     oldPrice: nullToUndefined(oldPrice),

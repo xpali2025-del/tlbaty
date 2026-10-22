@@ -16,6 +16,8 @@ export interface Product {
   colors: { name: string; hex: string }[]
   sizes: string[]
   stock: number
+  /** مخزون كل لون/مقاس إن كان المنتج يُتتبَّع به (وإلا يُستعمل stock). */
+  variantStock?: { color: string; size: string; stock: number }[]
   isNew?: boolean
   isBestseller?: boolean
   badge?: string
@@ -210,6 +212,7 @@ export function toCardProduct(p: Product): Product {
     colors: p.colors,
     sizes: p.sizes,
     stock: p.stock,
+    variantStock: p.variantStock,
     isNew: p.isNew,
     isBestseller: p.isBestseller,
     tags: p.tags,

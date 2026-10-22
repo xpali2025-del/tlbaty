@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { PgTable } from 'drizzle-orm/pg-core'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
@@ -52,6 +52,51 @@ beforeEach(() => vi.clearAllMocks())
 
 const productForm = (over: Record<string, string | string[]> = {}) =>
   form({ name: 'منتج اختبار', categoryId, price: '100', slug: 'test-product', ...over })
+
+describe('saveProduct with stock per colour and size', () => {
+  const colors = JSON.stringify([{ name: 'أحمر', hex: '#FF0000' }, { name: 'أزرق', hex: '#0000FF' }])
+  const variantsOf = async (id: string) => (await rows(s.productVariants)).filter((v) => v.productId === id).map((v) => `${v.color}|${v.size}|${v.stock}`).sort()
+  const rowsInput = (v: { color: string; size: string; stock: number; base?: number }[]) => JSON.stringify(v)
+
+  it('stores a quantity per combination, mirrors the total, and validates against the product colours and sizes', async () => {
+    await A.saveProduct(null, productForm({ slug: 'variant-product', colors, sizes: ['S', 'M'], trackVariants: 'true', variants: rowsInput([
+      { color: 'أحمر', size: 'S', stock: 3 }, { color: 'أحمر', size: 'M', stock: 0 }, { color: 'أزرق', size: 'S', stock: 5 }, { color: 'أزرق', size: 'M', stock: 2 },
+    ]) }))
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'variant-product')
+    expect(await variantsOf(p.id)).toEqual(['أحمر|M|0', 'أحمر|S|3', 'أزرق|M|2', 'أزرق|S|5'])
+    expect(p.stock).toBe(10)
+
+    const bad = (v: object[]) => A.saveProduct(p.id, productForm({ slug: 'variant-product', colors, sizes: ['S', 'M'], trackVariants: 'true', variants: rowsInput(v as never) }))
+    await expect(bad([{ color: 'أخضر', size: 'S', stock: 1 }])).rejects.toThrow('ليس من ألوان')
+    await expect(bad([{ color: 'أحمر', size: 'XL', stock: 1 }])).rejects.toThrow('ليس من مقاسات')
+    await expect(bad([{ color: 'أحمر', size: 'S', stock: -1 }])).rejects.toThrow('عدداً صحيحاً')
+    await expect(bad([{ color: 'أحمر', size: 'S', stock: 1 }, { color: 'أحمر', size: 'S', stock: 2 }])).rejects.toThrow('مكررة')
+    await expect(bad([])).rejects.toThrow('أضف ألواناً')
+    expect(await variantsOf(p.id)).toHaveLength(4)
+  })
+
+  it('applies edits as a delta so orders placed while the form was open are not undone', async () => {
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'variant-product')
+    // while the admin edits (saw red/S = 3), a customer buys 2 of red/S
+    await db.update(s.productVariants).set({ stock: 1 }).where(sql`${s.productVariants.productId} = ${p.id} and color = 'أحمر' and size = 'S'`)
+    await A.saveProduct(p.id, productForm({ slug: 'variant-product', colors, sizes: ['S', 'M'], trackVariants: 'true', variants: rowsInput([
+      { color: 'أحمر', size: 'S', stock: 4, base: 3 }, // +1 over what the admin saw
+      { color: 'أحمر', size: 'M', stock: 0, base: 0 }, { color: 'أزرق', size: 'S', stock: 5, base: 5 }, { color: 'أزرق', size: 'M', stock: 2, base: 2 },
+    ]) }))
+    expect(await variantsOf(p.id)).toContain('أحمر|S|2')
+    expect((await rows(s.products)).find((x) => x.id === p.id)!.stock).toBe(9)
+  })
+
+  it('removing a colour drops its rows, and turning tracking off returns to the single stock', async () => {
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'variant-product')
+    await A.saveProduct(p.id, productForm({ slug: 'variant-product', colors: JSON.stringify([{ name: 'أزرق', hex: '#0000FF' }]), sizes: ['S', 'M'], trackVariants: 'true', variants: rowsInput([
+      { color: 'أزرق', size: 'S', stock: 5, base: 5 }, { color: 'أزرق', size: 'M', stock: 2, base: 2 },
+    ]) }))
+    expect(await variantsOf(p.id)).toEqual(['أزرق|M|2', 'أزرق|S|5'])
+    await A.saveProduct(p.id, productForm({ slug: 'variant-product', colors, sizes: ['S', 'M'], stock: '6', stockBase: '7' }))
+    expect(await variantsOf(p.id)).toEqual([])
+  })
+})
 
 describe('saveProduct', () => {
   it('creates a product with a generated number, defaults, images and colors, then invalidates the store cache', async () => {

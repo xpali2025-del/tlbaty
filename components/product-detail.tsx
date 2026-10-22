@@ -1,5 +1,6 @@
 "use client"
 
+import { availableFor, colorInStock, firstAvailable, lowStockMessage, sizeInStock } from "@/lib/variant-stock"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { SafeImage } from "@/components/safe-image"
@@ -37,9 +38,25 @@ export function ProductDetail({
   brandSlug?: string
 }) {
   const [selectedImage, setSelectedImage] = useState(0)
-  const [selectedColor, setSelectedColor] = useState(product.colors?.[0]?.name ?? "")
-  const [selectedSize, setSelectedSize] = useState(product.sizes?.[0] ?? "")
+  // أول تركيبة (لون، مقاس) متوفرة تُحدَّد افتراضياً حتى لا يبدأ العميل بخيار نفد.
+  const initial = firstAvailable(product)
+  const [selectedColor, setSelectedColor] = useState(initial.color)
+  const [selectedSize, setSelectedSize] = useState(initial.size)
   const [quantity, setQuantity] = useState(1)
+
+  const available = availableFor(product, selectedColor, selectedSize)
+  const outOfStock = available <= 0
+  const effectiveQuantity = Math.min(quantity, Math.max(1, available))
+  const stockMessage = lowStockMessage(available)
+
+  const chooseColor = (name: string) => {
+    setSelectedColor(name)
+    // المقاس المحدد قد لا يتوفر بهذا اللون: ننتقل لأول مقاس متوفر له.
+    if (!sizeInStock(product, name, selectedSize)) {
+      const next = firstAvailable(product, name)
+      if (next.color === name) setSelectedSize(next.size)
+    }
+  }
 
   const { addItem } = useCart()
   const { isInWishlist, toggleItem } = useWishlist()
@@ -72,7 +89,7 @@ export function ProductDetail({
       image: images[0] || product.image,
       color: selectedColor,
       size: selectedSize,
-      quantity,
+      quantity: effectiveQuantity,
     })
   }
 
@@ -80,7 +97,7 @@ export function ProductDetail({
     addSelectedProduct()
     toast({
       title: "تمت الإضافة إلى السلة",
-      description: `${product.name} — الكمية: ${quantity}`,
+      description: `${product.name} — الكمية: ${effectiveQuantity}`,
     })
   }
 
@@ -212,13 +229,14 @@ export function ProductDetail({
                   <button
                     type="button"
                     key={color.name}
-                    onClick={() => setSelectedColor(color.name)}
-                    className={`h-11 w-11 rounded-full ring-2 ring-offset-2 ring-offset-background transition-all ${
+                    onClick={() => chooseColor(color.name)}
+                    disabled={!colorInStock(product, color.name)}
+                    className={`relative h-11 w-11 rounded-full ring-2 ring-offset-2 ring-offset-background transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
                       selectedColor === color.name ? "ring-primary" : "ring-transparent"
                     }`}
                     style={{ backgroundColor: color.hex }}
-                    aria-label={`اختيار اللون ${color.name}`}
-                    title={color.name}
+                    aria-label={`اختيار اللون ${color.name}${colorInStock(product, color.name) ? "" : " (نفد)"}`}
+                    title={colorInStock(product, color.name) ? color.name : `${color.name} — نفد`}
                   />
                 ))}
               </div>
@@ -235,7 +253,8 @@ export function ProductDetail({
                     type="button"
                     key={size}
                     onClick={() => setSelectedSize(size)}
-                    className={`h-10 rounded-full border px-4 text-sm font-medium transition-all ${
+                    disabled={!sizeInStock(product, selectedColor, size)}
+                    className={`h-11 rounded-full border px-4 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:text-muted-foreground disabled:line-through disabled:opacity-50 ${
                       selectedSize === size
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-border bg-background text-foreground hover:border-primary"
@@ -254,23 +273,29 @@ export function ProductDetail({
             <div className="inline-flex items-center rounded-full border border-border">
               <button
                 type="button"
-                onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-                disabled={quantity <= 1}
+                onClick={() => setQuantity(Math.max(1, effectiveQuantity - 1))}
+                disabled={effectiveQuantity <= 1}
                 className="flex h-10 w-10 items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="تقليل الكمية"
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="w-10 text-center font-medium">{quantity}</span>
+              <span className="w-10 text-center font-medium">{effectiveQuantity}</span>
               <button
                 type="button"
-                onClick={() => setQuantity((current) => current + 1)}
-                className="flex h-10 w-10 items-center justify-center transition-colors hover:text-primary"
+                onClick={() => setQuantity(Math.min(effectiveQuantity + 1, Math.max(1, available)))}
+                disabled={effectiveQuantity >= available}
+                className="flex h-10 w-10 items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="زيادة الكمية"
               >
                 <Plus className="h-4 w-4" />
               </button>
             </div>
+            {stockMessage ? (
+              <p className={`mt-2 text-sm font-medium ${outOfStock ? "text-destructive" : "text-amber-600"}`} role="status">
+                {stockMessage}
+              </p>
+            ) : null}
           </div>
 
           {/* أزرار الإجراء */}
@@ -278,7 +303,8 @@ export function ProductDetail({
             <button
               type="button"
               onClick={handleAddToCart}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border-2 border-primary bg-background py-3 font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+              disabled={outOfStock}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border-2 border-primary bg-background py-3 font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-background disabled:hover:text-primary"
             >
               <ShoppingBag className="h-5 w-5" />
               إضافة للسلة
@@ -286,9 +312,10 @@ export function ProductDetail({
             <button
               type="button"
               onClick={handleDirectOrder}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-primary py-3 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+              disabled={outOfStock}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-primary py-3 font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              طلب مباشر
+              {outOfStock ? "نفد المخزون" : "طلب مباشر"}
             </button>
           </div>
 

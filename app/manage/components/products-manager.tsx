@@ -1,5 +1,6 @@
 "use client"
 
+import { VariantStockEditor, variantCombos, variantKey } from "./variant-stock-editor"
 import { useMemo, useState, useTransition } from "react"
 import Image from "next/image"
 import { Pencil, PackageX, Star, Sparkles } from "lucide-react"
@@ -186,6 +187,12 @@ function ProductDialog({
   const [colors, setColors] = useState<AdminColor[]>(product?.colors ?? [])
   const [sizes, setSizes] = useState<string[]>(product?.sizes ?? [])
   const [keywords, setKeywords] = useState<string[]>(product?.keywords ?? [])
+  const [trackVariants, setTrackVariants] = useState((product?.variants?.length ?? 0) > 0)
+  const [variantValues, setVariantValues] = useState<Record<string, string>>(
+    Object.fromEntries((product?.variants ?? []).map((v) => [variantKey(v.color, v.size), String(v.stock)])),
+  )
+  // ما رآه المدير عند فتح النموذج، لتطبيق التغيير كفرق (لا يمسح خصم طلبات جرت أثناء التعديل).
+  const savedVariantStock = new Map((product?.variants ?? []).map((v) => [variantKey(v.color, v.size), v.stock]))
   const [isPending, startTransition] = useTransition()
 
   const selectedCategory = categories.find((c) => c._id === categoryId)
@@ -217,6 +224,15 @@ function ProductDialog({
     form.set("colors", JSON.stringify(colors))
     form.set("sizes", JSON.stringify(sizes))
     form.set("keywords", JSON.stringify(keywords))
+    if (trackVariants) {
+      const rows = variantCombos(colors, sizes).map((c) => ({
+        ...c,
+        stock: Math.max(0, Math.trunc(Number(variantValues[variantKey(c.color, c.size)])) || 0),
+        base: savedVariantStock.get(variantKey(c.color, c.size)),
+      }))
+      form.set("trackVariants", "true")
+      form.set("variants", JSON.stringify(rows))
+    }
 
     startTransition(async () => {
       try {
@@ -257,7 +273,8 @@ function ProductDialog({
               <Input name="oldPrice" type="number" step="0.01" defaultValue={product?.oldPrice ?? ""} />
             </Field>
             <Field label="المخزون">
-              <Input name="stock" type="number" min={0} defaultValue={product?.stock ?? 0} />
+              <Input name="stock" type="number" min={0} defaultValue={product?.stock ?? 0} disabled={trackVariants} />
+              {trackVariants ? <p className="text-xs text-muted-foreground">يُحسب من مخزون الألوان والمقاسات أدناه.</p> : null}
             {product ? <input type="hidden" name="stockBase" value={product.stock ?? 0} /> : null}
             </Field>
           </div>
@@ -340,6 +357,17 @@ function ProductDialog({
           </div>
 
           <ColorsEditor colors={colors} onChange={setColors} />
+
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={trackVariants} onChange={(e) => setTrackVariants(e.target.checked)} />
+              تحديد المخزون لكل لون ومقاس
+            </label>
+            <p className="text-xs text-muted-foreground">
+              فعّلها لتحديد الكمية المتوفرة من كل تركيبة (مثلاً: أسود - M = 3). يمنع المتجر بيع تركيبة نفدت ولو بقي مخزون في غيرها.
+            </p>
+            {trackVariants ? <VariantStockEditor colors={colors} sizes={sizes} values={variantValues} onChange={setVariantValues} /> : null}
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="عنوان SEO">

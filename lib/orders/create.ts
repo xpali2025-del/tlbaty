@@ -12,16 +12,12 @@ import { deletePaymentProof, newProofKey, putPaymentProof } from "@/lib/storage/
 import { CACHE_TAGS, productTag } from "@/lib/cache-tags"
 import { uniqueViolation } from "@/lib/manage-helpers"
 import { auditBlocked, chargeOrder } from "@/lib/wallet/ledger"
+import { deductVariantStock, OutOfStockError, syncProductStock } from "./variants"
 import type { PricingProduct, PricingResult } from "./pricing"
 
 export class ProofStorageError extends Error {}
 
-/** الكمية المطلوبة أكبر من المخزون المتاح؛ `productName` للعرض للعميل. */
-export class OutOfStockError extends Error {
-  constructor(readonly productName: string) {
-    super(`out of stock: ${productName}`)
-  }
-}
+export { OutOfStockError }
 
 /** المنتجات بالسعر الحالي من قاعدة البيانات مباشرة (بلا كاش) — مصدر السعر الوحيد للطلب. */
 export async function loadPricingProducts(productNumbers: string[]): Promise<Map<string, PricingProduct>> {
@@ -191,7 +187,15 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
         const prev = wanted.get(l.productId)
         wanted.set(l.productId, { qty: (prev?.qty ?? 0) + l.quantity, name: l.name })
       }
+      // منتجات مخزونها لكل لون/مقاس: يُخصم من صف المتغيّر المطلوب، ثم يُضبط المخزون الإجمالي على مجموع المتغيّرات.
+      const variantLines = pricing.lines.flatMap((l) => {
+        const productUuid = uuidByNumber.get(l.productId)
+        return productUuid ? [{ productUuid, name: l.name, color: l.color, size: l.size, quantity: l.quantity }] : []
+      })
+      const tracked = await deductVariantStock(tx, variantLines)
+      soldSlugs.push(...(await syncProductStock(tx, [...tracked])))
       for (const [number, { qty, name }] of [...wanted].sort(([a], [b]) => a.localeCompare(b))) {
+        if (tracked.has(uuidByNumber.get(number) ?? "")) continue
         const updated = await tx
           .update(products)
           .set({ stock: sql`${products.stock} - ${qty}` })
