@@ -1,13 +1,17 @@
+const resizing = process.env.IMAGE_RESIZING === 'cloudflare'
 const r2Url = process.env.R2_PUBLIC_URL ? new URL(process.env.R2_PUBLIC_URL) : null
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    unoptimized: true,
+    // IMAGE_RESIZING=cloudflare: الصور تُصغَّر عبر Cloudflare Image Resizing على نطاق R2 (lib/image-loader.ts).
+    // بدونه تُخدَم الصور كما هي (لا تحسين من Next لأن الصور على R2 لا على Vercel).
+    ...(resizing ? { loader: 'custom', loaderFile: './lib/image-loader.ts' } : { unoptimized: true }),
     remotePatterns: [
       ...(r2Url ? [{ protocol: r2Url.protocol.replace(':', ''), hostname: r2Url.hostname }] : []),
     ],
   },
+  env: { NEXT_PUBLIC_IMAGE_RESIZING: resizing ? 'cloudflare' : '' },
   async headers() {
     const common = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
