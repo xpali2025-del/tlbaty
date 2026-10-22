@@ -19,6 +19,7 @@ import { planDistribution, type DistributionPlan } from "@/lib/distribution"
 import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZE } from "@/lib/admin-orders"
 import { canTransitionPayment, initialPaymentStatus, isPaymentStatus, type PaymentStatus } from "@/lib/payment"
 import { deletePaymentProof } from "@/lib/storage/proofs"
+import { refundOrder } from "@/lib/wallet/ledger"
 
 // ============================================
 // إجراءات إدارة الطلبات على PostgreSQL. كل تغيير حالة يحدث داخل معاملة تقفل صف الطلب
@@ -86,7 +87,11 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
 
     const restoredSlugs: string[] = []
     await db.transaction(async (tx) => {
-      const [current] = await tx.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId)).for("update")
+      const [current] = await tx
+        .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod, paymentStatus: orders.paymentStatus })
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .for("update")
       if (!current) throw new Error("الطلب غير موجود.")
       const from = normalizeOrderStatus(current.status)
       if (from === next) throw new Error("الطلب في هذه الحالة أصلاً.")
@@ -99,7 +104,28 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
         .set({ status: next, updatedAt: now, ...(next === "delivered" ? { deliveredAt: now } : {}) })
         .where(eq(orders.id, orderId))
       // إلغاء الطلب أو إرجاعه يعيد المخزون (الحالتان نهائيتان فلا يتكرر الإرجاع).
-      if (next === "cancelled" || next === "returned") restoredSlugs.push(...(await restoreStock(tx, orderId)))
+      if (next === "cancelled" || next === "returned") {
+        restoredSlugs.push(...(await restoreStock(tx, orderId)))
+        // ما دُفع من الرصيد يعود للمحفظة تلقائياً (مرة واحدة) ويُسجَّل في سجل الدفع.
+        if (current.paymentMethod === "wallet") {
+          const refunded = await refundOrder(tx, {
+            orderId,
+            orderNumber: current.orderNumber,
+            actor: admin,
+            reason: next === "cancelled" ? "إلغاء الطلب" : "إرجاع الطلب",
+          })
+          if (refunded !== null) {
+            await tx.update(orders).set({ paymentStatus: "refunded" }).where(eq(orders.id, orderId))
+            await tx.insert(orderPaymentStatusHistory).values({
+              orderId,
+              status: "refunded",
+              changedAt: now,
+              changedBy: admin,
+              note: "أُعيد المبلغ إلى رصيد العميل",
+            })
+          }
+        }
+      }
       await tx.insert(orderStatusHistory).values({
         orderId,
         fromStatus: from,
@@ -317,8 +343,16 @@ export async function deleteOrder(id: string) {
   const [proof] = await db.select().from(orderPaymentProofs).where(eq(orderPaymentProofs.orderId, orderId)).limit(1)
   let slugs: string[] = []
   const deleted = await db.transaction(async (tx) => {
-    const [current] = await tx.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId)).for("update")
+    const [current] = await tx
+      .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .for("update")
     if (!current) return false
+    // طلب مدفوع من الرصيد ما زال مفتوحاً: يُعاد المبلغ لصاحبه قبل الحذف (لا يضيع رصيد العميل).
+    if (current.paymentMethod === "wallet" && isOpenOrderStatus(normalizeOrderStatus(current.status))) {
+      await refundOrder(tx, { orderId, orderNumber: current.orderNumber, actor: (await getManageSessionUser()) ?? "مدير", reason: "حذف الطلب" })
+    }
     // حذف طلب مفتوح (لم يُسلَّم ولم يُلغَ) يعيد وحداته للمخزون؛ المسلَّم والملغي/المُرجَع لا يُعاد لهما شيء هنا.
     if (isOpenOrderStatus(normalizeOrderStatus(current.status))) slugs = await restoreStock(tx, orderId)
     await tx.delete(orders).where(eq(orders.id, orderId))

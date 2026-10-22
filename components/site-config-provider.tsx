@@ -15,7 +15,7 @@ const FALLBACK: PublicSiteConfig = {
   social: { ...SITE_CONFIG.social, x: "", youtube: "", snapchat: "", telegram: "" },
   footer: { ...SITE_CONFIG.footer },
   logoUrl: null,
-  payments: { cashOnDelivery: true, manualTransfer: true },
+  payments: { cashOnDelivery: true, manualTransfer: true, wallet: true },
 }
 
 const SiteConfigContext = createContext<PublicSiteConfig>(FALLBACK)

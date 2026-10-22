@@ -6,6 +6,7 @@ import { isProofStorageConfigured } from "@/lib/env"
 import { findOrderByIdempotencyKey, insertOrder, loadPricingProducts, OutOfStockError, parseIdempotencyKey, ProofStorageError } from "@/lib/orders/create"
 import { computeOrderPricing, priceChanged } from "@/lib/orders/pricing"
 import { normalizeInternationalPhone, normalizeSenderPhone } from "@/lib/phone"
+import { isValidSenderName, isValidTransferReference } from "@/lib/payment-input"
 import { getCurrentCustomer } from "@/lib/otp/session"
 import {
   isPaymentMethod,
@@ -18,6 +19,7 @@ import {
   prepareEncryptedPaymentProof,
   type PaymentProofPayload,
 } from "@/lib/payment-proof"
+import { WalletError } from "@/lib/wallet/rules"
 
 export const runtime = "nodejs"
 
@@ -68,22 +70,6 @@ function mapsUrl(lat: number, lng: number): string {
 
 function fail(error: string, status: number, message?: string) {
   return NextResponse.json({ ok: false, error, ...(message ? { message } : {}) }, { status })
-}
-
-/** تحقّق اسم مرسل الحوالة على الخادم (لا نثق بتحقق الواجهة). */
-function isValidSenderName(value: string): boolean {
-  const trimmed = value.replace(/\s+/g, " ").trim()
-  if (trimmed.length < 5 || trimmed.length > 80) return false
-  if (trimmed.split(" ").filter((w) => w.length >= 2).length < 2) return false
-  return /^[\p{L}\s'.\-]+$/u.test(trimmed)
-}
-
-/** تحقّق رقم الحوالة — يبقى نصاً ولا يُحوَّل إلى Number. */
-function isValidTransferReference(value: string): boolean {
-  if (value.length < 4 || value.length > 40) return false
-  const digits = value.replace(/[^\d٠-٩۰-۹]/g, "")
-  if (digits.length < 4) return false
-  return /^[\d٠-٩۰-۹A-Za-z\-/ ]+$/.test(value)
 }
 
 export async function POST(req: Request) {
@@ -194,7 +180,7 @@ export async function POST(req: Request) {
 
   // طرق الدفع المفعّلة من لوحة الإدارة تُفرض هنا أيضاً (لا يكفي إخفاؤها في الواجهة).
   const { payments } = await getSiteConfig()
-  if ((paymentMethod === "cash_on_delivery" && !payments.cashOnDelivery) || (paymentMethod === "manual_transfer" && !payments.manualTransfer)) {
+  if ((paymentMethod === "cash_on_delivery" && !payments.cashOnDelivery) || (paymentMethod === "manual_transfer" && !payments.manualTransfer) || (paymentMethod === "wallet" && !payments.wallet)) {
     return fail("PAYMENT_METHOD_DISABLED", 400, "طريقة الدفع هذه غير متاحة حالياً. اختر طريقة دفع أخرى.")
   }
 
@@ -320,6 +306,10 @@ export async function POST(req: Request) {
     }
   }
 
+  if (paymentMethod === "wallet" && pricing.base.total <= 0) {
+    return fail("INVALID_PAYMENT_METHOD", 400, "الدفع من الرصيد غير متاح لهذا الطلب.")
+  }
+
   const clientTotals = {
     total: num(body.total),
     subtotal: num(body.subtotal),
@@ -374,6 +364,10 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
+    if (error instanceof WalletError) {
+      // الرصيد/التجميد/التهدئة/السقف: رسالة واضحة، والطلب والمخزون تراجعا كاملين.
+      return fail(`WALLET_${error.code}`, error.code === "INSUFFICIENT" ? 402 : 403, error.message)
+    }
     if (error instanceof OutOfStockError) {
       return fail("OUT_OF_STOCK", 409, `الكمية المطلوبة من "${error.productName}" غير متوفرة حالياً. عدّل الكمية أو أزل المنتج من السلة.`)
     }

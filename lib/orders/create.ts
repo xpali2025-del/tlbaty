@@ -11,6 +11,7 @@ import type { PaymentProofPayload } from "@/lib/payment-proof"
 import { deletePaymentProof, newProofKey, putPaymentProof } from "@/lib/storage/proofs"
 import { CACHE_TAGS, productTag } from "@/lib/cache-tags"
 import { uniqueViolation } from "@/lib/manage-helpers"
+import { auditBlocked, chargeOrder } from "@/lib/wallet/ledger"
 import type { PricingProduct, PricingResult } from "./pricing"
 
 export class ProofStorageError extends Error {}
@@ -217,12 +218,17 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
         })),
       )
 
+      // الدفع من الرصيد: خصم ذري داخل نفس المعاملة — إن فشل أي شيء بعده يتراجع الخصم مع الطلب والمخزون.
+      if (payment.method === "wallet") {
+        await chargeOrder(tx, { customerId: input.customer.id, orderId, orderNumber, amountBase: pricing.base.total })
+      }
+
       await tx.insert(orderPaymentStatusHistory).values({
         orderId,
         status: paymentStatus,
         changedAt: now,
         changedBy: "النظام",
-        note: "الحالة الابتدائية عند إنشاء الطلب",
+        note: payment.method === "wallet" ? "دُفع من رصيد المحفظة عند إنشاء الطلب" : "الحالة الابتدائية عند إنشاء الطلب",
       })
 
       if (proofKey && payment.proof) {
@@ -244,6 +250,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
     return created
   } catch (error) {
     if (proofKey) await deletePaymentProof(proofKey).catch(() => {})
+    await auditBlocked(error)
     // طلبان متزامنان بنفس المفتاح: الثاني يفشل بتفرّد المفتاح (والمعاملة تراجعت بما فيها المخزون)،
     // فنعيد الطلب الذي نجح بدل خطأ.
     if (input.idempotencyKey && uniqueViolation(error)?.includes("idempotency")) {

@@ -119,6 +119,7 @@ export const siteSettings = store.table('site_settings', {
   secondaryPhone: text('secondary_phone'),
   codEnabled: boolean('cod_enabled').notNull().default(true),
   transferEnabled: boolean('transfer_enabled').notNull().default(true),
+  walletEnabled: boolean('wallet_enabled').notNull().default(true),
   copyright: text('copyright'),
   updatedAt: timestamps().updatedAt,
 }, (t) => [check('site_settings_singleton', sql`${t.id} = 1`)])

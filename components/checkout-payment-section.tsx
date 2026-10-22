@@ -148,8 +148,10 @@ export function PaymentSection({
   onChange,
   formattedTotal,
   encryptionReady,
+  wallet,
   errors,
 }: {
+  wallet?: { balance: number; frozen: boolean; formattedBalance: string; enough: boolean } | null
   accounts: PaymentAccount[]
   value: PaymentSelection
   onChange: (next: PaymentSelection) => void
@@ -182,6 +184,14 @@ export function PaymentSection({
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [value.proofFile])
+
+  const walletVisible = payments.wallet && !!wallet
+  const walletUsable = walletVisible && !wallet!.frozen && wallet!.enough
+  // رصيد لا يكفي (تغيّرت السلة مثلاً) بعد اختيار الرصيد: نعود للدفع عند الاستلام بدل إرسال طلب سيُرفض.
+  useEffect(() => {
+    if (value.method === "wallet" && wallet && !walletUsable) onChange({ ...EMPTY_PAYMENT_SELECTION, method: payments.cashOnDelivery ? "cash_on_delivery" : "manual_transfer" })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletUsable])
 
   // إن عُطّلت طريقة من لوحة الإدارة وكانت هي المحددة، ننتقل للطريقة المتاحة تلقائياً.
   useEffect(() => {
@@ -269,7 +279,7 @@ export function PaymentSection({
         طريقة الدفع
       </h2>
 
-      {!payments.cashOnDelivery && !payments.manualTransfer && (
+      {!payments.cashOnDelivery && !payments.manualTransfer && !walletVisible && (
         <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           لا توجد طريقة دفع متاحة حالياً. تواصل معنا لإتمام طلبك.
         </p>
@@ -278,12 +288,30 @@ export function PaymentSection({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="طريقة الدفع">
         {payments.cashOnDelivery && (
           <MethodCard
-            selected={!transfer}
+            selected={value.method === "cash_on_delivery"}
             onSelect={chooseCashOnDelivery}
             icon={<Banknote className="h-5 w-5" aria-hidden="true" />}
             title="الدفع عند الاستلام"
             description="ادفع قيمة طلبك نقداً عند وصوله إليك."
             chip="بدون دفع مسبق"
+          />
+        )}
+        {walletVisible && (
+          <MethodCard
+            selected={value.method === "wallet"}
+            disabled={!walletUsable}
+            onSelect={() => onChange({ ...EMPTY_PAYMENT_SELECTION, method: "wallet" })}
+            icon={<Wallet className="h-5 w-5" aria-hidden="true" />}
+            title="الدفع من الرصيد"
+            description={
+              wallet!.frozen
+                ? "محفظتك مجمّدة مؤقتاً. تواصل مع خدمة العملاء."
+                : wallet!.enough
+                  ? `رصيدك ${wallet!.formattedBalance} — يُخصم المبلغ فوراً ويُؤكَّد طلبك.`
+                  : `رصيدك ${wallet!.formattedBalance} لا يكفي لهذا الطلب.`
+            }
+            chip={wallet!.enough && !wallet!.frozen ? "دفع فوري" : "اشحن رصيدك"}
+            href={!wallet!.enough && !wallet!.frozen ? "/account/wallet" : undefined}
           />
         )}
         {payments.manualTransfer && (
@@ -590,7 +618,11 @@ function MethodCard({
   title,
   description,
   chip,
+  disabled,
+  href,
 }: {
+  disabled?: boolean
+  href?: string
   selected: boolean
   onSelect: () => void
   icon: React.ReactNode
@@ -603,9 +635,17 @@ function MethodCard({
       type="button"
       role="radio"
       aria-checked={selected}
-      onClick={onSelect}
+      aria-disabled={disabled || undefined}
+      onClick={() => {
+        if (disabled) {
+          if (href) window.location.assign(href)
+          return
+        }
+        onSelect()
+      }}
       className={cn(
         "flex items-start gap-3 rounded-xl border p-4 text-right transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        disabled && "opacity-70",
         selected ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/30" : "border-border hover:border-primary/40 hover:bg-muted/40",
       )}
     >

@@ -4,7 +4,7 @@ export const orderStatus = store.enum('order_status', [
   'new', 'confirmed', 'processing', 'ready', 'assigned',
   'on_the_way', 'delivered', 'failed', 'cancelled', 'returned',
 ])
-export const paymentMethod = store.enum('payment_method', ['cash_on_delivery', 'manual_transfer'])
+export const paymentMethod = store.enum('payment_method', ['cash_on_delivery', 'manual_transfer', 'wallet'])
 export const paymentStatus = store.enum('payment_status', [
   'pending_on_delivery', 'pending_verification', 'verified', 'rejected', 'paid', 'refunded', 'cancelled',
 ])
@@ -21,3 +21,7 @@ export const notificationStatus = store.enum('notification_status', ['draft', 'p
 export const notificationPriority = store.enum('notification_priority', ['normal', 'important'])
 export const linkPlacement = store.enum('link_placement', ['nav', 'footer'])
 export const shippingIcon = store.enum('shipping_icon', ['express', 'standard', 'pickup'])
+export const walletTxnKind = store.enum('wallet_txn_kind', [
+  'topup', 'order_payment', 'order_refund', 'admin_credit', 'admin_debit',
+])
+export const walletTopupStatus = store.enum('wallet_topup_status', ['pending', 'approved', 'rejected', 'cancelled'])
