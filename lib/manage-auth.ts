@@ -2,7 +2,7 @@ import "server-only"
 
 import { cookies } from "next/headers"
 import { createHash, createHmac, timingSafeEqual } from "node:crypto"
-import { findUserByUsername, verifyDummyPassword, verifyStoredUser } from "@/lib/manage-users"
+import { findUserByUsername, verifyStoredUser } from "@/lib/manage-users"
 import { SCREENS, SCREEN_LABELS, type Screen } from "@/lib/permissions"
 
 // ============================================

@@ -85,6 +85,18 @@ describe('OTP generation and verification', () => {
     expect(await verifyOtp({ phone, purpose: 'login', code })).toEqual({ ok: false, error: 'NO_CODE' })
   })
 
+  it('parallel wrong guesses cannot exceed the attempt limit, and the right code is locked out afterwards', async () => {
+    const phone = nextPhone()
+    const { code } = await sendAndCapture(phone)
+    const wrong = code === '000000' ? '111111' : '000000'
+    const results = await Promise.all(Array.from({ length: 12 }, () => verifyOtp({ phone, purpose: 'login', code: wrong })))
+    const compared = results.filter((r) => !r.ok && r.error === 'INVALID_CODE').length
+    expect(compared).toBeLessThanOrEqual(4)
+    const [row] = await db.select().from(s.otpCodes).where(eq(s.otpCodes.phone, phone))
+    expect(row.attempts).toBeLessThanOrEqual(5)
+    expect(await verifyOtp({ phone, purpose: 'login', code })).toEqual({ ok: false, error: 'NO_CODE' })
+  })
+
   it('rejects an expired code', async () => {
     const phone = nextPhone()
     const { code } = await sendAndCapture(phone)

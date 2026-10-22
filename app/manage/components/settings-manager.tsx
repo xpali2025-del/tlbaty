@@ -260,7 +260,6 @@ function WhatsappStatusPanel() {
 
   useEffect(() => {
     check()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const label = status ? WORKER_LABELS[status.worker] : null

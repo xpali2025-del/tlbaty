@@ -50,7 +50,7 @@ export function BrandProducts({
             role="tab"
             aria-selected={active === "all"}
             onClick={() => setActive("all")}
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+            className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
               active === "all"
                 ? "bg-primary text-primary-foreground"
                 : "bg-secondary text-foreground hover:bg-accent"
@@ -67,7 +67,7 @@ export function BrandProducts({
               role="tab"
               aria-selected={active === cat.slug}
               onClick={() => setActive(cat.slug)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                 active === cat.slug
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-foreground hover:bg-accent"

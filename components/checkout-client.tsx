@@ -94,6 +94,26 @@ function formatDate(iso?: string): string {
   }
 }
 
+/** أسطر الدفع في رسالة واتساب بحسب الطريقة — بلا أي رابط للإثبات أو بيانات فك تشفير. */
+function buildPaymentLines(payment: PaymentSelection, providerName: string | undefined): string[] {
+  switch (payment.method) {
+    case "cash_on_delivery":
+      return ["*الدفع:*", "طريقة الدفع: الدفع عند الاستلام", "حالة الدفع: بانتظار التحصيل", ""]
+    case "wallet":
+      return ["*الدفع:*", "طريقة الدفع: الدفع من الرصيد", "حالة الدفع: تم الدفع", ""]
+    case "manual_transfer":
+      return [
+        "*الدفع:*",
+        `طريقة الدفع: تحويل عبر ${providerName ?? "حساب دفع"}`,
+        `اسم المرسل: ${payment.senderName.trim()}`,
+        `رقم المرسل: ${payment.senderPhone.trim()}`,
+        `رقم الحوالة: ${payment.reference.trim()}`,
+        "حالة الدفع: جارٍ التحقق من الدفع",
+        "",
+      ]
+  }
+}
+
 export function CheckoutClient({
   coupons,
   shippingZones,
@@ -534,8 +554,6 @@ export function CheckoutClient({
     toast({ title: "تم حذف العنوان" })
   }
 
-  const selectedAddress = selectedId ? addresses.find((a) => a.id === selectedId) : null
-
   const scrollToAddress = () => {
     addressSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
@@ -601,20 +619,7 @@ export function CheckoutClient({
     const chosenAccount = paymentAccounts.find((a) => a.id === payment.accountId)
 
     // تفاصيل الدفع في رسالة واتساب — بلا أي رابط للإثبات أو بيانات فك تشفير.
-    const paymentLines =
-      payment.method === "cash_on_delivery"
-        ? ["*الدفع:*", "طريقة الدفع: الدفع عند الاستلام", "حالة الدفع: بانتظار التحصيل", ""]
-        : payment.method === "wallet"
-          ? ["*الدفع:*", "طريقة الدفع: الدفع من الرصيد", "حالة الدفع: تم الدفع", ""]
-          : [
-            "*الدفع:*",
-            `طريقة الدفع: تحويل عبر ${chosenAccount?.providerName ?? "حساب دفع"}`,
-            `اسم المرسل: ${payment.senderName.trim()}`,
-            `رقم المرسل: ${payment.senderPhone.trim()}`,
-            `رقم الحوالة: ${payment.reference.trim()}`,
-            "حالة الدفع: جارٍ التحقق من الدفع",
-            "",
-          ]
+    const paymentLines = buildPaymentLines(payment, chosenAccount?.providerName)
 
     // الرسالة تُبنى بعد نجاح الحفظ حتى تحمل رقم الطلب الذي أنشأه الخادم.
     // لا نضيف أي رابط تتبع — العميل يفتح شاشة التتبع من الموقع بنفسه.

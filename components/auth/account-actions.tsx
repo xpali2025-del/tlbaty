@@ -41,7 +41,7 @@ export function AccountActions() {
 
   return (
     <div className="mt-8 flex flex-col gap-3">
-      <Button asChild variant="outline" className="justify-start">
+      <Button asChild variant="outline" className="min-h-11 justify-start">
         <Link href="/change-phone">
           <PencilLine className="size-4" />
           تغيير رقم الهاتف
@@ -50,7 +50,7 @@ export function AccountActions() {
 
       <Button
         variant="outline"
-        className="justify-start"
+        className="min-h-11 justify-start"
         onClick={() => logout("one")}
         disabled={loading !== null}
       >
@@ -60,7 +60,7 @@ export function AccountActions() {
 
       <Button
         variant="ghost"
-        className="justify-start text-muted-foreground"
+        className="min-h-11 justify-start text-muted-foreground"
         onClick={() => logout("all")}
         disabled={loading !== null}
       >

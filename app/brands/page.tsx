@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata } from "next"
 import { Header } from "@/components/header"
@@ -42,10 +43,10 @@ export default async function BrandsPage() {
       <Header />
       <main className="pb-24 lg:pb-12">
         <div className="mx-auto max-w-7xl px-4 py-6">
-          <nav aria-label="مسار التنقل" className="mb-3 text-sm text-muted-foreground">
-            <a href="/" className="hover:text-primary">
+          <nav aria-label="مسار التنقل" className="text-sm text-muted-foreground">
+            <Link href="/" className="inline-block py-3 hover:text-primary">
               الرئيسية
-            </a>
+            </Link>
             <span className="mx-2">/</span>
             <span className="text-foreground">الماركات</span>
           </nav>

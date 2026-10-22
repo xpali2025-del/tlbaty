@@ -1,3 +1,4 @@
+import { safeInternalPath } from "@/lib/safe-redirect"
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
@@ -17,18 +18,13 @@ export const metadata: Metadata = {
 // صفحة خاصة بالعميل: نمنع الكاش لأنها تعتمد على حالة الجلسة.
 export const dynamic = "force-dynamic"
 
-function safeNext(value: string | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/"
-  return value
-}
-
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ next?: string }>
 }) {
   const { next } = await searchParams
-  const target = safeNext(next)
+  const target = safeInternalPath(next)
 
   // إن كان العميل مسجّلاً بالفعل، لا داعي لإعادة تسجيل الدخول.
   const customer = await getCurrentCustomer().catch(() => null)

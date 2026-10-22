@@ -2,6 +2,7 @@ import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
+import Link from "next/link"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
@@ -118,10 +119,10 @@ export default async function CategoryPage({
       <Header />
       <main className="pb-24 lg:pb-12">
         <div className="mx-auto max-w-7xl px-4 py-6">
-          <nav aria-label="مسار التنقل" className="text-sm text-muted-foreground mb-3">
-            <a href="/" className="hover:text-primary">الرئيسية</a>
+          <nav aria-label="مسار التنقل" className="text-sm text-muted-foreground">
+            <Link href="/" className="inline-block py-3 hover:text-primary">الرئيسية</Link>
             <span className="mx-2">/</span>
-            <a href="/shop" className="hover:text-primary">الأقسام</a>
+            <Link href="/shop" className="inline-block py-3 hover:text-primary">الأقسام</Link>
             <span className="mx-2">/</span>
             <span className="text-foreground">{category.name}</span>
           </nav>

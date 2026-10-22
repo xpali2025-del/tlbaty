@@ -9,6 +9,7 @@ import { AdBanner } from "@/components/ad-banner"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
+import { getSiteConfig } from "@/lib/site-config"
 import {
   getSlides,
   getCategories,
@@ -27,8 +28,9 @@ import {
 
 export default async function HomePage() {
   // جلب كل البيانات بالتوازي مرة واحدة لكل الصفحة
-  const [slides, categories, brands, bestsellers, newArrivals, offers, allProducts, reviews, ads] =
+  const [config, slides, categories, brands, bestsellers, newArrivals, offers, allProducts, reviews, ads] =
     await Promise.all([
+      getSiteConfig(),
       getSlides(),
       getCategories(),
       getBrands(),
@@ -58,6 +60,8 @@ export default async function HomePage() {
     <>
       <Header />
       <main className="pb-24 lg:pb-0">
+        {/* عنوان الصفحة لقارئات الشاشة ومحركات البحث (التصميم بصري بلا عنوان رئيسي) */}
+        <h1 className="sr-only">{[config.name, config.tagline].filter(Boolean).join(" — ")}</h1>
         {/* 1. السلايدر - صور فقط */}
         <HeroSlider slides={slides} />
 

@@ -59,7 +59,7 @@ export function HeroSlider({ slides }: { slides: Slide[] }) {
       </div>
 
       {slides.length > 1 && (
-        <div className="absolute bottom-4 inset-x-0 flex items-center justify-center gap-2">
+        <div className="pointer-events-none absolute bottom-1 inset-x-0 flex items-center justify-center">
           {slides.map((slide, i) => (
             <button
               key={slide.id}
@@ -67,10 +67,15 @@ export function HeroSlider({ slides }: { slides: Slide[] }) {
               onClick={() => emblaApi?.scrollTo(i)}
               aria-label={`الانتقال إلى الشريحة ${i + 1}`}
               aria-current={i === selectedIndex}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                i === selectedIndex ? "w-6 bg-primary" : "w-2 bg-background/70"
-              }`}
-            />
+              className="pointer-events-auto flex h-11 items-center justify-center px-1"
+            >
+              <span
+                aria-hidden="true"
+                className={`block h-2 rounded-full transition-all duration-300 ${
+                  i === selectedIndex ? "w-6 bg-primary" : "w-2 bg-background/70"
+                }`}
+              />
+            </button>
           ))}
         </div>
       )}

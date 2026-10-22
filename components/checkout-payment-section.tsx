@@ -303,13 +303,7 @@ export function PaymentSection({
             onSelect={() => onChange({ ...EMPTY_PAYMENT_SELECTION, method: "wallet" })}
             icon={<Wallet className="h-5 w-5" aria-hidden="true" />}
             title="الدفع من الرصيد"
-            description={
-              wallet!.frozen
-                ? "محفظتك مجمّدة مؤقتاً. تواصل مع خدمة العملاء."
-                : wallet!.enough
-                  ? `رصيدك ${wallet!.formattedBalance} — يُخصم المبلغ فوراً ويُؤكَّد طلبك.`
-                  : `رصيدك ${wallet!.formattedBalance} لا يكفي لهذا الطلب.`
-            }
+            description={walletDescription(wallet!)}
             chip={wallet!.enough && !wallet!.frozen ? "دفع فوري" : "اشحن رصيدك"}
             href={!wallet!.enough && !wallet!.frozen ? "/account/wallet" : undefined}
           />
@@ -609,6 +603,12 @@ function RadioDot({ checked }: { checked: boolean }) {
       {checked ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
     </span>
   )
+}
+
+function walletDescription(wallet: { frozen: boolean; enough: boolean; formattedBalance: string }): string {
+  if (wallet.frozen) return "محفظتك مجمّدة مؤقتاً. تواصل مع خدمة العملاء."
+  if (wallet.enough) return `رصيدك ${wallet.formattedBalance} — يُخصم المبلغ فوراً ويُؤكَّد طلبك.`
+  return `رصيدك ${wallet.formattedBalance} لا يكفي لهذا الطلب.`
 }
 
 function MethodCard({

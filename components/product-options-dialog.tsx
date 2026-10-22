@@ -105,7 +105,7 @@ export function ProductOptionsDialog({ item, mode, open, onOpenChange }: Product
                 type="button"
                 key={color.name}
                 onClick={() => setSelectedColor(color.name)}
-                className={`h-9 w-9 rounded-full ring-2 ring-offset-2 ring-offset-background transition-all ${
+                className={`h-11 w-11 rounded-full ring-2 ring-offset-2 ring-offset-background transition-all ${
                   selectedColor === color.name ? "ring-primary" : "ring-transparent"
                 }`}
                 style={{ backgroundColor: color.hex }}

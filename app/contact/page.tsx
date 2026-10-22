@@ -111,6 +111,8 @@ export default function ContactPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="الاسم الكامل"
+                aria-label="الاسم الكامل"
+                autoComplete="name"
                 required
                 className="w-full bg-background border border-input rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
@@ -119,6 +121,8 @@ export default function ContactPage() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="رقم الهاتف"
+                aria-label="رقم الهاتف"
+                autoComplete="tel"
                 required
                 dir="ltr"
                 className="w-full bg-background border border-input rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary text-right"
@@ -127,6 +131,7 @@ export default function ContactPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="رسالتك"
+                aria-label="رسالتك"
                 rows={5}
                 required
                 className="w-full bg-background border border-input rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"

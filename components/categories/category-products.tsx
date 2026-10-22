@@ -54,7 +54,7 @@ export function CategoryProducts({
             role="tab"
             aria-selected={active === "all"}
             onClick={() => changeSub("all")}
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+            className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
               active === "all"
                 ? "bg-primary text-primary-foreground"
                 : "bg-secondary text-foreground hover:bg-accent"
@@ -72,7 +72,7 @@ export function CategoryProducts({
               aria-selected={active === sub.slug}
               onClick={() => changeSub(sub.slug)}
               disabled={sub.count === 0}
-              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 active === sub.slug
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-foreground hover:bg-accent"

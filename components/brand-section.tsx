@@ -24,7 +24,7 @@ export function BrandSection({
           <h2 className="text-xl md:text-2xl font-bold text-foreground">{title}</h2>
           <Link prefetch={false}
             href={viewAllHref}
-            className="inline-flex items-center gap-1 text-sm text-primary font-bold hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 text-sm text-primary font-bold hover:underline"
           >
             عرض الكل
             <ArrowLeft className="w-4 h-4" aria-hidden="true" />

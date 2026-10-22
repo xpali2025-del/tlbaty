@@ -73,14 +73,14 @@ export default async function AccountPage() {
         <div className="mt-6">
           <Link
             href="/orders"
-            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
           >
             عرض طلباتي
           </Link>
           <span className="mx-3 text-muted-foreground">·</span>
           <Link
             href="/account/wallet"
-            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
           >
             رصيدي
           </Link>

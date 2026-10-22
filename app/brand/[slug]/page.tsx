@@ -2,6 +2,7 @@ import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
+import Link from "next/link"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
@@ -105,14 +106,14 @@ export default async function BrandPage({
       <Header />
       <main className="pb-24 lg:pb-12">
         <div className="mx-auto max-w-7xl px-4 py-6">
-          <nav aria-label="مسار التنقل" className="mb-4 text-sm text-muted-foreground">
-            <a href="/" className="hover:text-primary">
+          <nav aria-label="مسار التنقل" className="text-sm text-muted-foreground">
+            <Link href="/" className="inline-block py-3 hover:text-primary">
               الرئيسية
-            </a>
+            </Link>
             <span className="mx-2">/</span>
-            <a href="/brands" className="hover:text-primary">
+            <Link href="/brands" className="inline-block py-3 hover:text-primary">
               الماركات
-            </a>
+            </Link>
             <span className="mx-2">/</span>
             <span className="text-foreground">{brand.name}</span>
           </nav>

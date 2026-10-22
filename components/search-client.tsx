@@ -125,7 +125,7 @@ export function SearchClient({
             autoFocus
           />
         </div>
-        <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={(e) => onPickImage(e.target.files?.[0])} />
+        <input ref={fileRef} type="file" accept="image/*" className="sr-only" aria-label="اختيار صورة للبحث" tabIndex={-1} onChange={(e) => onPickImage(e.target.files?.[0])} />
         <Button type="button" variant="outline" className="h-auto gap-2 rounded-full px-4" onClick={() => fileRef.current?.click()} disabled={imageBusy} aria-label="البحث بالصورة">
           {imageBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Camera className="h-4 w-4" aria-hidden="true" />}
           <span className="hidden sm:inline">بحث بالصورة</span>
@@ -169,7 +169,7 @@ export function SearchClient({
                 <select
                   value={params.sort ?? "relevance"}
                   onChange={(e) => update({ sort: e.target.value as SearchSort })}
-                  className="h-9 rounded-lg border border-border bg-card px-3 text-sm"
+                  className="h-11 rounded-lg border border-border bg-card px-3 text-sm"
                   aria-label="ترتيب النتائج"
                 >
                   {SEARCH_SORTS.filter((s) => s !== "relevance" || params.q).map((s) => (
@@ -361,7 +361,7 @@ function FilterPanel({ params, facets, update }: { params: SearchParams; facets:
                   aria-label={c.label}
                   aria-pressed={Boolean(active)}
                   onClick={() => update({ colors: toggle(params.colors, c.key) })}
-                  className={`h-8 w-8 rounded-full border-2 transition ${active ? "scale-110 border-primary ring-2 ring-primary/30" : "border-border"}`}
+                  className={`h-11 w-11 rounded-full border-2 transition ${active ? "scale-110 border-primary ring-2 ring-primary/30" : "border-border"}`}
                   style={{ backgroundColor: c.hex }}
                 />
               )

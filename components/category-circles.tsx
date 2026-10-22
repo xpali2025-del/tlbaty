@@ -12,7 +12,7 @@ export function CategoryCircles({ categories }: { categories: Category[] }) {
           <h2 className="text-xl md:text-2xl font-bold text-foreground">الأقسام الرئيسية</h2>
           <Link prefetch={false}
             href="/shop"
-            className="inline-flex items-center gap-1 text-sm text-primary font-bold hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 text-sm text-primary font-bold hover:underline"
           >
             عرض الكل
             <ArrowLeft className="w-4 h-4" aria-hidden="true" />

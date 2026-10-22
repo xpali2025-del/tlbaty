@@ -124,7 +124,7 @@ export function WalletClient({
                 key={c.code}
                 type="button"
                 onClick={() => setCurrencyCode(c.code)}
-                className={cn("rounded-full border px-3 py-1 text-xs font-medium", c.code === currencyCode ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card")}
+                className={cn("min-h-11 rounded-full border px-4 py-1 text-sm font-medium", c.code === currencyCode ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card")}
               >
                 {c.symbol}
               </button>
@@ -134,7 +134,7 @@ export function WalletClient({
         {summary.frozen ? (
           <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">محفظتك مجمّدة مؤقتاً. تواصل مع خدمة العملاء.</p>
         ) : (
-          <Button className="mt-4" onClick={() => setOpen((v) => !v)} data-testid="wallet-topup-toggle">
+          <Button className="mt-4 min-h-11" onClick={() => setOpen((v) => !v)} data-testid="wallet-topup-toggle">
             {open ? "إخفاء" : "شحن الرصيد"}
           </Button>
         )}
@@ -182,7 +182,7 @@ export function WalletClient({
             <input value={form.reference} onChange={set("reference")} className={inputCls} dir="ltr" aria-label="رقم الحوالة" />
             {errors.reference && <span className="mt-1 block text-xs text-destructive">{errors.reference}</span>}
           </label>
-          <Button onClick={submit} disabled={busy} className="w-full" data-testid="wallet-topup-submit">
+          <Button onClick={submit} disabled={busy} className="min-h-11 w-full" data-testid="wallet-topup-submit">
             {busy && <Loader2 className="me-2 size-4 animate-spin" aria-hidden />}
             إرسال طلب الشحن
           </Button>

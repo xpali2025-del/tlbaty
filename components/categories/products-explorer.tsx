@@ -189,7 +189,7 @@ export function ProductsExplorer({
               <button
                 key={f.key}
                 onClick={() => changeFilter(f.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-foreground hover:bg-accent"
@@ -204,7 +204,7 @@ export function ProductsExplorer({
           {isFiltered && (
             <button
               onClick={resetAll}
-              className="inline-flex items-center gap-1 rounded-full px-3 py-2 text-sm text-muted-foreground hover:text-primary"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full px-3 py-2 text-sm text-muted-foreground hover:text-primary"
             >
               <X className="w-4 h-4" aria-hidden="true" />
               إعادة تعيين
