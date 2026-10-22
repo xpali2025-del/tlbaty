@@ -16,7 +16,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
 export const MAX_PROOF_UPLOAD_BYTES = 6 * 1024 * 1024
 
 /** الحجم المستهدف بعد المعالجة — يبقي الطلب الكامل تحت حدود المنصة. */
-export const MAX_PROOF_PROCESSED_BYTES = Math.floor(2.5 * 1024 * 1024)
+export const MAX_PROOF_PROCESSED_BYTES = Math.floor(1.2 * 1024 * 1024)
 
 /** أنواع الصور المقبولة — بلا SVG وبلا أي ملف تنفيذي. */
 export const ALLOWED_PROOF_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
@@ -173,7 +173,7 @@ async function processProofImage(
     let output: Buffer | null = null
 
     // نحاول الحفاظ على أعلى جودة ممكنة ضمن الحجم المسموح.
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
       const candidate = await sharpModule(buffer, { failOn: "error" })
         .rotate() // يعتمد على EXIF ثم يُزال
         .resize({ width: dimension, height: dimension, fit: "inside", withoutEnlargement: true })
@@ -184,7 +184,7 @@ async function processProofImage(
       if (candidate.byteLength <= MAX_PROOF_PROCESSED_BYTES) break
 
       quality = Math.max(55, quality - 12)
-      dimension = Math.max(1400, Math.round(dimension * 0.85))
+      dimension = Math.max(1000, Math.round(dimension * 0.85))
     }
 
     if (!output) {

@@ -35,7 +35,7 @@ import type { PaymentAccount, PaymentMethod } from "@/lib/payment"
 // ============================================
 
 /** الحجم المستهدف بعد الضغط على العميل. */
-const TARGET_PROOF_BYTES = Math.floor(2.5 * 1024 * 1024)
+const TARGET_PROOF_BYTES = Math.floor(1.2 * 1024 * 1024)
 
 /** أقصى حجم مقبول من المستخدم قبل الضغط. */
 const MAX_PICK_BYTES = 12 * 1024 * 1024

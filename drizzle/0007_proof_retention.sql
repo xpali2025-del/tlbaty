@@ -1,0 +1,2 @@
+ALTER TABLE "store"."site_settings" ADD COLUMN "proof_retention_days" integer;--> statement-breakpoint
+ALTER TABLE "store"."site_settings" ADD CONSTRAINT "site_settings_proof_retention_range" CHECK ("store"."site_settings"."proof_retention_days" is null or "store"."site_settings"."proof_retention_days" between 7 and 365);
