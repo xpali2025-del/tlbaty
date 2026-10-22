@@ -1,6 +1,6 @@
 import "server-only"
 import { randomBytes } from "node:crypto"
-import { and, desc, eq, gte, sql } from "drizzle-orm"
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { customerPhoneHistory, customers, otpCodes } from "@/lib/db/store"
 import type { OtpPurpose } from "./provider"
@@ -61,14 +61,17 @@ export async function getLastOtpCreatedAt(phone: string, purpose: OtpPurpose): P
   return row?.createdAt ?? null
 }
 
-/** زيادة ذرّية للمحاولات (لا سباق بين طلبات متزامنة). تعيد العدد الجديد. */
-export async function incrementOtpAttempts(id: string): Promise<number> {
+/**
+ * يحجز محاولة تحقق واحدة قبل مقارنة الرمز، ذرّياً: يفشل (null) إن بلغ الحد أو استُهلك الرمز.
+ * الحجز قبل المقارنة يمنع تجاوز الحد بطلبات متوازية (كلها كانت تقرأ العدّاد القديم ثم تقارن).
+ */
+export async function reserveOtpAttempt(id: string, max: number): Promise<number | null> {
   const [row] = await db
     .update(otpCodes)
     .set({ attempts: sql`${otpCodes.attempts} + 1` })
-    .where(eq(otpCodes.id, id))
+    .where(and(eq(otpCodes.id, id), eq(otpCodes.consumed, false), lt(otpCodes.attempts, max)))
     .returning({ attempts: otpCodes.attempts })
-  return row?.attempts ?? 0
+  return row?.attempts ?? null
 }
 
 /** يستهلك الرمز مرة واحدة فقط: تعيد true لأول مستهلك وfalse لأي طلب متزامن آخر. */

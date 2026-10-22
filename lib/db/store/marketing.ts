@@ -122,10 +122,13 @@ export const siteSettings = store.table('site_settings', {
   walletEnabled: boolean('wallet_enabled').notNull().default(true),
   /** Days after an order is delivered/cancelled/returned before its payment-proof image is deleted; null = keep forever. */
   proofRetentionDays: integer('proof_retention_days'),
+  /** Number of the WhatsApp login bot (international digits). Null = use WHATSAPP_BOT_NUMBER from the environment. */
+  loginBotNumber: text('login_bot_number'),
   copyright: text('copyright'),
   updatedAt: timestamps().updatedAt,
 }, (t) => [
   check('site_settings_singleton', sql`${t.id} = 1`),
+  check('site_settings_login_bot_number_format', sql`${t.loginBotNumber} is null or ${t.loginBotNumber} ~ '^[0-9]{8,15}$'`),
   check('site_settings_proof_retention_range', sql`${t.proofRetentionDays} is null or ${t.proofRetentionDays} between 7 and 365`),
 ])
 

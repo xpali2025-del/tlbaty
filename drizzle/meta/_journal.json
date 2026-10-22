@@ -57,6 +57,13 @@
       "when": 1792630398087,
       "tag": "0007_proof_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792633679304,
+      "tag": "0008_login_bot_number",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { safeInternalPath } from "@/lib/safe-redirect"
 import { isAuthConfigured } from "@/lib/otp/config"
 import { logAuthEvent } from "@/lib/otp/audit"
 import { consumeVerifyAttempt } from "@/lib/otp/rate-limit"
@@ -9,12 +10,6 @@ import { normalizeInternationalPhone } from "@/lib/phone"
 
 export const runtime = "nodejs"
 
-/** يقبل فقط مسارات داخلية آمنة لإعادة التوجيه بعد الدخول. */
-function safeNext(value: unknown): string {
-  if (typeof value !== "string") return "/"
-  if (!value.startsWith("/") || value.startsWith("//")) return "/"
-  return value.slice(0, 512)
-}
 
 const cleanCode = (value: unknown) => String(value ?? "").replace(/\D/g, "").slice(0, 8)
 
@@ -57,5 +52,5 @@ export async function POST(req: Request) {
 
   const login = await completeLogin({ phone, ip, userAgent })
   if (!login.ok) return NextResponse.json({ ok: false, error: login.error }, { status: 403 })
-  return NextResponse.json({ ok: true, redirect: safeNext(body.next) })
+  return NextResponse.json({ ok: true, redirect: safeInternalPath(body.next) })
 }

@@ -160,6 +160,8 @@ export type AdminSettings = {
   payments: { cashOnDelivery: boolean; manualTransfer: boolean; wallet: boolean }
   /** أيام الاحتفاظ بصور إثبات الدفع بعد انتهاء الطلب؛ null = بلا حذف تلقائي. */
   proofRetentionDays: number | null
+  /** رقم بوت الدخول المحفوظ في الإعدادات (فارغ = من متغير البيئة). */
+  loginBotNumber: string | null
   /** عدد صور الإثبات المخزَّنة حالياً. */
   storedProofs: number
 } | null
@@ -377,6 +379,7 @@ export const getAdminSettings = () =>
       copyright: opt(x.copyright),
       payments: { cashOnDelivery: x.codEnabled, manualTransfer: x.transferEnabled, wallet: x.walletEnabled },
       proofRetentionDays: x.proofRetentionDays ?? null,
+      loginBotNumber: x.loginBotNumber ?? null,
       storedProofs: (await db.select({ n: count() }).from(orderPaymentProofs))[0].n,
     }
   })

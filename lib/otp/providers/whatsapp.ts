@@ -22,7 +22,7 @@ type Template = (v: { reason: string; code: string; time: string; minutes: numbe
 
 const TEMPLATES: Template[] = [
   ({ reason, code, time, minutes }) => `رمز ${reason}: ${code}\nالوقت: ${time}\nصالح لمدة ${minutes} دقائق، ولا تشاركه مع أحد.`,
-  ({ reason, code, time, minutes }) => `مرحباً 👋\nرمزك لـ${reason} هو ${code}\nأُرسل عند ${time}، وينتهي بعد ${minutes} دقائق.`,
+  ({ reason, code, time, minutes }) => `مرحباً 👋\nرمزك (${reason}) هو ${code}\nأُرسل عند ${time}، وينتهي بعد ${minutes} دقائق.`,
   ({ reason, code, time, minutes }) => `تاج لاين - ${time}\nرمز ${reason}: ${code}\nيُستخدم مرة واحدة ويصلح ${minutes} دقائق فقط.`,
   ({ reason, code, time, minutes }) => `${code} هو رمز ${reason}.\nالوقت ${time}. لا تعطِ هذا الرمز لأي شخص، ويسري ${minutes} دقائق.`,
 ]

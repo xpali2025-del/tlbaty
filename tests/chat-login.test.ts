@@ -77,6 +77,30 @@ describe('start', () => {
   })
 })
 
+describe('bot number from settings', () => {
+  it('prefers the number saved in the panel over the environment, so a banned number can be swapped without a deploy', async () => {
+    await db.insert(s.siteSettings).values({ id: 1, loginBotNumber: '966500000001' }).onConflictDoUpdate({ target: s.siteSettings.id, set: { loginBotNumber: '966500000001' } })
+    const { data } = await startFlow()
+    expect(data.link).toContain('https://wa.me/966500000001?text=')
+
+    await db.update(s.siteSettings).set({ loginBotNumber: null })
+    const env = await startFlow()
+    expect(env.data.link).toContain('https://wa.me/967700000000?text=')
+
+    const saved = process.env.WHATSAPP_BOT_NUMBER
+    delete process.env.WHATSAPP_BOT_NUMBER
+    expect((await start.POST(post({}))).status).toBe(503)
+    await db.update(s.siteSettings).set({ loginBotNumber: '966500000002' })
+    expect((await start.POST(post({}))).status).toBe(200)
+    await db.update(s.siteSettings).set({ loginBotNumber: null })
+    process.env.WHATSAPP_BOT_NUMBER = saved
+  })
+
+  it('the database refuses a malformed number', async () => {
+    await expect(db.insert(s.siteSettings).values({ id: 1, loginBotNumber: '+967 7' }).onConflictDoUpdate({ target: s.siteSettings.id, set: { loginBotNumber: '+967 7' } })).rejects.toThrow()
+  })
+})
+
 describe('claim (called by the WhatsApp worker)', () => {
   it('requires the worker bearer token', async () => {
     const { data } = await startFlow()

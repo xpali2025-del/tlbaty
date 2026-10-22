@@ -86,7 +86,7 @@ export function ProductCard({ product, compact = false }: { product: Product; co
         onClick={handleWishlist}
         aria-pressed={saved}
         aria-label={saved ? "حذف من الرغبات" : "إضافة إلى الرغبات"}
-        className="absolute top-2 left-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/90 shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+        className="absolute top-0 left-0 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-transparent transition-colors [&>svg]:box-content [&>svg]:rounded-full [&>svg]:bg-background/90 [&>svg]:p-1.5 [&>svg]:shadow-sm hover:[&>svg]:bg-background"
       >
         <Heart
           className={`h-5 w-5 transition-colors ${saved ? "fill-primary text-primary" : "text-foreground"}`}

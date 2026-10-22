@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { safeInternalPath } from "@/lib/safe-redirect"
 import { logAuthEvent } from "@/lib/otp/audit"
 import { clearChallengeClaim, consumeChallenge, getChallengeForBrowser } from "@/lib/otp/chat-login"
 import { isAuthConfigured } from "@/lib/otp/config"
@@ -9,11 +10,6 @@ import { verifyOtp } from "@/lib/otp/verify"
 
 export const runtime = "nodejs"
 
-function safeNext(value: unknown): string {
-  if (typeof value !== "string") return "/"
-  if (!value.startsWith("/") || value.startsWith("//")) return "/"
-  return value.slice(0, 512)
-}
 
 /** يتحقق من الرمز الذي ردّ به البوت. الرقم يُؤخذ من التحدّي المربوط بالمتصفح، لا من الطلب. */
 export async function POST(req: Request) {
@@ -58,5 +54,5 @@ export async function POST(req: Request) {
 
   const login = await completeLogin({ phone, ip, userAgent })
   if (!login.ok) return NextResponse.json({ ok: false, error: login.error }, { status: 403 })
-  return NextResponse.json({ ok: true, redirect: safeNext(body.next) })
+  return NextResponse.json({ ok: true, redirect: safeInternalPath(body.next) })
 }

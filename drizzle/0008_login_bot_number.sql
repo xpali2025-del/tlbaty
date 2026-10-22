@@ -1,0 +1,2 @@
+ALTER TABLE "store"."site_settings" ADD COLUMN "login_bot_number" text;--> statement-breakpoint
+ALTER TABLE "store"."site_settings" ADD CONSTRAINT "site_settings_login_bot_number_format" CHECK ("store"."site_settings"."login_bot_number" is null or "store"."site_settings"."login_bot_number" ~ '^[0-9]{8,15}$');
