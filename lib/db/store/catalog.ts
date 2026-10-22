@@ -109,3 +109,19 @@ export const productColors = store.table('product_colors', {
   check('product_colors_hex_format', sql`${t.hex} ~ '^#[0-9a-fA-F]{6}$'`),
 ])
 
+
+/**
+ * Stock per colour/size combination. A product with at least one row here is tracked per variant:
+ * `products.stock` then mirrors the sum of its variants (kept in sync by the admin save and by orders).
+ * `color` / `size` are '' when the product has no colours / no sizes.
+ */
+export const productVariants = store.table('product_variants', {
+  id: pk(),
+  productId: uuid('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+  color: text('color').notNull().default(''),
+  size: text('size').notNull().default(''),
+  stock: integer('stock').notNull().default(0),
+}, (t) => [
+  uniqueIndex('product_variants_unique_idx').on(t.productId, t.color, t.size),
+  check('product_variants_stock_nonneg', sql`${t.stock} >= 0`),
+])

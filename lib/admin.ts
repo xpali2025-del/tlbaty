@@ -12,6 +12,7 @@ import {
   orderPaymentProofs,
   paymentAccounts,
   productColors,
+  productVariants,
   productImages,
   products,
   reviews,
@@ -67,6 +68,8 @@ export type AdminProduct = {
   keywords?: string[]
   colors: AdminColor[]
   sizes: string[]
+  /** مخزون كل لون/مقاس؛ فارغ = مخزون واحد للمنتج (stock). */
+  variants: { color: string; size: string; stock: number }[]
   tags?: string[]
 }
 
@@ -211,9 +214,10 @@ export const getAdminProducts = () =>
       .orderBy(asc(products.sortOrder), asc(products.name))
     if (rows.length === 0) return []
     const ids = rows.map((r) => r.p.id)
-    const [images, colors] = await Promise.all([
+    const [images, colors, variants] = await Promise.all([
       db.select().from(productImages).where(inArray(productImages.productId, ids)).orderBy(asc(productImages.sortOrder)),
       db.select().from(productColors).where(inArray(productColors.productId, ids)).orderBy(asc(productColors.sortOrder)),
+      db.select().from(productVariants).where(inArray(productVariants.productId, ids)),
     ])
     return rows.map(({ p, categorySlug, categoryName, subcategorySlug, brandName }) => ({
       _id: p.id,
@@ -246,6 +250,7 @@ export const getAdminProducts = () =>
       keywords: p.keywords,
       colors: colors.filter((c) => c.productId === p.id).map((c) => ({ name: c.name, hex: c.hex })),
       sizes: p.sizes,
+      variants: variants.filter((v) => v.productId === p.id).map((v) => ({ color: v.color, size: v.size, stock: v.stock })),
       tags: p.tags,
     }))
   })

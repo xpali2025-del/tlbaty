@@ -20,6 +20,7 @@ import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZ
 import { canTransitionPayment, initialPaymentStatus, isPaymentStatus, type PaymentStatus } from "@/lib/payment"
 import { deletePaymentProof } from "@/lib/storage/proofs"
 import { refundOrder } from "@/lib/wallet/ledger"
+import { restoreVariantStock, syncProductStock } from "@/lib/orders/variants"
 
 // ============================================
 // إجراءات إدارة الطلبات على PostgreSQL. كل تغيير حالة يحدث داخل معاملة تقفل صف الطلب
@@ -60,7 +61,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 /** يعيد مخزون بنود طلب (المنتجات الحيّة فقط) ويعيد slugs المتأثرة لإبطال كاشها بعد نجاح المعاملة. */
 async function restoreStock(tx: Tx, orderId: string): Promise<string[]> {
   const lines = await tx
-    .select({ productId: orderItems.productId, quantity: orderItems.quantity })
+    .select({ productId: orderItems.productId, name: orderItems.name, color: orderItems.color, size: orderItems.size, quantity: orderItems.quantity })
     .from(orderItems)
     .where(eq(orderItems.orderId, orderId))
   const restore = new Map<string, number>()
@@ -74,6 +75,12 @@ async function restoreStock(tx: Tx, orderId: string): Promise<string[]> {
       .returning({ slug: products.slug })
     if (row) slugs.push(row.slug)
   }
+  // منتجات مخزونها لكل لون/مقاس: تعود الكمية لصف اللون/المقاس نفسه، ثم يُضبط الإجمالي على مجموع المتغيّرات.
+  const tracked = await restoreVariantStock(
+    tx,
+    lines.flatMap((l) => (l.productId ? [{ productUuid: l.productId, name: l.name, color: l.color ?? "", size: l.size ?? "", quantity: l.quantity }] : [])),
+  )
+  slugs.push(...(await syncProductStock(tx, [...tracked])))
   return slugs
 }
 

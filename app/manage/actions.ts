@@ -11,6 +11,7 @@ import {
   coupons,
   manageUsers,
   productColors,
+  productVariants,
   productImages,
   products,
   reviews,
@@ -135,6 +136,24 @@ export async function saveProduct(id: string | null, form: FormData) {
     if (!c?.name?.trim() || !HEX.test(c.hex ?? "")) throw new Error("لون غير صالح: الاسم مطلوب واللون بصيغة #RRGGBB")
     return { name: c.name.trim(), hex: c.hex }
   })
+  const sizeList = json<string[]>(form, "sizes", []).map((x) => String(x).trim()).filter(Boolean)
+  // مخزون كل لون/مقاس (اختياري): كل تركيبة يجب أن تكون من ألوان ومقاسات المنتج نفسه، بلا تكرار.
+  const trackVariants = bool(form, "trackVariants")
+  const variantInput = trackVariants ? json<{ color?: string; size?: string; stock?: number; base?: number }[]>(form, "variants", []) : []
+  const variants = new Map<string, { color: string; size: string; stock: number; base: number | undefined }>()
+  for (const v of variantInput) {
+    const color = String(v.color ?? "").trim()
+    const size = String(v.size ?? "").trim()
+    if (color && !colors.some((c) => c.name === color)) throw new Error(`اللون "${color}" ليس من ألوان المنتج`)
+    if (size && !sizeList.includes(size)) throw new Error(`المقاس "${size}" ليس من مقاسات المنتج`)
+    const stock = Math.trunc(Number(v.stock))
+    if (!Number.isFinite(stock) || stock < 0 || stock > 1_000_000) throw new Error("كمية المخزون لكل لون/مقاس يجب أن تكون عدداً صحيحاً من 0 إلى 1,000,000")
+    const baseRaw = v.base === undefined || v.base === null ? undefined : Math.trunc(Number(v.base))
+    const key = `${color}\u0000${size}`
+    if (variants.has(key)) throw new Error("تركيبة لون/مقاس مكررة")
+    variants.set(key, { color, size, stock, base: baseRaw !== undefined && Number.isFinite(baseRaw) && baseRaw >= 0 ? baseRaw : undefined })
+  }
+  if (trackVariants && variants.size === 0) throw new Error("أضف ألواناً أو مقاسات لتتبع مخزونها، أو أوقف تتبع المخزون حسب اللون والمقاس")
   const flags = { isNew: bool(form, "isNew"), isBestseller: bool(form, "isBestseller") }
   const stockBaseRaw = num(form, "stockBase")
   const stockBase = stockBaseRaw === undefined ? undefined : Math.max(0, Math.trunc(stockBaseRaw))
@@ -206,6 +225,7 @@ export async function saveProduct(id: string | null, form: FormData) {
       if (colors.length) {
         await tx.insert(productColors).values(colors.map((c, i) => ({ productId: rowId, name: c.name, hex: c.hex, sortOrder: i })))
       }
+      await saveVariantStock(tx, rowId, trackVariants ? [...variants.values()] : null)
       await refreshProductSearch(tx, { productIds: [rowId] })
       savedId = rowId
     })
@@ -220,6 +240,42 @@ export async function saveProduct(id: string | null, form: FormData) {
   await removeObjects(removed)
   // بصمة الألوان للبحث بالصورة: عند رفع صورة رئيسية جديدة فقط، وأفضل جهد (لا تُفشل الحفظ).
   if (mainKey && savedId) await refreshProductPalette(savedId, mainKey).catch(() => false)
+}
+
+/**
+ * يحفظ مخزون ألوان/مقاسات المنتج. كالمخزون الواحد، يُطبَّق كفرق عمّا رآه المدير عند فتح النموذج (base)
+ * فلا يمسح الحفظ خصم طلبات جرت أثناء فتح النموذج. تركيبة جديدة تأخذ القيمة المدخلة. المحذوفة تُحذف.
+ * `null` = إيقاف التتبع (حذف المتغيّرات والعودة للمخزون الواحد). المخزون الإجمالي يصير مجموع المتغيّرات.
+ */
+async function saveVariantStock(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  productId: string,
+  next: { color: string; size: string; stock: number; base: number | undefined }[] | null,
+) {
+  if (next === null) {
+    await tx.delete(productVariants).where(eq(productVariants.productId, productId))
+    return
+  }
+  const existing = new Map(
+    (await tx.select().from(productVariants).where(eq(productVariants.productId, productId)).for("update")).map((v) => [`${v.color}\u0000${v.size}`, v]),
+  )
+  const keep = new Set<string>()
+  for (const v of next) {
+    const key = `${v.color}\u0000${v.size}`
+    keep.add(key)
+    const row = existing.get(key)
+    if (!row) {
+      await tx.insert(productVariants).values({ productId, color: v.color, size: v.size, stock: v.stock })
+    } else {
+      const stock = v.base === undefined ? v.stock : Math.max(0, row.stock + (v.stock - v.base))
+      await tx.update(productVariants).set({ stock }).where(eq(productVariants.id, row.id))
+    }
+  }
+  for (const [key, row] of existing) if (!keep.has(key)) await tx.delete(productVariants).where(eq(productVariants.id, row.id))
+  await tx
+    .update(products)
+    .set({ stock: sql`coalesce((select sum(${productVariants.stock}) from ${productVariants} where ${productVariants.productId} = ${productId}), 0)` })
+    .where(eq(products.id, productId))
 }
 
 /** تعبئة بصمات الألوان للمنتجات القائمة (صورها موجودة وبلا بصمة) — دفعة من 40 في كل نداء. */
