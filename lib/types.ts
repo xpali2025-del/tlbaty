@@ -1,3 +1,4 @@
+import type { SizeChart } from "@/lib/size-chart"
 export interface Product {
   id: string
   slug: string
@@ -18,6 +19,8 @@ export interface Product {
   stock: number
   /** مخزون كل لون/مقاس إن كان المنتج يُتتبَّع به (وإلا يُستعمل stock). */
   variantStock?: { color: string; size: string; stock: number }[]
+  /** دليل المقاسات الفعّال لهذا المنتج (جدول مشترك أو خاص)، يُحمَّل لصفحة المنتج فقط. */
+  sizeChart?: SizeChart
   isNew?: boolean
   isBestseller?: boolean
   badge?: string

@@ -23,6 +23,7 @@ import {
   Coins,
   PiggyBank,
   BellRing,
+  Ruler,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "@/lib/permissions"
@@ -37,6 +38,7 @@ import type {
   AdminAd,
   AdminSettings,
   AdminShipping,
+  AdminSizeChart,
   AdminPaymentAccount,
 } from "@/lib/admin"
 import type { OrderStats, OrdersPage } from "@/lib/admin-orders"
@@ -55,6 +57,7 @@ import { ShippingManager } from "./components/shipping-manager"
 import { CurrenciesManager } from "./components/currencies-manager"
 import { WalletsManager } from "./components/wallets-manager"
 import { MarketingManager } from "./components/marketing-manager"
+import { SizeChartsManager } from "./components/size-charts-manager"
 import type { AdminMarketing } from "@/lib/admin-marketing"
 import type { AdminWalletOverview } from "@/lib/admin-wallet"
 import { SettingsManager } from "./components/settings-manager"
@@ -81,6 +84,7 @@ type TabId =
   | "currencies"
   | "wallets"
   | "marketing"
+  | "size-charts"
   | "settings"
 
 type DashboardProps = {
@@ -95,6 +99,7 @@ type DashboardProps = {
   shipping: AdminShipping
   wallets: AdminWalletOverview
   marketing: AdminMarketing
+  sizeCharts: AdminSizeChart[]
   /** الدفعة الأولى من الطلبات فقط — الباقي يُحمَّل من الخادم عند الحاجة. */
   ordersPage: OrdersPage
   orderStats: OrderStats
@@ -135,6 +140,7 @@ export function Dashboard(props: DashboardProps) {
     { id: "users", label: "المستخدمون", icon: Users, count: props.users.length },
     { id: "shipping", label: "الشحن", icon: Truck },
     { id: "currencies", label: "العملات", icon: Coins },
+    { id: "size-charts", label: "جداول المقاسات", icon: Ruler, count: props.sizeCharts.length },
     { id: "marketing", label: "التذكيرات والعروض", icon: BellRing },
     { id: "wallets", label: "المحافظ والرصيد", icon: PiggyBank, count: props.wallets.totals.pendingCount || undefined },
     { id: "settings", label: "إعدادات الموقع", icon: Settings },
@@ -232,7 +238,7 @@ export function Dashboard(props: DashboardProps) {
         {tab === "notifications" && <NotificationsManager data={props.notifications} />}
         {tab === "payment-accounts" && <PaymentAccountsManager accounts={props.paymentAccounts} />}
         {tab === "products" && (
-          <ProductsManager products={props.products} categories={props.categories} brands={props.brands} />
+          <ProductsManager products={props.products} categories={props.categories} brands={props.brands} sizeCharts={props.sizeCharts} />
         )}
         {tab === "categories" && <CategoriesManager categories={props.categories} />}
         {tab === "brands" && <BrandsManager brands={props.brands} />}
@@ -247,6 +253,7 @@ export function Dashboard(props: DashboardProps) {
         )}
         {tab === "wallets" && <WalletsManager initial={props.wallets} />}
         {tab === "marketing" && <MarketingManager initial={props.marketing} />}
+        {tab === "size-charts" && <SizeChartsManager charts={props.sizeCharts} />}
         {tab === "settings" && <SettingsManager settings={props.settings} />}
       </main>
     </div>

@@ -1,5 +1,7 @@
 "use client"
 
+import { SizeChartEditor, emptyChart } from "./size-chart-editor"
+import { validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { VariantStockEditor, variantCombos, variantKey } from "./variant-stock-editor"
 import { useMemo, useState, useTransition } from "react"
 import Image from "next/image"
@@ -27,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { AdminBrand, AdminCategory, AdminColor, AdminProduct } from "@/lib/admin"
+import type { AdminBrand, AdminCategory, AdminColor, AdminProduct, AdminSizeChart } from "@/lib/admin"
 import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes } from "../actions"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
@@ -36,10 +38,12 @@ export function ProductsManager({
   products,
   categories,
   brands,
+  sizeCharts,
 }: {
   products: AdminProduct[]
   categories: AdminCategory[]
   brands: AdminBrand[]
+  sizeCharts: AdminSizeChart[]
 }) {
   const [search, setSearch] = useState("")
   const [editing, setEditing] = useState<AdminProduct | null>(null)
@@ -151,6 +155,7 @@ export function ProductsManager({
         product={editing}
         categories={categories}
         brands={brands}
+        sizeCharts={sizeCharts}
       />
     </div>
   )
@@ -171,12 +176,14 @@ function ProductDialog({
   product,
   categories,
   brands,
+  sizeCharts,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   product: AdminProduct | null
   categories: AdminCategory[]
   brands: AdminBrand[]
+  sizeCharts: AdminSizeChart[]
 }) {
   const [productName, setProductName] = useState(product?.name ?? "")
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "")
@@ -187,6 +194,10 @@ function ProductDialog({
   const [colors, setColors] = useState<AdminColor[]>(product?.colors ?? [])
   const [sizes, setSizes] = useState<string[]>(product?.sizes ?? [])
   const [keywords, setKeywords] = useState<string[]>(product?.keywords ?? [])
+  // دليل المقاسات: بدون (الافتراضي) | جدول مشترك | جدول خاص بهذا المنتج.
+  const [guideMode, setGuideMode] = useState<"none" | "chart" | "custom">(product?.customSizeChart ? "custom" : product?.sizeChartId ? "chart" : "none")
+  const [guideChartId, setGuideChartId] = useState(product?.sizeChartId ?? sizeCharts[0]?._id ?? "")
+  const [guideCustom, setGuideCustom] = useState<SizeChart>(product?.customSizeChart ?? emptyChart())
   const [trackVariants, setTrackVariants] = useState((product?.variants?.length ?? 0) > 0)
   const [variantValues, setVariantValues] = useState<Record<string, string>>(
     Object.fromEntries((product?.variants ?? []).map((v) => [variantKey(v.color, v.size), String(v.stock)])),
@@ -224,6 +235,11 @@ function ProductDialog({
     form.set("colors", JSON.stringify(colors))
     form.set("sizes", JSON.stringify(sizes))
     form.set("keywords", JSON.stringify(keywords))
+    if (guideMode === "custom") {
+      const problem = validateSizeChart({ ...guideCustom, name: guideCustom.name.trim() || "جدول المنتج" })
+      if (problem) return void toast.error(`دليل المقاسات: ${problem}`)
+    }
+    form.set("sizeGuide", JSON.stringify({ mode: guideMode, chartId: guideChartId, custom: { ...guideCustom, name: guideCustom.name.trim() || "جدول المنتج" } }))
     if (trackVariants) {
       const rows = variantCombos(colors, sizes).map((c) => ({
         ...c,
@@ -357,6 +373,32 @@ function ProductDialog({
           </div>
 
           <ColorsEditor colors={colors} onChange={setColors} />
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="size-guide-mode">دليل المقاسات (اختياري)</Label>
+            <select
+              id="size-guide-mode"
+              value={guideMode === "chart" ? `chart:${guideChartId}` : guideMode}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v.startsWith("chart:")) {
+                  setGuideMode("chart")
+                  setGuideChartId(v.slice(6))
+                } else setGuideMode(v as "none" | "custom")
+              }}
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="none">بدون دليل مقاسات</option>
+              {sizeCharts.map((c) => (
+                <option key={c._id} value={`chart:${c._id}`}>جدول: {c.name}</option>
+              ))}
+              <option value="custom">جدول خاص بهذا المنتج…</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              يظهر للعميل رابط «دليل المقاسات» و«اعرف مقاسك». اختر جدولاً جاهزاً بنقرة، ولا تحتاج لإدخال بيانات هنا إلا لجدول خاص. تُدار الجداول من تبويب «جداول المقاسات».
+            </p>
+            {guideMode === "custom" ? <SizeChartEditor value={guideCustom} onChange={setGuideCustom} showName={false} /> : null}
+          </div>
 
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 text-sm font-medium">

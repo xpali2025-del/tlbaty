@@ -17,6 +17,7 @@ export const SCREENS = [
   "currencies",
   "wallets",
   "marketing",
+  "size-charts",
   "settings",
   "users",
 ] as const
@@ -39,6 +40,7 @@ export const SCREEN_LABELS: Record<Screen, string> = {
   currencies: "العملات وأسعار الصرف",
   wallets: "المحافظ والرصيد",
   marketing: "التذكيرات والعروض",
+  "size-charts": "جداول المقاسات",
   settings: "إعدادات المتجر",
   users: "المستخدمون والصلاحيات",
 }
@@ -57,7 +59,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const ROLE_PRESETS: Record<Role, readonly Screen[]> = {
   admin: SCREENS,
   manager: SCREENS.filter((s) => s !== "users"),
-  editor: ["products", "categories", "brands", "slides", "coupons", "reviews", "ads", "notifications"],
+  editor: ["products", "size-charts", "categories", "brands", "slides", "coupons", "reviews", "ads", "notifications"],
   operator: ["orders", "couriers", "notifications"],
 }
 

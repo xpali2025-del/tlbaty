@@ -47,6 +47,16 @@ export const brands = store.table('brands', {
   ...timestamps(),
 }, (t) => [index('brands_featured_idx').on(t.sortOrder).where(sql`${t.featured}`)])
 
+/** Reusable size guide (measurements in cm per size). A product points to one, or carries its own custom copy. */
+export const sizeCharts = store.table('size_charts', {
+  id: pk(),
+  name: text('name').notNull(),
+  columns: jsonb('columns').$type<{ key: string; label: string }[]>().notNull(),
+  rows: jsonb('rows').$type<{ size: string; ranges: Record<string, [number, number]> }[]>().notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...timestamps(),
+}, (t) => [uniqueIndex('size_charts_name_lower_idx').on(sql`lower(${t.name})`)])
+
 export const products = store.table('products', {
   id: pk(),
   /** Human-facing product number ( `productId`). */
@@ -64,6 +74,9 @@ export const products = store.table('products', {
   mainImageKey: text('main_image_key'),
   stock: integer('stock').notNull().default(0),
   sizes: text('sizes').array().notNull().default(sql`'{}'::text[]`),
+  /** Size guide shown on the product page: a shared chart, or a custom one for this product; both null = none. */
+  sizeChartId: uuid('size_chart_id').references(() => sizeCharts.id, { onDelete: 'set null' }),
+  customSizeChart: jsonb('custom_size_chart').$type<{ name: string; columns: { key: string; label: string }[]; rows: { size: string; ranges: Record<string, [number, number]> }[] }>(),
   sku: text('sku'),
   badge: text('badge'),
   /** Legacy merchandising tags (new / bestseller / offer / regular); the storefront lists use them. */
