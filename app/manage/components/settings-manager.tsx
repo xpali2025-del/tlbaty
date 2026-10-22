@@ -134,6 +134,10 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
               <input type="checkbox" name="transferEnabled" value="true" defaultChecked={settings?.payments?.manualTransfer ?? true} />
               الحوالة / التحويل البنكي (حسابات الدفع تُدار من شاشة «حسابات الدفع»)
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="walletEnabled" value="true" defaultChecked={settings?.payments?.wallet ?? true} />
+              الرصيد (شحن المحفظة والدفع منها؛ تُدار من شاشة «المحافظ والرصيد»)
+            </label>
             <p className="text-xs text-muted-foreground">
               تُفرض طرق الدفع على الخادم أيضاً: الطريقة المعطّلة تُرفض حتى لو أُرسلت من متصفح معدَّل. يجب تفعيل طريقة واحدة على الأقل.
             </p>

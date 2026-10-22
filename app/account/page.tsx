@@ -77,6 +77,13 @@ export default async function AccountPage() {
           >
             عرض طلباتي
           </Link>
+          <span className="mx-3 text-muted-foreground">·</span>
+          <Link
+            href="/account/wallet"
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            رصيدي
+          </Link>
         </div>
 
         <AccountActions />

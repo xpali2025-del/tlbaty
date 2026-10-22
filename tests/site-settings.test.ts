@@ -36,7 +36,7 @@ describe('mergeSiteConfig', () => {
     const c = mergeSiteConfig(null)
     expect(c.name).toBe(SITE_CONFIG.name)
     expect(c.contact.whatsapp).toBe(SITE_CONFIG.contact.whatsapp)
-    expect(c.payments).toEqual({ cashOnDelivery: true, manualTransfer: true })
+    expect(c.payments).toEqual({ cashOnDelivery: true, manualTransfer: true, wallet: true })
     expect(c.logoUrl).toBeNull()
   })
 
@@ -71,6 +71,6 @@ describe('saveSettings validation', () => {
   it('requires at least one payment method', async () => {
     await expect(A.saveSettings(null, form({ name: 'x' }))).rejects.toThrow('طريقة دفع')
     await A.saveSettings(null, form({ name: 'x', transferEnabled: 'true' }))
-    expect((await getSiteConfig()).payments).toEqual({ cashOnDelivery: false, manualTransfer: true })
+    expect((await getSiteConfig()).payments).toEqual({ cashOnDelivery: false, manualTransfer: true, wallet: false })
   })
 })

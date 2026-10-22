@@ -29,7 +29,7 @@ export type SiteConfig = Omit<typeof SITE_CONFIG, "name" | "nameEn" | "tagline" 
   /** رابط الشعار المرفوع، أو null لاستخدام الشعار الافتراضي. */
   logoUrl: string | null
   /** طرق الدفع المفعّلة من اللوحة. */
-  payments: { cashOnDelivery: boolean; manualTransfer: boolean }
+  payments: { cashOnDelivery: boolean; manualTransfer: boolean; wallet: boolean }
 }
 
 type Row = typeof siteSettings.$inferSelect
@@ -52,7 +52,7 @@ function socialUrl(value: string, base: string): string {
 export function mergeSiteConfig(row: Row | null): SiteConfig {
   const d = SITE_CONFIG
   if (!row) {
-    return { ...d, contact: { ...d.contact, secondaryPhone: "" }, social: { ...d.social, x: "", youtube: "", snapchat: "", telegram: "" }, footer: { ...d.footer }, logoUrl: null, payments: { cashOnDelivery: true, manualTransfer: true } }
+    return { ...d, contact: { ...d.contact, secondaryPhone: "" }, social: { ...d.social, x: "", youtube: "", snapchat: "", telegram: "" }, footer: { ...d.footer }, logoUrl: null, payments: { cashOnDelivery: true, manualTransfer: true, wallet: true } }
   }
   const phone = clean(row.phone)
   const whatsapp = whatsappDigits(clean(row.whatsapp))
@@ -86,7 +86,7 @@ export function mergeSiteConfig(row: Row | null): SiteConfig {
     },
     footer: { copyright: clean(row.copyright) || `© ${new Date().getFullYear()} جميع الحقوق محفوظة - ${name}`, credit: d.footer.credit },
     logoUrl: resolveOptionalImageUrl(row.logoKey) ?? null,
-    payments: { cashOnDelivery: row.codEnabled, manualTransfer: row.transferEnabled },
+    payments: { cashOnDelivery: row.codEnabled, manualTransfer: row.transferEnabled, wallet: row.walletEnabled },
   }
 }
 

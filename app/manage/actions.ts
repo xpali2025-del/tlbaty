@@ -629,6 +629,7 @@ export async function saveSettings(_id: string | null, form: FormData) {
 
   const codEnabled = bool(form, "codEnabled")
   const transferEnabled = bool(form, "transferEnabled")
+  const walletEnabled = bool(form, "walletEnabled")
   if (!codEnabled && !transferEnabled) throw new Error("فعّل طريقة دفع واحدة على الأقل، وإلا لن يستطيع العملاء إتمام الطلب")
 
   const values = {
@@ -652,6 +653,7 @@ export async function saveSettings(_id: string | null, form: FormData) {
     telegram: socialField(form, "telegram", "تيليجرام"),
     codEnabled,
     transferEnabled,
+    walletEnabled,
     updatedAt: new Date(),
   }
 

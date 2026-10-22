@@ -14,7 +14,7 @@
 export const INITIAL_PAYMENT_PROVIDERS = ["خدمة حاسب", "جيب", "جوالي", "قطبي"] as const
 
 /** طريقة الدفع التي اختارها العميل. */
-export type PaymentMethod = "cash_on_delivery" | "manual_transfer"
+export type PaymentMethod = "cash_on_delivery" | "manual_transfer" | "wallet"
 
 /** حالة الدفع/التحقق — منفصلة تماماً عن حالة الطلب. */
 export type PaymentStatus =
@@ -26,7 +26,7 @@ export type PaymentStatus =
   | "refunded"
   | "cancelled"
 
-export const PAYMENT_METHODS: PaymentMethod[] = ["cash_on_delivery", "manual_transfer"]
+export const PAYMENT_METHODS: PaymentMethod[] = ["cash_on_delivery", "manual_transfer", "wallet"]
 
 export const PAYMENT_STATUSES: PaymentStatus[] = [
   "pending_on_delivery",
@@ -41,6 +41,7 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash_on_delivery: "الدفع عند الاستلام",
   manual_transfer: "الدفع عبر حساب دفع",
+  wallet: "الدفع من الرصيد",
 }
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
@@ -83,6 +84,7 @@ export function isPaymentStatus(value: unknown): value is PaymentStatus {
 
 /** الحالة الابتدائية — يحدّدها الخادم وحده اعتماداً على طريقة الدفع. */
 export function initialPaymentStatus(method: PaymentMethod): PaymentStatus {
+  if (method === "wallet") return "paid"
   return method === "cash_on_delivery" ? "pending_on_delivery" : "pending_verification"
 }
 
@@ -99,6 +101,8 @@ const TRANSITIONS: Record<PaymentMethod, Partial<Record<PaymentStatus, PaymentSt
     rejected: ["pending_verification"],
     verified: ["refunded", "cancelled"],
   },
+  // الدفع من الرصيد يُخصم لحظة الطلب؛ لا انتقال يدوي — الإرجاع للمحفظة يتم تلقائياً عند إلغاء/إرجاع الطلب.
+  wallet: {},
 }
 
 /** الانتقالات المتاحة من الحالة الحالية لطريقة دفع معيّنة. */
@@ -166,6 +170,7 @@ export function describePaymentMethod(
   providerName?: string,
 ): string {
   if (method === "cash_on_delivery") return PAYMENT_METHOD_LABELS.cash_on_delivery
+  if (method === "wallet") return PAYMENT_METHOD_LABELS.wallet
   if (method === "manual_transfer") {
     return providerName ? `تحويل عبر ${providerName}` : "تحويل عبر حساب دفع"
   }

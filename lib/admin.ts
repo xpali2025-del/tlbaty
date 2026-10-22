@@ -156,7 +156,7 @@ export type AdminSettings = {
   social?: { instagram?: string; facebook?: string; tiktok?: string; x?: string; youtube?: string; snapchat?: string; telegram?: string }
   copyright?: string
   /** طرق الدفع المفعّلة في صفحة الدفع. */
-  payments: { cashOnDelivery: boolean; manualTransfer: boolean }
+  payments: { cashOnDelivery: boolean; manualTransfer: boolean; wallet: boolean }
 } | null
 
 /** حساب دفع كما يُعرض في لوحة الإدارة (يشمل المعطّل). */
@@ -370,7 +370,7 @@ export const getAdminSettings = () =>
         telegram: opt(x.telegram),
       },
       copyright: opt(x.copyright),
-      payments: { cashOnDelivery: x.codEnabled, manualTransfer: x.transferEnabled },
+      payments: { cashOnDelivery: x.codEnabled, manualTransfer: x.transferEnabled, wallet: x.walletEnabled },
     }
   })
 

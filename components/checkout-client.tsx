@@ -159,6 +159,19 @@ export function CheckoutClient({
     return () => document.removeEventListener("visibilitychange", check)
   }, [])
 
+  // رصيد المحفظة (بالعملة الأساسية) للعميل المسجّل؛ null = غير مسجّل أو الخدمة غير متاحة.
+  const [wallet, setWallet] = useState<{ balance: number; frozen: boolean } | null>(null)
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/wallet?summary=1", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setWallet(d?.ok ? { balance: d.balance, frozen: d.frozen } : null))
+        .catch(() => setWallet(null))
+    load()
+    window.addEventListener("tajline:logged-in", load)
+    return () => window.removeEventListener("tajline:logged-in", load)
+  }, [])
+
   // ملاحظة العميل — اختيارية تماماً ولا تمنع إرسال الطلب.
   const [customerNote, setCustomerNote] = useState("")
 
@@ -256,7 +269,7 @@ export function CheckoutClient({
 
   // التحقق من بيانات الدفع في الواجهة (الخادم يعيد التحقق دائماً)
   const validatePayment = () => {
-    if (payment.method === "cash_on_delivery") return {}
+    if (payment.method === "cash_on_delivery" || payment.method === "wallet") return {}
     const next: typeof paymentErrors = {}
     if (!payment.accountId) next.account = "اختر حساب دفع واحداً."
     const senderErr = validateSenderName(payment.senderName)
@@ -270,6 +283,7 @@ export function CheckoutClient({
 
   const paymentReady =
     payment.method === "cash_on_delivery" ||
+    (payment.method === "wallet" && !!wallet && wallet.balance >= total) ||
     (Boolean(payment.accountId) &&
       !validateSenderName(payment.senderName) &&
       !validateSenderPhone(payment.senderPhone) &&
@@ -590,7 +604,9 @@ export function CheckoutClient({
     const paymentLines =
       payment.method === "cash_on_delivery"
         ? ["*الدفع:*", "طريقة الدفع: الدفع عند الاستلام", "حالة الدفع: بانتظار التحصيل", ""]
-        : [
+        : payment.method === "wallet"
+          ? ["*الدفع:*", "طريقة الدفع: الدفع من الرصيد", "حالة الدفع: تم الدفع", ""]
+          : [
             "*الدفع:*",
             `طريقة الدفع: تحويل عبر ${chosenAccount?.providerName ?? "حساب دفع"}`,
             `اسم المرسل: ${payment.senderName.trim()}`,
@@ -1319,6 +1335,7 @@ export function CheckoutClient({
               setPaymentErrors({})
             }}
             formattedTotal={format(total)}
+            wallet={wallet ? { ...wallet, formattedBalance: format(wallet.balance), enough: wallet.balance >= total && total > 0 } : null}
             encryptionReady={paymentProofReady}
             errors={paymentErrors}
           />
