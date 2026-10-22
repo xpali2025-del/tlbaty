@@ -12,12 +12,14 @@ import { deletePaymentProof, newProofKey, putPaymentProof } from "@/lib/storage/
 import { CACHE_TAGS, productTag } from "@/lib/cache-tags"
 import { uniqueViolation } from "@/lib/manage-helpers"
 import { auditBlocked, chargeOrder } from "@/lib/wallet/ledger"
+import { redeemCoupon } from "./coupons"
 import { deductVariantStock, OutOfStockError, syncProductStock } from "./variants"
 import type { PricingProduct, PricingResult } from "./pricing"
 
 export class ProofStorageError extends Error {}
 
 export { OutOfStockError }
+export { CouponUnavailableError } from "./coupons"
 
 /** المنتجات بالسعر الحالي من قاعدة البيانات مباشرة (بلا كاش) — مصدر السعر الوحيد للطلب. */
 export async function loadPricingProducts(productNumbers: string[]): Promise<Map<string, PricingProduct>> {
@@ -171,6 +173,9 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
         }
       }
       if (!orderNumber) throw new Error("تعذّر توليد رقم طلب فريد")
+
+      // الكود المستعمل يُستهلك ذرياً هنا (أحادي الاستعمال/مقيّد بعميل)؛ إن لم يعد صالحاً يتراجع الطلب كله.
+      if (pricing.couponCode) await redeemCoupon(tx, pricing.couponCode, input.customer.id)
 
       // البنود لقطة ثابتة (الاسم والسعر)، وتُربط بالمنتج الحي إن وُجد حتى لو حُذف لاحقاً.
       const numbers = pricing.lines.map((l) => l.productId)

@@ -1,6 +1,6 @@
 import "server-only"
 
-import { desc } from "drizzle-orm"
+import { desc, isNull } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { notifications } from "@/lib/db/store"
 import { resolveOptionalImageUrl } from "@/lib/images"
@@ -80,6 +80,7 @@ export async function getAdminNotifications(): Promise<AdminNotificationsResult>
     const rows = await db
       .select()
       .from(notifications)
+      .where(isNull(notifications.customerId))
       .orderBy(desc(notifications.publishedAt), desc(notifications.createdAt))
     const items = rows.map(toAdminNotification)
     return { notifications: items, stats: buildStats(items), config, loadError: null }

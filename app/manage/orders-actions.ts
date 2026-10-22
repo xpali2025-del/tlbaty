@@ -20,6 +20,7 @@ import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZ
 import { canTransitionPayment, initialPaymentStatus, isPaymentStatus, type PaymentStatus } from "@/lib/payment"
 import { deletePaymentProof } from "@/lib/storage/proofs"
 import { refundOrder } from "@/lib/wallet/ledger"
+import { releaseCoupon } from "@/lib/orders/coupons"
 import { restoreVariantStock, syncProductStock } from "@/lib/orders/variants"
 
 // ============================================
@@ -95,7 +96,7 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
     const restoredSlugs: string[] = []
     await db.transaction(async (tx) => {
       const [current] = await tx
-        .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod, paymentStatus: orders.paymentStatus })
+        .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod, paymentStatus: orders.paymentStatus, couponCode: orders.couponCode })
         .from(orders)
         .where(eq(orders.id, orderId))
         .for("update")
@@ -113,6 +114,7 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
       // إلغاء الطلب أو إرجاعه يعيد المخزون (الحالتان نهائيتان فلا يتكرر الإرجاع).
       if (next === "cancelled" || next === "returned") {
         restoredSlugs.push(...(await restoreStock(tx, orderId)))
+        await releaseCoupon(tx, current.couponCode)
         // ما دُفع من الرصيد يعود للمحفظة تلقائياً (مرة واحدة) ويُسجَّل في سجل الدفع.
         if (current.paymentMethod === "wallet") {
           const refunded = await refundOrder(tx, {
@@ -351,7 +353,7 @@ export async function deleteOrder(id: string) {
   let slugs: string[] = []
   const deleted = await db.transaction(async (tx) => {
     const [current] = await tx
-      .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod })
+      .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod, couponCode: orders.couponCode })
       .from(orders)
       .where(eq(orders.id, orderId))
       .for("update")
@@ -361,7 +363,10 @@ export async function deleteOrder(id: string) {
       await refundOrder(tx, { orderId, orderNumber: current.orderNumber, actor: (await getManageSessionUser()) ?? "مدير", reason: "حذف الطلب" })
     }
     // حذف طلب مفتوح (لم يُسلَّم ولم يُلغَ) يعيد وحداته للمخزون؛ المسلَّم والملغي/المُرجَع لا يُعاد لهما شيء هنا.
-    if (isOpenOrderStatus(normalizeOrderStatus(current.status))) slugs = await restoreStock(tx, orderId)
+    if (isOpenOrderStatus(normalizeOrderStatus(current.status))) {
+      slugs = await restoreStock(tx, orderId)
+      await releaseCoupon(tx, current.couponCode)
+    }
     await tx.delete(orders).where(eq(orders.id, orderId))
     return true
   })

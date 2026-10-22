@@ -15,8 +15,13 @@ export const notifications = store.table('notifications', {
   publishedAt: timestamp('published_at', { withTimezone: true }),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   createdBy: text('created_by'),
+  /** Set for a personal notification (e.g. a cart reminder) visible only to this customer; null = broadcast to everyone. */
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'cascade' }),
+  /** Machine tag for automatic notifications ('cart_reminder', 'wishlist_reminder'). */
+  kind: text('kind'),
   ...timestamps(),
 }, (t) => [
+  index('notifications_customer_idx').on(t.customerId, t.publishedAt.desc()).where(sql`${t.customerId} is not null`),
   index('notifications_published_idx').on(t.publishedAt.desc()).where(sql`${t.status} = 'published'`),
   index('notifications_status_idx').on(t.status, t.createdAt.desc()),
 ])

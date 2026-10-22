@@ -16,6 +16,7 @@ import {
 import { EMPTY_ORDER_STATS, getAdminOrdersPage, getAdminOrderStats } from "@/lib/admin-orders"
 import { getAdminCouriers } from "@/lib/admin-couriers"
 import { EMPTY_ADMIN_WALLETS, getAdminWalletOverview } from "@/lib/admin-wallet"
+import { EMPTY_ADMIN_MARKETING, getAdminMarketing } from "@/lib/admin-marketing"
 import { EMPTY_ADMIN_NOTIFICATIONS, getAdminNotifications } from "@/lib/admin-notifications"
 import { getAdminUsers } from "@/lib/manage-users"
 import { Dashboard } from "./dashboard"
@@ -44,6 +45,7 @@ export default async function ManagePage() {
     settings,
     shipping,
     walletOverview,
+    marketing,
     ordersPage,
     orderStats,
     couriers,
@@ -68,6 +70,7 @@ export default async function ManagePage() {
       }
     }),
     need(can("wallets"), EMPTY_ADMIN_WALLETS, getAdminWalletOverview),
+    need(can("marketing"), EMPTY_ADMIN_MARKETING, getAdminMarketing),
     // الدفعة الأولى فقط من الطلبات — الباقي يُحمَّل عند الطلب.
     need(can("orders"), { orders: [], total: 0, hasMore: false }, () => getAdminOrdersPage({ status: "all", sort: "newest" }, 0)),
     need(can("orders"), EMPTY_ORDER_STATS, getAdminOrderStats),
@@ -89,6 +92,7 @@ export default async function ManagePage() {
       settings={settings}
       shipping={shipping}
       wallets={walletOverview}
+      marketing={marketing}
       ordersPage={ordersPage}
       orderStats={orderStats}
       couriers={couriers}

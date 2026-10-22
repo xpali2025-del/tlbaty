@@ -1,5 +1,5 @@
-import { timingSafeEqual } from "node:crypto"
 import { NextResponse, type NextRequest } from "next/server"
+import { isCronAuthorized } from "@/lib/cron-auth"
 import { purgeExpiredAuthData, purgeOldPaymentProofs } from "@/lib/maintenance"
 
 // GET /api/cron/cleanup — يستدعيه جدول Vercel Cron يومياً مع Authorization: Bearer $CRON_SECRET.
@@ -7,16 +7,8 @@ import { purgeExpiredAuthData, purgeOldPaymentProofs } from "@/lib/maintenance"
 
 export const dynamic = "force-dynamic"
 
-function authorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  const given = Buffer.from(request.headers.get("authorization") ?? "")
-  const expected = Buffer.from(`Bearer ${secret}`)
-  return given.length === expected.length && timingSafeEqual(given, expected)
-}
-
 export async function GET(request: NextRequest) {
-  if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+  if (!isCronAuthorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
   try {
     const deleted = await purgeExpiredAuthData()
     // فشل حذف الإثباتات لا يمنع نتيجة التنظيف الأساسي؛ يُعاد المحاولة غداً.

@@ -22,6 +22,7 @@ import {
   Bike,
   Coins,
   PiggyBank,
+  BellRing,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "@/lib/permissions"
@@ -53,6 +54,8 @@ import { AdsManager } from "./components/ads-manager"
 import { ShippingManager } from "./components/shipping-manager"
 import { CurrenciesManager } from "./components/currencies-manager"
 import { WalletsManager } from "./components/wallets-manager"
+import { MarketingManager } from "./components/marketing-manager"
+import type { AdminMarketing } from "@/lib/admin-marketing"
 import type { AdminWalletOverview } from "@/lib/admin-wallet"
 import { SettingsManager } from "./components/settings-manager"
 import { OrdersManager } from "./components/orders-manager"
@@ -77,6 +80,7 @@ type TabId =
   | "shipping"
   | "currencies"
   | "wallets"
+  | "marketing"
   | "settings"
 
 type DashboardProps = {
@@ -90,6 +94,7 @@ type DashboardProps = {
   settings: AdminSettings
   shipping: AdminShipping
   wallets: AdminWalletOverview
+  marketing: AdminMarketing
   /** الدفعة الأولى من الطلبات فقط — الباقي يُحمَّل من الخادم عند الحاجة. */
   ordersPage: OrdersPage
   orderStats: OrderStats
@@ -130,6 +135,7 @@ export function Dashboard(props: DashboardProps) {
     { id: "users", label: "المستخدمون", icon: Users, count: props.users.length },
     { id: "shipping", label: "الشحن", icon: Truck },
     { id: "currencies", label: "العملات", icon: Coins },
+    { id: "marketing", label: "التذكيرات والعروض", icon: BellRing },
     { id: "wallets", label: "المحافظ والرصيد", icon: PiggyBank, count: props.wallets.totals.pendingCount || undefined },
     { id: "settings", label: "إعدادات الموقع", icon: Settings },
   ] as { id: TabId; label: string; icon: typeof Package; count?: number }[]).filter((item) => props.permissions.includes(item.id))
@@ -240,6 +246,7 @@ export function Dashboard(props: DashboardProps) {
           <CurrenciesManager currencies={props.shipping.currencies} defaultCurrency={props.shipping.defaultCurrency} />
         )}
         {tab === "wallets" && <WalletsManager initial={props.wallets} />}
+        {tab === "marketing" && <MarketingManager initial={props.marketing} />}
         {tab === "settings" && <SettingsManager settings={props.settings} />}
       </main>
     </div>
