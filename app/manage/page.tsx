@@ -12,6 +12,7 @@ import {
   getAdminSettings,
   getAdminShipping,
   getAdminPaymentAccounts,
+  getAdminSizeCharts,
 } from "@/lib/admin"
 import { EMPTY_ORDER_STATS, getAdminOrdersPage, getAdminOrderStats } from "@/lib/admin-orders"
 import { getAdminCouriers } from "@/lib/admin-couriers"
@@ -46,6 +47,7 @@ export default async function ManagePage() {
     shipping,
     walletOverview,
     marketing,
+    sizeCharts,
     ordersPage,
     orderStats,
     couriers,
@@ -71,6 +73,8 @@ export default async function ManagePage() {
     }),
     need(can("wallets"), EMPTY_ADMIN_WALLETS, getAdminWalletOverview),
     need(can("marketing"), EMPTY_ADMIN_MARKETING, getAdminMarketing),
+    // المنتجات تحتاج الجداول لاختيارها في نموذج المنتج، فتُحمَّل لمن يملك إحدى الصلاحيتين.
+    need(can("size-charts") || can("products"), [], getAdminSizeCharts),
     // الدفعة الأولى فقط من الطلبات — الباقي يُحمَّل عند الطلب.
     need(can("orders"), { orders: [], total: 0, hasMore: false }, () => getAdminOrdersPage({ status: "all", sort: "newest" }, 0)),
     need(can("orders"), EMPTY_ORDER_STATS, getAdminOrderStats),
@@ -93,6 +97,7 @@ export default async function ManagePage() {
       shipping={shipping}
       wallets={walletOverview}
       marketing={marketing}
+      sizeCharts={sizeCharts}
       ordersPage={ordersPage}
       orderStats={orderStats}
       couriers={couriers}

@@ -4,6 +4,7 @@ import { availableFor, colorInStock, firstAvailable, lowStockMessage, sizeInStoc
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { SafeImage } from "@/components/safe-image"
+import { SizeGuide } from "@/components/size-guide"
 import { useState } from "react"
 import {
   Heart,
@@ -246,7 +247,19 @@ export function ProductDetail({
           {/* المقاسات */}
           {product.sizes && product.sizes.length > 0 && (
             <div className="mb-6">
-              <p className="mb-2 text-sm font-medium text-foreground">المقاس</p>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-foreground">المقاس</p>
+                {product.sizeChart ? (
+                  <SizeGuide
+                    chart={product.sizeChart}
+                    productSizes={product.sizes}
+                    selectedSize={selectedSize}
+                    isSizeAvailable={(size) => sizeInStock(product, selectedColor, size)}
+                    isSizeAvailableInOtherColor={(size) => (product.colors ?? []).some((c) => c.name !== selectedColor && sizeInStock(product, c.name, size))}
+                    onSelectSize={setSelectedSize}
+                  />
+                ) : null}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {product.sizes.map((size) => (
                   <button

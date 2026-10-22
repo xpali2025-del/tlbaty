@@ -13,6 +13,7 @@ import {
   paymentAccounts,
   productColors,
   productVariants,
+  sizeCharts,
   productImages,
   products,
   reviews,
@@ -70,8 +71,13 @@ export type AdminProduct = {
   sizes: string[]
   /** مخزون كل لون/مقاس؛ فارغ = مخزون واحد للمنتج (stock). */
   variants: { color: string; size: string; stock: number }[]
+  /** دليل المقاسات: جدول مشترك (معرّفه) أو جدول خاص بالمنتج؛ كلاهما فارغ = بلا دليل. */
+  sizeChartId?: string
+  customSizeChart?: import("@/lib/size-chart").SizeChart
   tags?: string[]
 }
+
+export type AdminSizeChart = import("@/lib/size-chart").SizeChart & { _id: string; productCount: number }
 
 export type AdminSubcategory = { name: string; slug?: string; description?: string }
 
@@ -251,6 +257,8 @@ export const getAdminProducts = () =>
       colors: colors.filter((c) => c.productId === p.id).map((c) => ({ name: c.name, hex: c.hex })),
       sizes: p.sizes,
       variants: variants.filter((v) => v.productId === p.id).map((v) => ({ color: v.color, size: v.size, stock: v.stock })),
+      sizeChartId: opt(p.sizeChartId),
+      customSizeChart: p.customSizeChart ?? undefined,
       tags: p.tags,
     }))
   })
@@ -434,4 +442,14 @@ export const getAdminShipping = () =>
       currencies: rates.map((c) => ({ code: c.code, name: c.name, symbol: c.symbol, rate: c.rate, updatedAt: c.updatedAt.toISOString() })),
       defaultCurrency: settings?.defaultCurrency ?? "YER",
     }
+  })
+
+export const getAdminSizeCharts = () =>
+  adminFetch<AdminSizeChart[]>([], async () => {
+    const [rows, counts] = await Promise.all([
+      db.select().from(sizeCharts).orderBy(asc(sizeCharts.sortOrder), asc(sizeCharts.name)),
+      db.select({ id: products.sizeChartId, n: count() }).from(products).where(sql`${products.sizeChartId} is not null`).groupBy(products.sizeChartId),
+    ])
+    const usage = new Map(counts.map((c) => [c.id, c.n]))
+    return rows.map((r) => ({ _id: r.id, name: r.name, columns: r.columns, rows: r.rows, productCount: usage.get(r.id) ?? 0 }))
   })

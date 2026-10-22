@@ -1,5 +1,6 @@
 import "server-only"
 import { cache } from "react"
+import { parseSizeChart, type SizeChart } from "@/lib/size-chart"
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import {
@@ -12,6 +13,7 @@ import {
   paymentAccounts,
   productColors,
   productVariants,
+  sizeCharts,
   productImages,
   products,
   reviews,
@@ -156,10 +158,28 @@ export const getProductBySlug = cache(async (slug: string): Promise<Product | un
     keyParts: ["store", "product", slug],
     tags: [productTag(slug), ...PRODUCT_REFERENCE_TAGS],
     fallback: [],
-    load: () => loadProducts(eq(products.slug, slug)),
+    load: async () => {
+      const [loaded] = await loadProducts(eq(products.slug, slug))
+      if (!loaded) return []
+      return [{ ...loaded, sizeChart: await loadSizeChart(slug) }]
+    },
   })
   return product
 })
+
+/** دليل المقاسات الفعّال: الجدول الخاص بالمنتج إن وُجد، وإلا الجدول المشترك المختار، وإلا لا شيء. */
+async function loadSizeChart(slug: string): Promise<SizeChart | undefined> {
+  const [row] = await db
+    .select({ custom: products.customSizeChart, chartId: products.sizeChartId })
+    .from(products)
+    .where(eq(products.slug, slug))
+    .limit(1)
+  if (!row) return undefined
+  if (row.custom) return parseSizeChart(row.custom) ?? undefined
+  if (!row.chartId) return undefined
+  const [chart] = await db.select().from(sizeCharts).where(eq(sizeCharts.id, row.chartId)).limit(1)
+  return chart ? (parseSizeChart({ name: chart.name, columns: chart.columns, rows: chart.rows }) ?? undefined) : undefined
+}
 
 export const getProductById = cache(async (id: string): Promise<Product | undefined> => {
   const all = await getProducts()

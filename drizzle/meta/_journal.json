@@ -85,6 +85,13 @@
       "when": 1792641120181,
       "tag": "0011_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792642977745,
+      "tag": "0012_size_charts",
+      "breakpoints": true
     }
   ]
 }

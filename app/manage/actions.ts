@@ -1,5 +1,6 @@
 "use server"
 
+import { parseSizeChart, validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { generateText } from "ai"
 import { and, count, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
@@ -12,6 +13,7 @@ import {
   manageUsers,
   productColors,
   productVariants,
+  sizeCharts,
   productImages,
   products,
   reviews,
@@ -154,6 +156,19 @@ export async function saveProduct(id: string | null, form: FormData) {
     variants.set(key, { color, size, stock, base: baseRaw !== undefined && Number.isFinite(baseRaw) && baseRaw >= 0 ? baseRaw : undefined })
   }
   if (trackVariants && variants.size === 0) throw new Error("أضف ألواناً أو مقاسات لتتبع مخزونها، أو أوقف تتبع المخزون حسب اللون والمقاس")
+  // دليل المقاسات (اختياري): none | chart (جدول مشترك) | custom (خاص بهذا المنتج).
+  const guide = json<{ mode?: string; chartId?: string; custom?: unknown }>(form, "sizeGuide", { mode: "none" })
+  let sizeChartId: string | null = null
+  let customSizeChart: SizeChart | null = null
+  if (guide.mode === "chart") {
+    sizeChartId = uuidParam(guide.chartId, "جدول المقاسات غير صالح")
+    const [chart] = await db.select({ id: sizeCharts.id }).from(sizeCharts).where(eq(sizeCharts.id, sizeChartId)).limit(1)
+    if (!chart) throw new Error("جدول المقاسات المختار غير موجود")
+  } else if (guide.mode === "custom") {
+    customSizeChart = parseSizeChart(guide.custom)
+    const problem = customSizeChart ? validateSizeChart(customSizeChart) : "بيانات جدول المقاسات غير صالحة"
+    if (problem) throw new Error(problem)
+  }
   const flags = { isNew: bool(form, "isNew"), isBestseller: bool(form, "isBestseller") }
   const stockBaseRaw = num(form, "stockBase")
   const stockBase = stockBaseRaw === undefined ? undefined : Math.max(0, Math.trunc(stockBaseRaw))
@@ -176,6 +191,8 @@ export async function saveProduct(id: string | null, form: FormData) {
     metaTitle: str(form, "metaTitle") ?? null,
     metaDescription: str(form, "metaDescription") ?? null,
     sizes: json<string[]>(form, "sizes", []),
+    sizeChartId,
+    customSizeChart,
     keywords: json<string[]>(form, "keywords", []),
     updatedAt: new Date(),
   }
