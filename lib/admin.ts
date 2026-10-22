@@ -1,5 +1,5 @@
 import "server-only"
-import { asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { asc, count, desc, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
 import {
@@ -9,6 +9,7 @@ import {
   categories,
   coupons,
   currencies,
+  orderPaymentProofs,
   paymentAccounts,
   productColors,
   productImages,
@@ -157,6 +158,10 @@ export type AdminSettings = {
   copyright?: string
   /** طرق الدفع المفعّلة في صفحة الدفع. */
   payments: { cashOnDelivery: boolean; manualTransfer: boolean; wallet: boolean }
+  /** أيام الاحتفاظ بصور إثبات الدفع بعد انتهاء الطلب؛ null = بلا حذف تلقائي. */
+  proofRetentionDays: number | null
+  /** عدد صور الإثبات المخزَّنة حالياً. */
+  storedProofs: number
 } | null
 
 /** حساب دفع كما يُعرض في لوحة الإدارة (يشمل المعطّل). */
@@ -371,6 +376,8 @@ export const getAdminSettings = () =>
       },
       copyright: opt(x.copyright),
       payments: { cashOnDelivery: x.codEnabled, manualTransfer: x.transferEnabled, wallet: x.walletEnabled },
+      proofRetentionDays: x.proofRetentionDays ?? null,
+      storedProofs: (await db.select({ n: count() }).from(orderPaymentProofs))[0].n,
     }
   })
 

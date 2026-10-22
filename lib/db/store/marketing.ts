@@ -120,9 +120,14 @@ export const siteSettings = store.table('site_settings', {
   codEnabled: boolean('cod_enabled').notNull().default(true),
   transferEnabled: boolean('transfer_enabled').notNull().default(true),
   walletEnabled: boolean('wallet_enabled').notNull().default(true),
+  /** Days after an order is delivered/cancelled/returned before its payment-proof image is deleted; null = keep forever. */
+  proofRetentionDays: integer('proof_retention_days'),
   copyright: text('copyright'),
   updatedAt: timestamps().updatedAt,
-}, (t) => [check('site_settings_singleton', sql`${t.id} = 1`)])
+}, (t) => [
+  check('site_settings_singleton', sql`${t.id} = 1`),
+  check('site_settings_proof_retention_range', sql`${t.proofRetentionDays} is null or ${t.proofRetentionDays} between 7 and 365`),
+])
 
 export const currencies = store.table('currencies', {
   code: text('code').primaryKey(),

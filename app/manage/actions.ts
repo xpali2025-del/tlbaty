@@ -630,6 +630,13 @@ export async function saveSettings(_id: string | null, form: FormData) {
   const codEnabled = bool(form, "codEnabled")
   const transferEnabled = bool(form, "transferEnabled")
   const walletEnabled = bool(form, "walletEnabled")
+  // حذف صور الإثبات تلقائياً: غير مفعّل افتراضياً؛ عند التفعيل المدة بين 7 و365 يوماً.
+  let proofRetentionDays: number | null = null
+  if (bool(form, "proofRetentionEnabled")) {
+    const days = Number(str(form, "proofRetentionDays"))
+    if (!Number.isInteger(days) || days < 7 || days > 365) throw new Error("مدة الاحتفاظ بصور الإثبات: عدد صحيح من 7 إلى 365 يوماً")
+    proofRetentionDays = days
+  }
   if (!codEnabled && !transferEnabled) throw new Error("فعّل طريقة دفع واحدة على الأقل، وإلا لن يستطيع العملاء إتمام الطلب")
 
   const values = {
@@ -654,6 +661,7 @@ export async function saveSettings(_id: string | null, form: FormData) {
     codEnabled,
     transferEnabled,
     walletEnabled,
+    proofRetentionDays,
     updatedAt: new Date(),
   }
 

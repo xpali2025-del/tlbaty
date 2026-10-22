@@ -74,3 +74,19 @@ describe('saveSettings validation', () => {
     expect((await getSiteConfig()).payments).toEqual({ cashOnDelivery: false, manualTransfer: true, wallet: false })
   })
 })
+
+describe('proof retention setting', () => {
+  it('is off by default, saves a valid period, clears when unchecked, and rejects out-of-range values', async () => {
+    await A.saveSettings(null, form({ name: 'x', ...both }))
+    expect((await db.select().from(s.siteSettings))[0].proofRetentionDays).toBeNull()
+    await A.saveSettings(null, form({ name: 'x', ...both, proofRetentionEnabled: 'true', proofRetentionDays: '45' }))
+    expect((await db.select().from(s.siteSettings))[0].proofRetentionDays).toBe(45)
+    for (const bad of ['6', '366', '', 'abc', '10.5']) {
+      await expect(A.saveSettings(null, form({ name: 'x', ...both, proofRetentionEnabled: 'true', proofRetentionDays: bad }))).rejects.toThrow('7 إلى 365')
+    }
+    expect((await db.select().from(s.siteSettings))[0].proofRetentionDays).toBe(45)
+    await A.saveSettings(null, form({ name: 'x', ...both, proofRetentionDays: '45' }))
+    expect((await db.select().from(s.siteSettings))[0].proofRetentionDays).toBeNull()
+  })
+})
+

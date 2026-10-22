@@ -146,6 +146,37 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">صور إثبات الدفع</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="proofRetentionEnabled" value="true" defaultChecked={settings?.proofRetentionDays != null} />
+              حذف صور الإثبات تلقائياً بعد انتهاء الطلب
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              بعد
+              <input
+                type="number"
+                name="proofRetentionDays"
+                min={7}
+                max={365}
+                defaultValue={settings?.proofRetentionDays ?? 30}
+                className="h-9 w-24 rounded-md border bg-background px-2 text-center"
+                dir="ltr"
+                aria-label="عدد أيام الاحتفاظ"
+              />
+              يوماً (من 7 إلى 365) من تسليم الطلب أو إلغائه أو إرجاعه
+            </label>
+            <p className="text-xs text-muted-foreground">
+              الحذف نهائي ولا يمكن استرجاع الصورة. لا يشمل الطلبات التي ما زال دفعها بانتظار التحقق، وتبقى بيانات الحوالة النصية
+              (اسم المرسل ورقمه ورقم الحوالة) في الطلب. يعمل الحذف يومياً وبدفعات؛ وعند تقصير المدة تُحذف الصور القديمة المستحقة
+              في أول تشغيل بعد الحفظ. المخزَّن حالياً: {settings?.storedProofs ?? 0} صورة.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base">الفوتر</CardTitle>
           </CardHeader>
           <CardContent>
