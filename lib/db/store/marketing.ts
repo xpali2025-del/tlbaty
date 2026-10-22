@@ -4,6 +4,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { categories } from './catalog'
 import { pk, store, timestamps } from './common'
+import { customers } from './customers'
 import { discountType, linkPlacement, manageUserRole, shippingIcon } from './enums'
 
 const money = (name: string) => numeric(name, { precision: 14, scale: 2, mode: 'number' })
@@ -15,8 +16,15 @@ export const coupons = store.table('coupons', {
   type: discountType('type').notNull().default('fixed'),
   minOrder: money('min_order').notNull().default(0),
   description: text('description').notNull(),
+  /** Personal coupon: only this customer can use it (and it never appears in the public coupon list). */
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  /** null = unlimited. A reminder coupon is single-use (1). */
+  maxUses: integer('max_uses'),
+  usedCount: integer('used_count').notNull().default(0),
   ...timestamps(),
 }, (t) => [
+  check('coupons_uses_valid', sql`${t.usedCount} >= 0 and (${t.maxUses} is null or (${t.maxUses} >= 1 and ${t.usedCount} <= ${t.maxUses}))`),
   uniqueIndex('coupons_code_lower_idx').on(sql`lower(${t.code})`),
   check('coupons_discount_nonneg', sql`${t.discount} >= 0`),
   check('coupons_percent_max', sql`${t.type} <> 'percent' or ${t.discount} <= 100`),
@@ -172,4 +180,42 @@ export const shippingMethods = store.table('shipping_methods', {
 }, (t) => [
   index('shipping_methods_zone_idx').on(t.zoneId, t.sortOrder),
   check('shipping_methods_price_nonneg', sql`${t.price} >= 0`),
+])
+
+/** Automatic reminder rule, one row per kind ('cart' | 'wishlist'). Disabled until the owner turns it on. */
+export const reminderRules = store.table('reminder_rules', {
+  kind: text('kind').primaryKey(),
+  enabled: boolean('enabled').notNull().default(false),
+  /** Hours the cart/wishlist must stay untouched before a reminder is sent. */
+  delayHours: integer('delay_hours').notNull(),
+  /** Minimum days between two reminders of this kind to the same customer. */
+  cooldownDays: integer('cooldown_days').notNull().default(7),
+  title: text('title').notNull(),
+  /** Placeholders: {product} {code} {discount} {days}. */
+  body: text('body').notNull(),
+  discountType: discountType('discount_type').notNull().default('percent'),
+  /** 0 = no coupon is attached. */
+  discountValue: money('discount_value').notNull().default(0),
+  minOrder: money('min_order').notNull().default(0),
+  couponValidDays: integer('coupon_valid_days').notNull().default(7),
+  updatedAt: timestamps().updatedAt,
+}, (t) => [
+  check('reminder_rules_kind', sql`${t.kind} in ('cart','wishlist')`),
+  check('reminder_rules_delay', sql`${t.delayHours} between 1 and 2160`),
+  check('reminder_rules_cooldown', sql`${t.cooldownDays} between 1 and 90`),
+  check('reminder_rules_discount', sql`${t.discountValue} >= 0 and (${t.discountType} <> 'percent' or ${t.discountValue} <= 100)`),
+  check('reminder_rules_coupon_days', sql`${t.couponValidDays} between 1 and 90`),
+])
+
+/** What was sent to whom and when (cooldown source, and one reminder per customer/kind/day even if the job runs twice). */
+export const reminderLog = store.table('reminder_log', {
+  id: pk(),
+  customerId: uuid('customer_id').notNull().references(() => customers.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  couponId: uuid('coupon_id').references(() => coupons.id, { onDelete: 'set null' }),
+  sentOn: date('sent_on').notNull().defaultNow(),
+  sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('reminder_log_once_per_day_idx').on(t.customerId, t.kind, t.sentOn),
+  index('reminder_log_lookup_idx').on(t.customerId, t.kind, t.sentAt.desc()),
 ])

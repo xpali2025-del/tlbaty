@@ -53,7 +53,8 @@ export async function purgeOldPaymentProofs(now = new Date()) {
       and(
         inArray(orders.status, ["delivered", "cancelled", "returned"]),
         ne(orders.paymentStatus, "pending_verification"),
-        lt(sql`coalesce(${orders.deliveredAt}, ${orders.updatedAt})`, cutoff),
+        // تاريخ داخل تعبير خام: يُرسل نصاً ISO مع cast (برنامج postgres لا يرمّز Date في تعبير SQL خام).
+        sql`coalesce(${orders.deliveredAt}, ${orders.updatedAt}) < ${cutoff.toISOString()}::timestamptz`,
       ),
     )
     .limit(PROOF_PURGE_BATCH)

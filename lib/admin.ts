@@ -1,5 +1,5 @@
 import "server-only"
-import { asc, count, desc, eq, inArray, sql } from "drizzle-orm"
+import { asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
 import {
@@ -316,7 +316,7 @@ export const getAdminSlides = () =>
 
 export const getAdminCoupons = () =>
   adminFetch<AdminCoupon[]>([], async () =>
-    (await db.select().from(coupons).orderBy(desc(coupons.createdAt))).map((c) => ({
+    (await db.select().from(coupons).where(isNull(coupons.customerId)).orderBy(desc(coupons.createdAt))).map((c) => ({
       _id: c.id,
       code: c.code,
       discount: c.discount,

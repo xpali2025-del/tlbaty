@@ -32,6 +32,7 @@ function normalizePriority(value: string | undefined): NotificationPriority {
 /** الإشعار الظاهر الآن: منشور، وقت نشره حلّ، ولم ينتهِ. */
 function visibleNow(now: Date) {
   return and(
+    isNull(notifications.customerId),
     eq(notifications.status, "published"),
     lte(notifications.publishedAt, now),
     or(isNull(notifications.expiresAt), gt(notifications.expiresAt, now)),
@@ -124,4 +125,38 @@ export async function getNotificationsSummary(): Promise<NotificationSummaryItem
         }))
     },
   })
+}
+
+/** إشعارات هذا العميل الشخصية (تذكير السلة والرغبات…) الصالحة الآن، الأحدث أولاً. بلا كاش: تختلف من عميل لآخر. */
+export async function getPersonalNotifications(customerId: string, limit = 20): Promise<PublicNotification[]> {
+  if (!process.env.DATABASE_URL) return []
+  const now = new Date()
+  const rows = await db
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.customerId, customerId),
+        eq(notifications.status, "published"),
+        lte(notifications.publishedAt, now),
+        or(isNull(notifications.expiresAt), gt(notifications.expiresAt, now)),
+      ),
+    )
+    .orderBy(desc(notifications.publishedAt))
+    .limit(limit)
+  return rows.flatMap((row) =>
+    row.publishedAt && row.title.trim() && (row.body ?? "").trim()
+      ? [
+          {
+            _id: row.id,
+            title: row.title.trim(),
+            body: (row.body ?? "").trim(),
+            imageUrl: resolveOptionalImageUrl(row.imageKey) ?? null,
+            link: sanitizeInternalLink(row.link),
+            priority: normalizePriority(row.priority),
+            publishedAt: row.publishedAt.toISOString(),
+          },
+        ]
+      : [],
+  )
 }

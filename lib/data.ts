@@ -1,6 +1,6 @@
 import "server-only"
 import { cache } from "react"
-import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import {
   adCategories,
@@ -425,17 +425,45 @@ export const getCoupons = cache(async (): Promise<Coupon[]> =>
     tags: [CACHE_TAGS.coupons],
     fallback: [],
     load: async () => {
-      const rows = await db.select().from(coupons).orderBy(asc(coupons.code))
-      return rows.map((c) => ({
-        code: c.code,
-        discount: c.discount,
-        type: c.type,
-        minOrder: c.minOrder,
-        description: c.description,
-      }))
+      // العامة فقط: كود شخصي لعميل (تذكير السلة…) لا يظهر في قائمة يراها الجميع.
+      const rows = await db.select().from(coupons).where(isNull(coupons.customerId)).orderBy(asc(coupons.code))
+      return rows.map(toCoupon)
     },
   }),
 )
+
+const toCoupon = (c: typeof coupons.$inferSelect): Coupon => ({
+  code: c.code,
+  discount: c.discount,
+  type: c.type,
+  minOrder: c.minOrder,
+  description: c.description,
+})
+
+/**
+ * أكواد العميل الشخصية الصالحة الآن (غير منتهية ولم تُستهلك). بلا كاش: تختلف من عميل لآخر.
+ * مصدر الحقيقة لخصم الطلب على الخادم وللأكواد التي تصل لمتصفح العميل نفسه فقط.
+ */
+export async function getPersonalCoupons(customerId: string): Promise<Coupon[]> {
+  if (!process.env.DATABASE_URL) return []
+  const rows = await db
+    .select()
+    .from(coupons)
+    .where(
+      and(
+        eq(coupons.customerId, customerId),
+        or(isNull(coupons.expiresAt), gt(coupons.expiresAt, new Date())),
+        or(isNull(coupons.maxUses), lt(coupons.usedCount, coupons.maxUses)),
+      ),
+    )
+  return rows.map(toCoupon)
+}
+
+/** العامة + الشخصية لهذا العميل. */
+export async function getCouponsForCustomer(customerId: string): Promise<Coupon[]> {
+  const [shared, personal] = await Promise.all([getCoupons(), getPersonalCoupons(customerId)])
+  return [...shared, ...personal]
+}
 
 /** طرق التوصيل حسب المحافظة — تُدار من لوحة الإدارة */
 export const getShippingZones = cache(async (): Promise<ShippingZone[]> =>

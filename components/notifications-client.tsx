@@ -17,6 +17,9 @@ import type { PublicNotification } from "@/lib/notification-types"
 //   لذلك لا يحدث أي اختلاف بين HTML الخادم والمتصفح (بلا Hydration Error).
 // ============================================
 
+/** كود التذكير الشخصي (TJ + 8 رموز) داخل نص الإشعار. */
+const PERSONAL_CODE = /\bTJ[A-Z2-9]{8}\b/
+
 type Props = {
   initialItems: PublicNotification[]
   initialHasMore: boolean
@@ -39,7 +42,7 @@ function formatPublishedAt(iso: string): string {
 }
 
 export function NotificationsClient({ initialItems, initialHasMore, total }: Props) {
-  const { isRead, markAsRead, markAllAsRead, hydrated, unreadCount } = useNotifications()
+  const { isRead, markAsRead, markAllAsRead, hydrated, unreadCount, personal } = useNotifications()
 
   const [items, setItems] = useState<PublicNotification[]>(initialItems)
   const [page, setPage] = useState(0)
@@ -76,8 +79,12 @@ export function NotificationsClient({ initialItems, initialHasMore, total }: Pro
     }
   }, [page])
 
+  // الشخصية (تذكير السلة/الرغبات) أولاً، ثم إشعارات المتجر العامة.
+  const allItems = [...personal.filter((p) => !items.some((i) => i._id === p._id)), ...items]
+  const allTotal = total + personal.length
+
   // حالة عدم وجود إشعارات
-  if (items.length === 0) {
+  if (allItems.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
         <span className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
@@ -106,10 +113,10 @@ export function NotificationsClient({ initialItems, initialHasMore, total }: Pro
           {hydrated && unreadCount > 0 ? (
             <>
               لديك <span className="font-bold text-foreground">{unreadCount}</span> إشعار غير مقروء
-              من أصل {total}
+              من أصل {allTotal}
             </>
           ) : (
-            <>إجمالي الإشعارات: {total}</>
+            <>إجمالي الإشعارات: {allTotal}</>
           )}
         </p>
 
@@ -127,7 +134,7 @@ export function NotificationsClient({ initialItems, initialHasMore, total }: Pro
 
       {/* قائمة الإشعارات */}
       <ul className="flex flex-col gap-3">
-        {items.map((item) => {
+        {allItems.map((item) => {
           // قبل الـ Hydration نعتبر الكل مقروءاً فلا تظهر «جديد» على الخادم.
           const unread = hydrated && !isRead(item._id)
 
@@ -192,6 +199,20 @@ export function NotificationsClient({ initialItems, initialHasMore, total }: Pro
                           className="flex min-h-11 items-center rounded-xl px-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
                         >
                           تعليم كمقروء
+                        </button>
+                      )}
+
+                      {/* كود خصم شخصي داخل نص الإشعار: نسخ بنقرة */}
+                      {item.body.match(PERSONAL_CODE) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard?.writeText(item.body.match(PERSONAL_CODE)![0]).catch(() => undefined)
+                            markAsRead(item._id)
+                          }}
+                          className="flex min-h-11 items-center rounded-xl border border-primary/40 px-3 text-xs font-bold text-primary transition-colors hover:bg-primary/10"
+                        >
+                          نسخ الكود
                         </button>
                       )}
 

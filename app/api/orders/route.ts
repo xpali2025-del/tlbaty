@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
-import { getCoupons, getCurrencySettings, getPaymentAccountById, getShippingZones } from "@/lib/data"
+import { getCouponsForCustomer, getCurrencySettings, getPaymentAccountById, getShippingZones } from "@/lib/data"
 import { isDbConfigured } from "@/lib/db-cache"
 import { getSiteConfig } from "@/lib/site-config"
 import { isProofStorageConfigured } from "@/lib/env"
-import { findOrderByIdempotencyKey, insertOrder, loadPricingProducts, OutOfStockError, parseIdempotencyKey, ProofStorageError } from "@/lib/orders/create"
+import { CouponUnavailableError, findOrderByIdempotencyKey, insertOrder, loadPricingProducts, OutOfStockError, parseIdempotencyKey, ProofStorageError } from "@/lib/orders/create"
 import { computeOrderPricing, priceChanged } from "@/lib/orders/pricing"
 import { normalizeInternationalPhone, normalizeSenderPhone } from "@/lib/phone"
 import { isValidSenderName, isValidTransferReference } from "@/lib/payment-input"
@@ -257,7 +257,7 @@ export async function POST(req: Request) {
   const [products, zones, coupons, currencySettings] = await Promise.all([
     loadPricingProducts([...new Set(requestedItems.map((i) => i.productId).filter(Boolean))]),
     getShippingZones(),
-    getCoupons(),
+    getCouponsForCustomer(sessionCustomer.id),
     getCurrencySettings(),
   ])
   const pricing = computeOrderPricing({
@@ -367,6 +367,9 @@ export async function POST(req: Request) {
     if (error instanceof WalletError) {
       // الرصيد/التجميد/التهدئة/السقف: رسالة واضحة، والطلب والمخزون تراجعا كاملين.
       return fail(`WALLET_${error.code}`, error.code === "INSUFFICIENT" ? 402 : 403, error.message)
+    }
+    if (error instanceof CouponUnavailableError) {
+      return fail("COUPON_UNAVAILABLE", 409, "كود الخصم لم يعد صالحاً (استُعمل أو انتهت مدته). أزله من الطلب وحاول مجدداً.")
     }
     if (error instanceof OutOfStockError) {
       return fail("OUT_OF_STOCK", 409, `الكمية المطلوبة من "${error.productName}" غير متوفرة حالياً. عدّل الكمية أو أزل المنتج من السلة.`)

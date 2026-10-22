@@ -16,7 +16,7 @@ import {
   pruneReadIds,
   saveReadIds,
 } from "@/lib/notifications-read-state"
-import type { NotificationSummaryItem } from "@/lib/notification-types"
+import type { NotificationSummaryItem, PublicNotification } from "@/lib/notification-types"
 
 // ============================================
 // مزوّد حالة الإشعارات
@@ -40,6 +40,8 @@ type NotificationsContextValue = {
   markAllAsRead: () => void
   /** إعادة جلب الملخص يدوياً (بعد النشر مثلاً). */
   refreshSummary: () => void
+  /** إشعارات العميل الشخصية (تذكير السلة/الرغبات مع كود الخصم)، فارغة لغير المسجّل. */
+  personal: PublicNotification[]
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined)
@@ -69,7 +71,26 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     shouldRetryOnError: false,
   })
 
-  const summaryItems = useMemo(() => data?.items ?? [], [data])
+  // إشعارات العميل الشخصية: طلب خاص بلا كاش مشترك، فارغ لغير المسجّل.
+  const { data: personalData, mutate: mutatePersonal } = useSWR<{ items: PublicNotification[] }>(
+    "/api/notifications/mine",
+    fetchSummary as unknown as (url: string) => Promise<{ items: PublicNotification[] }>,
+    { revalidateOnFocus: false, revalidateOnReconnect: false, refreshInterval: 0, dedupingInterval: 5 * 60 * 1000, keepPreviousData: true, onError: () => undefined, shouldRetryOnError: false },
+  )
+  const personal = useMemo(() => personalData?.items ?? [], [personalData])
+
+  // بعد تسجيل الدخول (من أي نافذة) نجلب إشعارات العميل فوراً.
+  useEffect(() => {
+    const reload = () => void mutatePersonal()
+    window.addEventListener("tajline:logged-in", reload)
+    return () => window.removeEventListener("tajline:logged-in", reload)
+  }, [mutatePersonal])
+
+  // العدّاد والتعليم كمقروء يشملان العامة والشخصية.
+  const summaryItems = useMemo<NotificationSummaryItem[]>(
+    () => [...(data?.items ?? []), ...personal.map((p) => ({ _id: p._id, publishedAt: p.publishedAt, priority: p.priority }))],
+    [data, personal],
+  )
 
   // قراءة التخزين المحلي بعد التحميل فقط.
   useEffect(() => {
@@ -121,11 +142,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const refreshSummary = useCallback(() => {
     void mutate()
-  }, [mutate])
+    void mutatePersonal()
+  }, [mutate, mutatePersonal])
 
   const value = useMemo<NotificationsContextValue>(
-    () => ({ unreadCount, hydrated, isRead, markAsRead, markAllAsRead, refreshSummary }),
-    [unreadCount, hydrated, isRead, markAsRead, markAllAsRead, refreshSummary],
+    () => ({ unreadCount, hydrated, isRead, markAsRead, markAllAsRead, refreshSummary, personal }),
+    [unreadCount, hydrated, isRead, markAsRead, markAllAsRead, refreshSummary, personal],
   )
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>
@@ -145,5 +167,6 @@ export function useNotifications(): NotificationsContextValue {
     markAsRead: () => undefined,
     markAllAsRead: () => undefined,
     refreshSummary: () => undefined,
+    personal: [],
   }
 }

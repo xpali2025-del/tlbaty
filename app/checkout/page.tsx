@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { CheckoutClient } from "@/components/checkout-client"
-import { getCoupons, getShippingZones, getPaymentAccounts } from "@/lib/data"
+import { getCouponsForCustomer, getShippingZones, getPaymentAccounts } from "@/lib/data"
 import { isPaymentProofEncryptionReady } from "@/lib/payment-proof"
 import { getCurrentCustomer } from "@/lib/otp/session"
 
@@ -25,7 +25,7 @@ export default async function CheckoutPage() {
   }
 
   const [coupons, shippingZones, paymentAccounts] = await Promise.all([
-    getCoupons(),
+    getCouponsForCustomer(customer.id),
     getShippingZones(),
     getPaymentAccounts(),
   ])

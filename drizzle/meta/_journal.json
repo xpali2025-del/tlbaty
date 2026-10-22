@@ -78,6 +78,13 @@
       "when": 1792639396571,
       "tag": "0010_marketing_opt_in",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792641120181,
+      "tag": "0011_reminders",
+      "breakpoints": true
     }
   ]
 }
