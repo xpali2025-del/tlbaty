@@ -86,7 +86,8 @@ export function mergeSiteConfig(row: Row | null): SiteConfig {
     },
     footer: { copyright: clean(row.copyright) || `© ${new Date().getFullYear()} جميع الحقوق محفوظة - ${name}`, credit: d.footer.credit },
     logoUrl: resolveOptionalImageUrl(row.logoKey) ?? null,
-    payments: { cashOnDelivery: row.codEnabled, manualTransfer: row.transferEnabled, wallet: row.walletEnabled },
+    // نسخة كاش قديمة (قبل إضافة العمود) قد لا تحمل walletEnabled: نعتبره مفعّلاً كالافتراضي.
+    payments: { cashOnDelivery: row.codEnabled, manualTransfer: row.transferEnabled, wallet: row.walletEnabled ?? true },
   }
 }
 
