@@ -26,7 +26,7 @@ export function AdBanner({ ad }: { ad: Ad }) {
 
   if (ad.href) {
     return (
-      <Link
+      <Link prefetch={false}
         href={ad.href}
         aria-label={ad.title}
         className="col-span-full block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-2xl"

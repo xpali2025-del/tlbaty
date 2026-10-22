@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useUrlParam } from "@/hooks/use-url-param"
 import { Search, X, LayoutGrid, Flame, Sparkles, Tag } from "lucide-react"
 import type { Ad, Product, Category } from "@/lib/types"
 import { ProductCard } from "@/components/product-card"
@@ -46,11 +46,8 @@ export function ProductsExplorer({
   categories: Category[]
   ads?: Ad[]
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
-  const filterFromUrl = normalizeFilter(searchParams.get("filter"))
+  const [filterParam, setFilterParam] = useUrlParam("filter")
+  const filterFromUrl = normalizeFilter(filterParam)
 
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string>("all")
@@ -63,19 +60,7 @@ export function ProductsExplorer({
   const changeFilter = (nextFilter: FilterKey) => {
     setFilter(nextFilter)
 
-    const params = new URLSearchParams(searchParams.toString())
-
-    if (nextFilter === "all") {
-      params.delete("filter")
-    } else {
-      params.set("filter", nextFilter)
-    }
-
-    const queryString = params.toString()
-
-    router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
-      scroll: false,
-    })
+    setFilterParam(nextFilter === "all" ? null : nextFilter)
   }
 
   const results = useMemo(() => {

@@ -10,7 +10,7 @@ export function Logo({ className = "" }: { className?: string }) {
   return (
     <Link href="/" className={`inline-flex items-center ${className}`} aria-label={`${name} - الرئيسية`}>
       <Image
-        src={logoUrl ?? "/logo.png"}
+        src={logoUrl ?? "/logo-192.webp"}
         alt={name}
         width={200}
         height={100}

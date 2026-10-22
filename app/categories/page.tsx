@@ -5,6 +5,7 @@ import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
 import { ProductsExplorer } from "@/components/categories/products-explorer"
 import { getAds, getCategories, getProducts } from "@/lib/data"
+import { toCardProduct } from "@/lib/types"
 
 export const metadata: Metadata = {
   title: "كافة المنتجات",
@@ -23,7 +24,7 @@ export default async function CategoriesPage() {
       <Header />
       <main className="pb-24 lg:pb-12">
         <Suspense fallback={<div className="p-6 text-center">جاري تحميل المنتجات...</div>}>
-          <ProductsExplorer products={products} categories={categories} ads={ads} />
+          <ProductsExplorer products={products.map(toCardProduct)} categories={categories} ads={ads} />
         </Suspense>
       </main>
       <Footer />

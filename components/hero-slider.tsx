@@ -19,9 +19,13 @@ export function HeroSlider({ slides }: { slides: Slide[] }) {
     if (!emblaApi) return
     onSelect()
     emblaApi.on("select", onSelect)
-    const interval = setInterval(() => emblaApi.scrollNext(), 5000)
+    // لا تدوير تلقائي لمن فعّل «تقليل الحركة» ولا والتبويب مخفي (يوفر بطارية وCPU على الجوال).
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const interval = reduceMotion ? null : setInterval(() => {
+      if (document.visibilityState === "visible") emblaApi.scrollNext()
+    }, 5000)
     return () => {
-      clearInterval(interval)
+      if (interval) clearInterval(interval)
       emblaApi.off("select", onSelect)
     }
   }, [emblaApi, onSelect])

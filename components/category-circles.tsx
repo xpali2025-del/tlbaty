@@ -10,7 +10,7 @@ export function CategoryCircles({ categories }: { categories: Category[] }) {
       <div className="mx-auto max-w-7xl px-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl md:text-2xl font-bold text-foreground">الأقسام الرئيسية</h2>
-          <Link
+          <Link prefetch={false}
             href="/shop"
             className="inline-flex items-center gap-1 text-sm text-primary font-bold hover:underline"
           >
@@ -20,7 +20,7 @@ export function CategoryCircles({ categories }: { categories: Category[] }) {
         </div>
         <div className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide pb-2">
           {categories.map((cat) => (
-            <Link
+            <Link prefetch={false}
               key={cat.id}
               href={`/category/${cat.slug}`}
               className="flex flex-col items-center gap-2 shrink-0 group"
