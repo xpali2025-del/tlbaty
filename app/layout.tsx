@@ -1,6 +1,6 @@
 import { safeJsonLd } from "@/lib/json-ld"
 import type { Metadata, Viewport } from "next"
-import { Tajawal, Amiri } from "next/font/google"
+import { Tajawal } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { CartProvider } from "@/components/cart-provider"
 import { WishlistProvider } from "@/components/wishlist-provider"
@@ -15,15 +15,9 @@ import "./globals.css"
 
 const tajawal = Tajawal({
   subsets: ["arabic", "latin"],
-  weight: ["300", "400", "500", "700", "800"],
+  // الأوزان المستعملة فعلاً فقط (لا font-light/extrabold في الواجهة): كل وزن إضافي ملف خط آخر على كل صفحة.
+  weight: ["400", "500", "700"],
   variable: "--font-tajawal",
-  display: "swap",
-})
-
-const amiri = Amiri({
-  subsets: ["arabic", "latin"],
-  weight: ["400", "700"],
-  variable: "--font-amiri",
   display: "swap",
 })
 
@@ -193,7 +187,7 @@ export default async function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${tajawal.variable} ${amiri.variable} bg-background`}
+      className={`${tajawal.variable} bg-background`}
     >
       <head>
         <script

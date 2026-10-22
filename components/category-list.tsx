@@ -12,7 +12,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {categories.map((cat) => (
             <li key={cat.id}>
-              <Link
+              <Link prefetch={false}
                 href={`/category/${cat.slug}`}
                 className="flex items-center gap-4 bg-card border border-border rounded-2xl p-3 hover:border-primary/40 hover:shadow-sm transition-all"
               >

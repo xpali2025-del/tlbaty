@@ -10,6 +10,7 @@ import { SafeImage } from "@/components/safe-image"
 import { getBrandSlugs, getBrandBySlug, getProductsByBrand, getCategories } from "@/lib/data"
 import { SITE_CONFIG } from "@/lib/site"
 import { decodeSlug } from "@/lib/utils"
+import { toCardProduct } from "@/lib/types"
 
 // On-Demand Revalidation: الصفحة ثابتة وتُحدَّث فوراً
 // عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
@@ -149,7 +150,7 @@ export default async function BrandPage({
               <div className="p-6 text-center text-muted-foreground">جاري تحميل المنتجات...</div>
             }
           >
-            <BrandProducts products={products} categories={categories} />
+            <BrandProducts products={products.map(toCardProduct)} categories={categories} />
           </Suspense>
         </div>
       </main>

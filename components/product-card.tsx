@@ -26,7 +26,7 @@ export function ProductCard({ product, compact = false }: { product: Product; co
 
   return (
     <div className="group relative">
-      <Link
+      <Link prefetch={false}
         href={`/product/${product.slug}`}
         className="block bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/40 hover:shadow-lg transition-all"
         itemScope

@@ -15,6 +15,7 @@ import {
 } from "@/lib/data"
 import { SITE_CONFIG } from "@/lib/site"
 import { decodeSlug } from "@/lib/utils"
+import { toCardProduct } from "@/lib/types"
 
 // On-Demand Revalidation: الصفحة ثابتة وتُحدَّث فوراً
 // عبر إجراءات لوحة الإدارة (revalidateStore في lib/manage-helpers.ts)
@@ -137,7 +138,7 @@ export default async function CategoryPage({
           </header>
 
           <Suspense fallback={<div className="p-6 text-center text-muted-foreground">جاري تحميل المنتجات...</div>}>
-            <CategoryProducts products={products} subcategories={subcategories} ads={ads} />
+            <CategoryProducts products={products.map(toCardProduct)} subcategories={subcategories} ads={ads} />
           </Suspense>
         </div>
       </main>

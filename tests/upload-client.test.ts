@@ -73,4 +73,16 @@ describe('uploadFormImages', () => {
     await expect(uploadFormImages(form, [{ name: 'image', folder: 'products', keyName: 'imageKey' }], failing)).rejects.toThrow('فشل رفع الصورة')
     expect(form.has('imageKey')).toBe(false)
   })
+
+  it('uploads the prepared (compressed) file instead of the original, validating the original first', async () => {
+    const form = new FormData()
+    form.set('image', file('big.png', 'image/png', 4_000_000))
+    const d = deps()
+    const small = new File([new Uint8Array(50)], 'big.webp', { type: 'image/webp' })
+    const prepare = vi.fn(async () => small)
+    const keys = await uploadFormImages(form, [{ name: 'image', folder: 'products', keyName: 'imageKey' }], { ...d, prepare })
+    expect(prepare).toHaveBeenCalledWith(expect.any(File), 'products')
+    expect(d.request).toHaveBeenCalledWith('products', 'image/webp', 50)
+    expect(keys).toEqual(['products/k1.webp'])
+  })
 })

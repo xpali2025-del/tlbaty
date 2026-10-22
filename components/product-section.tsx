@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
-import type { Product } from "@/lib/types"
+import { toCardProduct, type Product } from "@/lib/types"
 import { ProductCard } from "./product-card"
 
 export function ProductSection({
@@ -31,7 +31,7 @@ export function ProductSection({
           </Link>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5">
-          {products.slice(0, limit).map((product) => (
+          {products.slice(0, limit).map(toCardProduct).map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
         </div>

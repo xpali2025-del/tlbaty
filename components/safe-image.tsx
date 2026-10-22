@@ -43,7 +43,7 @@ export function SafeImage({ src, alt, className, ...props }: SafeImageProps) {
         {/* شعار المتجر كصورة أصلية خفيفة — إن فشل يُخفى ويبقى النص */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/logo.png"
+          src="/logo-192.webp"
           alt=""
           aria-hidden="true"
           className="h-8 w-auto opacity-60"

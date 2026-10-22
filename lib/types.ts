@@ -188,3 +188,31 @@ export interface RecentlyViewedItem extends WishlistItem {
   isNew?: boolean
   sku?: string
 }
+
+/**
+ * نسخة خفيفة من المنتج لبطاقات القوائم التي تُمرَّر إلى مكوّنات المتصفح: تُسلسَل كاملة داخل HTML الصفحة،
+ * فحذف الوصف الطويل وبقية الصور وحقول SEO يقلّل حجم الصفحة كثيراً. الوصف يُقتطع (يكفي للبحث داخل القائمة).
+ */
+export function toCardProduct(p: Product): Product {
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    description: p.description.slice(0, 120),
+    price: p.price,
+    oldPrice: p.oldPrice,
+    image: p.image,
+    images: p.image ? [p.image] : [],
+    category: p.category,
+    subcategory: p.subcategory,
+    rating: p.rating,
+    reviewsCount: p.reviewsCount,
+    colors: p.colors,
+    sizes: p.sizes,
+    stock: p.stock,
+    isNew: p.isNew,
+    isBestseller: p.isBestseller,
+    tags: p.tags,
+    brand: p.brand,
+  }
+}

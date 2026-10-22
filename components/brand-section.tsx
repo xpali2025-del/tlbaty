@@ -22,7 +22,7 @@ export function BrandSection({
       <div className="mx-auto max-w-7xl px-4">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl md:text-2xl font-bold text-foreground">{title}</h2>
-          <Link
+          <Link prefetch={false}
             href={viewAllHref}
             className="inline-flex items-center gap-1 text-sm text-primary font-bold hover:underline"
           >

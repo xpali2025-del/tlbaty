@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useUrlParam } from "@/hooks/use-url-param"
 import { LayoutGrid } from "lucide-react"
 import type { Ad, Product, Subcategory } from "@/lib/types"
 import { ProductCard } from "@/components/product-card"
@@ -18,16 +18,11 @@ export function CategoryProducts({
   subcategories: SubWithCount[]
   ads?: Ad[]
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const [subFromUrl, setSubParam] = useUrlParam("sub")
 
   const validSlugs = useMemo(() => subcategories.map((s) => s.slug), [subcategories])
 
-  const subFromUrl = searchParams.get("sub")
-  const initial = subFromUrl && validSlugs.includes(subFromUrl) ? subFromUrl : "all"
-
-  const [active, setActive] = useState<string>(initial)
+  const [active, setActive] = useState<string>("all")
 
   useEffect(() => {
     setActive(subFromUrl && validSlugs.includes(subFromUrl) ? subFromUrl : "all")
@@ -35,14 +30,7 @@ export function CategoryProducts({
 
   const changeSub = (slug: string) => {
     setActive(slug)
-    const params = new URLSearchParams(searchParams.toString())
-    if (slug === "all") {
-      params.delete("sub")
-    } else {
-      params.set("sub", slug)
-    }
-    const qs = params.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    setSubParam(slug === "all" ? null : slug)
   }
 
   const results = useMemo(() => {
