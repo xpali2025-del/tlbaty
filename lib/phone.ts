@@ -127,9 +127,17 @@ export function customerKey(input: { customerId?: string; phone?: string }): str
 // ============================================
 
 export const SUPPORTED_COUNTRIES = [
-  { code: "967", name: "اليمن", mobile: /^7\d{8}$/ },
-  { code: "966", name: "السعودية", mobile: /^5\d{8}$/ },
+  { code: "967", name: "اليمن", flag: "🇾🇪", example: "7XXXXXXXX", mobile: /^7\d{8}$/ },
+  { code: "966", name: "السعودية", flag: "🇸🇦", example: "5XXXXXXXX", mobile: /^5\d{8}$/ },
 ] as const
+
+/** كود الدولة الافتراضي لتسجيل الدخول (اليمن). */
+export const DEFAULT_LOGIN_COUNTRY = "967"
+
+/** رقم دولي → كود دولته (من الدول المدعومة) أو null. */
+export function countryCodeOf(international: string): string | null {
+  return SUPPORTED_COUNTRIES.find((c) => international.startsWith(c.code))?.code ?? null
+}
 
 /**
  * يوحّد أي إدخال إلى الصيغة الدولية بلا + (967781234567 / 966512345678) أو يعيد null.

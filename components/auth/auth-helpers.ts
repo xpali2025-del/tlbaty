@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 // رسائل الأخطاء الموحّدة بالعربية لكل رموز الخطأ القادمة من مسارات المصادقة.
 export const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  INVALID_PHONE: "رقم الهاتف غير صحيح. أدخل رقماً يمنياً مكوّناً من 9 أرقام.",
+  INVALID_PHONE: "رقم الهاتف غير صحيح. تأكد من الرقم ومن كود الدولة.",
+  COUNTRY_NOT_ALLOWED: "تسجيل الدخول غير متاح حالياً لهذه الدولة.",
   INVALID_JSON: "طلب غير صالح. حاول مرة أخرى.",
   INVALID_CODE: "الرمز غير صحيح. تأكد من الأرقام وحاول مجدداً.",
   NO_CODE: "لا يوجد رمز فعّال. اطلب رمزاً جديداً.",

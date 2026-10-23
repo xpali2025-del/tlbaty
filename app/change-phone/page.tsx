@@ -4,6 +4,7 @@ import { Header } from "@/components/header"
 import { getCurrentCustomer } from "@/lib/otp/session"
 import { ChangePhoneForm } from "@/components/auth/change-phone-form"
 import { OTP_LENGTH, OTP_RESEND } from "@/lib/otp/config"
+import { getLoginCountryOptions } from "@/lib/otp/countries"
 import { ArrowRight } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -18,6 +19,8 @@ export default async function ChangePhonePage() {
   if (!customer) {
     redirect("/login?next=/change-phone")
   }
+
+  const countries = await getLoginCountryOptions()
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,7 +42,7 @@ export default async function ChangePhonePage() {
           </p>
         </div>
 
-        <ChangePhoneForm otpLength={OTP_LENGTH} resendSeconds={OTP_RESEND} />
+        <ChangePhoneForm otpLength={OTP_LENGTH} resendSeconds={OTP_RESEND} countries={countries} />
       </main>
     </div>
   )

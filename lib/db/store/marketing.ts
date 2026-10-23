@@ -132,11 +132,14 @@ export const siteSettings = store.table('site_settings', {
   proofRetentionDays: integer('proof_retention_days'),
   /** Number of the WhatsApp login bot (international digits). Null = use WHATSAPP_BOT_NUMBER from the environment. */
   loginBotNumber: text('login_bot_number'),
+  /** Country calling codes customers may log in with (subset of SUPPORTED_COUNTRIES); Yemen only by default. */
+  loginCountries: text('login_countries').array().notNull().default(sql`'{967}'::text[]`),
   copyright: text('copyright'),
   updatedAt: timestamps().updatedAt,
 }, (t) => [
   check('site_settings_singleton', sql`${t.id} = 1`),
   check('site_settings_login_bot_number_format', sql`${t.loginBotNumber} is null or ${t.loginBotNumber} ~ '^[0-9]{8,15}$'`),
+  check('site_settings_login_countries_nonempty', sql`cardinality(${t.loginCountries}) >= 1`),
   check('site_settings_proof_retention_range', sql`${t.proofRetentionDays} is null or ${t.proofRetentionDays} between 7 and 365`),
 ])
 

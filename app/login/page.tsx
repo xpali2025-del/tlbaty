@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/mobile-nav"
 import { LoginForm } from "@/components/auth/login-form"
 import { getCurrentCustomer } from "@/lib/otp/session"
 import { OTP_LENGTH, OTP_RESEND } from "@/lib/otp/config"
+import { getLoginCountryOptions } from "@/lib/otp/countries"
 
 export const metadata: Metadata = {
   title: "تسجيل الدخول",
@@ -30,6 +31,8 @@ export default async function LoginPage({
   const customer = await getCurrentCustomer().catch(() => null)
   if (customer) redirect(target)
 
+  const countries = await getLoginCountryOptions()
+
   return (
     <>
       <Header />
@@ -42,7 +45,7 @@ export default async function LoginPage({
             </p>
           </div>
           <div className="rounded-xl border border-border bg-card p-6">
-            <LoginForm next={target} otpLength={OTP_LENGTH} resendSeconds={OTP_RESEND} />
+            <LoginForm next={target} otpLength={OTP_LENGTH} resendSeconds={OTP_RESEND} countries={countries} />
           </div>
         </div>
       </main>

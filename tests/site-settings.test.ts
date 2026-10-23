@@ -103,3 +103,25 @@ describe('login bot number setting', () => {
   })
 })
 
+describe('login countries setting', () => {
+  const base = { name: 'x', ...both }
+  const withCountries = (...codes: string[]) => {
+    const d = form({ ...base, loginCountriesPresent: '1' })
+    for (const c of codes) d.append('loginCountries', c)
+    return d
+  }
+  it('defaults to Yemen only', async () => {
+    await A.saveSettings(null, form(base))
+    expect((await db.select().from(s.siteSettings))[0].loginCountries).toEqual(['967'])
+  })
+  it('saves the chosen countries in a stable order and leaves them alone when the field is absent', async () => {
+    await A.saveSettings(null, withCountries('966', '967'))
+    expect((await db.select().from(s.siteSettings))[0].loginCountries).toEqual(['967', '966'])
+    await A.saveSettings(null, form(base))
+    expect((await db.select().from(s.siteSettings))[0].loginCountries).toEqual(['967', '966'])
+  })
+  it('rejects an empty or unsupported selection', async () => {
+    await expect(A.saveSettings(null, withCountries())).rejects.toThrow('دولة واحدة')
+    await expect(A.saveSettings(null, withCountries('967', '971'))).rejects.toThrow('غير مدعومة')
+  })
+})

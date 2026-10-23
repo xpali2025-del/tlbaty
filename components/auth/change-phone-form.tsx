@@ -3,24 +3,29 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { authErrorMessage } from "./auth-helpers"
-import { CheckCircle2, Loader2, Phone } from "lucide-react"
+import { composePhone, hasPhoneDigits, PhoneField, YEMEN_ONLY, type CountryOption } from "./phone-field"
+import { CheckCircle2, Loader2 } from "lucide-react"
 
 type Step = "phone" | "otp" | "done"
 
 export function ChangePhoneForm({
   otpLength,
   resendSeconds,
+  countries = YEMEN_ONLY,
 }: {
   otpLength: number
   resendSeconds: number
+  /** الدول المفعّلة للدخول (اليمن وحده افتراضياً). */
+  countries?: CountryOption[]
 }) {
   const router = useRouter()
   const [step, setStep] = useState<Step>("phone")
   const [phone, setPhone] = useState("")
+  const [country, setCountry] = useState(countries[0]?.code ?? YEMEN_ONLY[0].code)
+  const fullPhone = composePhone(country, phone)
   const [displayPhone, setDisplayPhone] = useState("")
   const [code, setCode] = useState("")
   const [error, setError] = useState("")
@@ -56,12 +61,12 @@ export function ChangePhoneForm({
       const res = await fetch("/api/auth/change-phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ step: "send", phone }),
+        body: JSON.stringify({ step: "send", phone: fullPhone }),
       })
       const data = await res.json()
       if (!res.ok) {
         if (data.error === "RESEND_TOO_SOON") {
-          setDisplayPhone(phone)
+          setDisplayPhone(fullPhone)
           setStep("otp")
           startCountdown(typeof data.retryAfter === "number" ? data.retryAfter : resendSeconds)
           return
@@ -69,7 +74,7 @@ export function ChangePhoneForm({
         setError(authErrorMessage(data.error))
         return
       }
-      setDisplayPhone(phone)
+      setDisplayPhone(fullPhone)
       setStep("otp")
       setCode("")
       startCountdown(resendSeconds)
@@ -87,7 +92,7 @@ export function ChangePhoneForm({
       const res = await fetch("/api/auth/change-phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ step: "verify", phone, code: value }),
+        body: JSON.stringify({ step: "verify", phone: fullPhone, code: value }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -129,21 +134,7 @@ export function ChangePhoneForm({
       <form onSubmit={requestChange} className="flex flex-col gap-5" noValidate>
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-phone">رقم الهاتف الجديد</Label>
-          <div className="relative">
-            <Phone className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="new-phone"
-              type="tel"
-              inputMode="tel"
-              dir="ltr"
-              autoComplete="tel"
-              placeholder="7XXXXXXXX"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="pr-10 text-left"
-              required
-            />
-          </div>
+          <PhoneField id="new-phone" value={phone} onChange={setPhone} country={country} onCountryChange={setCountry} countries={countries} />
         </div>
 
         {error ? (
@@ -152,7 +143,7 @@ export function ChangePhoneForm({
           </p>
         ) : null}
 
-        <Button type="submit" disabled={loading || phone.trim().length < 9} className="w-full">
+        <Button type="submit" disabled={loading || !hasPhoneDigits(phone)} className="w-full">
           {loading ? <Loader2 className="size-4 animate-spin" /> : null}
           إرسال رمز التحقق
         </Button>

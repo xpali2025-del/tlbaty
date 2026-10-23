@@ -1,0 +1,2 @@
+ALTER TABLE "store"."site_settings" ADD COLUMN "login_countries" text[] DEFAULT '{967}'::text[] NOT NULL;--> statement-breakpoint
+ALTER TABLE "store"."site_settings" ADD CONSTRAINT "site_settings_login_countries_nonempty" CHECK (cardinality("store"."site_settings"."login_countries") >= 1);

@@ -5,6 +5,7 @@ import { createAndSendOtp } from "@/lib/otp/generate"
 import { consumeSendAttempt } from "@/lib/otp/rate-limit"
 import { getClientContext } from "@/lib/otp/request-context"
 import { normalizeInternationalPhone } from "@/lib/phone"
+import { isLoginCountryAllowed } from "@/lib/otp/countries"
 
 export const runtime = "nodejs"
 
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
   const phoneRaw = typeof body === "object" && body !== null ? (body as { phone?: unknown }).phone : ""
   const phone = normalizeInternationalPhone(phoneRaw)
   if (!phone) return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 })
+  if (!(await isLoginCountryAllowed(phone))) return NextResponse.json({ ok: false, error: "COUNTRY_NOT_ALLOWED" }, { status: 403 })
 
   const { ip, userAgent } = getClientContext(req)
   if (!(await consumeSendAttempt(phone, ip))) {

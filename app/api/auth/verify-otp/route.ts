@@ -7,6 +7,7 @@ import { getClientContext } from "@/lib/otp/request-context"
 import { completeLogin } from "@/lib/otp/login"
 import { verifyOtp } from "@/lib/otp/verify"
 import { normalizeInternationalPhone } from "@/lib/phone"
+import { isLoginCountryAllowed } from "@/lib/otp/countries"
 
 export const runtime = "nodejs"
 
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
 
   const phone = normalizeInternationalPhone(body.phone)
   if (!phone) return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 })
+  if (!(await isLoginCountryAllowed(phone))) return NextResponse.json({ ok: false, error: "COUNTRY_NOT_ALLOWED" }, { status: 403 })
   const code = cleanCode(body.code)
   if (!code) return NextResponse.json({ ok: false, error: "INVALID_CODE" }, { status: 400 })
 

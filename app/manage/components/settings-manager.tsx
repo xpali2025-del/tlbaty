@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { AdminSettings } from "@/lib/admin"
 import { SITE_CONFIG } from "@/lib/site"
+import { SUPPORTED_COUNTRIES } from "@/lib/phone"
 import { fetchWhatsappStatus, saveSettings } from "../actions"
 import type { WhatsappStatus } from "@/lib/whatsapp-status"
 import { ImageField, SectionHeader } from "./shared"
@@ -141,6 +142,33 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
             </label>
             <p className="text-xs text-muted-foreground">
               تُفرض طرق الدفع على الخادم أيضاً: الطريقة المعطّلة تُرفض حتى لو أُرسلت من متصفح معدَّل. يجب تفعيل طريقة واحدة على الأقل.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">دول تسجيل دخول العملاء</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <input type="hidden" name="loginCountriesPresent" value="1" />
+            {SUPPORTED_COUNTRIES.map((c) => (
+              <label key={c.code} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="loginCountries"
+                  value={c.code}
+                  defaultChecked={(settings?.loginCountries ?? ["967"]).includes(c.code)}
+                  className="h-4 w-4"
+                />
+                <span>
+                  {c.flag} {c.name} <span dir="ltr">+{c.code}</span>
+                </span>
+              </label>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              الافتراضي اليمن فقط. عند تفعيل أكثر من دولة تظهر للعميل قائمة لاختيار كود الدولة (مفيدة لاختبار رقم من دولة أخرى). يُفرض هذا على الخادم أيضاً.
+              تعطيل دولة يمنع دخول عملائها الحاليين ما دامت معطّلة. رقم بوت واتساب يجب أن يستقبل رسائل من الدولة المفعّلة.
             </p>
           </CardContent>
         </Card>

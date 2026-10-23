@@ -5,6 +5,7 @@ import { logAuthEvent } from "@/lib/otp/audit"
 import { issueOtpForReply } from "@/lib/otp/generate"
 import { consumeSendAttempt } from "@/lib/otp/rate-limit"
 import { normalizeInternationalPhone } from "@/lib/phone"
+import { isLoginCountryAllowed } from "@/lib/otp/countries"
 
 export const runtime = "nodejs"
 
@@ -27,6 +28,8 @@ export async function POST(req: Request) {
   const token = typeof body.token === "string" ? body.token.toUpperCase() : ""
   if (!phone || normalizeInternationalPhone(phone) !== phone) return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 })
   if (!TOKEN_PATTERN.test(token)) return NextResponse.json({ ok: false, error: "INVALID_TOKEN" }, { status: 400 })
+  // دولة الرقم غير مفعّلة للدخول: نرفض قبل أي إرسال (العامل لا يرد على المرسل عند أي خطأ).
+  if (!(await isLoginCountryAllowed(phone))) return NextResponse.json({ ok: false, error: "COUNTRY_NOT_ALLOWED" }, { status: 403 })
 
   // رمز غير معروف أو مستخدم أو منتهٍ: نرفض قبل أن نستهلك حصة الإرسال لهذا الرقم.
   if (!(await isClaimable(token))) {
