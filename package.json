@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "check:budget": "node scripts/check-budget.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
