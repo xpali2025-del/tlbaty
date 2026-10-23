@@ -11,6 +11,11 @@ export const FALLBACK_SHIPPING_METHODS: ShippingMethod[] = [
   { id: "pickup", icon: "pickup", name: "استلام من المتجر", desc: "صنعاء شارع الرقاص", price: 0 },
 ]
 
+/** «الاستلام من المتجر»: لا توصيل، فلا حاجة لموقع العميل الجغرافي (GPS). مشتركة بين الواجهة والخادم. */
+export function isPickupMethod(method: Pick<ShippingMethod, "icon"> | null | undefined): boolean {
+  return method?.icon === "pickup"
+}
+
 /**
  * طرق التوصيل المتاحة للمحافظة المختارة:
  * - إن وُجد إعداد خاص بالمحافظة استُخدم.

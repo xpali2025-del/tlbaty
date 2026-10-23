@@ -55,10 +55,11 @@ export type NewOrder = {
     city: string
     address: string
     addressSource: "saved" | "new"
-    latitude: number
-    longitude: number
-    accuracy: number
-    capturedAt: Date
+    /** الموقع الجغرافي؛ null للاستلام من المتجر فقط. */
+    latitude: number | null
+    longitude: number | null
+    accuracy: number | null
+    capturedAt: Date | null
     note: string
   }
   pricing: Extract<PricingResult, { ok: true }>

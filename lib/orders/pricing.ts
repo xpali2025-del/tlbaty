@@ -1,5 +1,5 @@
 import { convertPrice, type Currency } from "@/lib/currency"
-import { resolveShippingMethods } from "@/lib/shipping"
+import { isPickupMethod, resolveShippingMethods } from "@/lib/shipping"
 import type { Coupon, ShippingZone } from "@/lib/types"
 
 // ============================================
@@ -49,6 +49,8 @@ export type PricingResult =
       currency: Currency
       lines: PricedLine[]
       shippingMethod: string
+      /** استلام من المتجر (لا يلزم موقع GPS)؛ الغياب = false. */
+      pickup?: boolean
       couponCode: string
       /** بالعملة المختارة (كل رقم مُقرَّب على حدة كما تفعل الواجهة). */
       shippingPrice: number
@@ -114,6 +116,7 @@ export function computeOrderPricing(input: PricingInput): PricingResult {
     currency,
     lines,
     shippingMethod: method.name,
+    pickup: isPickupMethod(method),
     couponCode: coupon.code,
     shippingPrice: convertPrice(method.price, currency),
     discount: convertPrice(coupon.amount, currency),

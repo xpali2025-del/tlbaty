@@ -102,6 +102,35 @@ describe('authentication and validation', () => {
   })
 })
 
+describe('pickup from the store does not need GPS', () => {
+  const pickup = (over: Record<string, unknown> = {}) =>
+    order({ shippingMethod: 'استلام من المتجر', shippingPrice: 0, total: 118, latitude: undefined, longitude: undefined, locationAccuracy: undefined, locationCapturedAt: undefined, ...over })
+
+  it('accepts a pickup order without a location and stores none', async () => {
+    const res = await post(pickup())
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.locationLink).toBeNull()
+    expect(await stored(json.id)).toMatchObject({ shippingMethod: 'استلام من المتجر', latitude: null, longitude: null, locationAccuracy: null, locationCapturedAt: null })
+  })
+  it('does not even validate (or keep) a location sent with a pickup order', async () => {
+    const res = await post(pickup({ latitude: 999, longitude: 999, locationAccuracy: 5, locationCapturedAt: 'x' }))
+    expect(res.status).toBe(200)
+    expect(await stored((await res.json()).id)).toMatchObject({ latitude: null, longitude: null })
+  })
+  it('still requires the address text for pickup', async () => {
+    const res = await post(pickup({ address: '' }))
+    expect((await res.json()).error).toBe('ADDRESS_REQUIRED')
+  })
+  it('still requires a valid location for every delivery method', async () => {
+    const before = await orderCount()
+    const res = await post(order({ latitude: undefined, longitude: undefined }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('LOCATION_REQUIRED')
+    expect(await orderCount()).toBe(before)
+  })
+})
+
 describe('payment methods enabled from the panel', () => {
   it('refuses a disabled method on the server even if the browser sends it', async () => {
     await db.update(s.siteSettings).set({ codEnabled: false })
