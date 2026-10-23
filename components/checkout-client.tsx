@@ -50,7 +50,7 @@ import { useSiteConfig } from "@/components/site-config-provider"
 import { GovernorateCombobox } from "@/components/governorate-combobox"
 import { buildProductNumber } from "@/lib/product-number"
 import { LoginDialog } from "@/components/auth/login-dialog"
-import { FALLBACK_SHIPPING_METHODS, resolveShippingMethods } from "@/lib/shipping"
+import { FALLBACK_SHIPPING_METHODS, isPickupMethod, resolveShippingMethods } from "@/lib/shipping"
 import type { Coupon, ShippingMethod, ShippingZone } from "@/lib/types"
 import type { PaymentAccount } from "@/lib/payment"
 import { CustomerNoteSection, MAX_CUSTOMER_NOTE } from "@/components/checkout-customer-note"
@@ -270,6 +270,8 @@ export function CheckoutClient({
 
   const shippingMethod =
     availableMethods.find((s) => s.id === shipping) || availableMethods[0] || FALLBACK_SHIPPING_METHODS[0]
+  // الاستلام من المتجر لا يحتاج موقع GPS ولا عنواناً محفوظاً (الخادم يطبّق القاعدة نفسها).
+  const pickup = isPickupMethod(shippingMethod)
   const discountAmount = appliedCoupon?.amount || 0
   const total = Math.max(0, subtotal + shippingMethod.price - discountAmount)
 
@@ -313,10 +315,8 @@ export function CheckoutClient({
   const canSubmit =
     items.length > 0 &&
     manualValid &&
-    locationValid &&
     paymentReady &&
-    Boolean(selectedId) &&
-    Boolean(addressSource)
+    (pickup || (locationValid && Boolean(selectedId) && Boolean(addressSource)))
 
   const applyCoupon = () => {
     const found = coupons.find((c) => c.code.toUpperCase() === couponCode.trim().toUpperCase())
@@ -576,7 +576,12 @@ export function CheckoutClient({
     }
 
     // التحقق الإلزامي من العنوان والموقع داخل handleSubmit (لا نعتمد على disabled فقط)
-    if (!selectedId || !addressSource || !locationValid || !coords) {
+    if (pickup && !manualValid) {
+      toast({ title: "أكمل بياناتك", description: "أدخل المدينة والعنوان لإتمام الاستلام من المتجر." })
+      scrollToAddress()
+      return
+    }
+    if (!pickup && (!selectedId || !addressSource || !locationValid || !coords)) {
       toast({
         title: "الموقع مطلوب",
         description: "اختر عنوانًا محفوظًا أو أضف عنوانًا جديدًا وحدد موقعه لإرسال الطلب.",
@@ -615,7 +620,7 @@ export function CheckoutClient({
       (i) =>
         `• ${i.name}\n  رقم المنتج: ${buildProductNumber(i.productId)}\n  المقاس: ${i.size} | اللون: ${i.color} | الكمية: ${i.quantity} | ${format(i.price * i.quantity)}`,
     )
-    const locationLink = mapsUrl(coords.latitude, coords.longitude)
+    const locationLink = !pickup && coords ? mapsUrl(coords.latitude, coords.longitude) : ""
     const chosenAccount = paymentAccounts.find((a) => a.id === payment.accountId)
 
     // تفاصيل الدفع في رسالة واتساب — بلا أي رابط للإثبات أو بيانات فك تشفير.
@@ -635,10 +640,9 @@ export function CheckoutClient({
       `العنوان: ${address}`,
       `نوع العنوان: ${addressSource === "saved" ? "عنوان محفوظ" : "عنوان جديد"}`,
       "",
-      "*موقع التوصيل:*",
-      `رابط الموقع: ${locationLink}`,
-      `دقة الموقع: ${Math.round(coords.accuracy)} متر`,
-      "",
+      ...(pickup || !coords
+        ? ["*الاستلام من المتجر* (بدون موقع توصيل)", ""]
+        : ["*موقع التوصيل:*", `رابط الموقع: ${locationLink}`, `دقة الموقع: ${Math.round(coords.accuracy)} متر`, ""]),
       "*المنتجات:*",
       ...lines,
       "",
@@ -684,11 +688,16 @@ export function CheckoutClient({
         phone,
         city,
         address,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        locationAccuracy: coords.accuracy,
-        locationCapturedAt: coords.capturedAt,
-        addressSource,
+        // الاستلام من المتجر: لا نرسل الموقع إطلاقاً.
+        ...(!pickup && coords
+          ? {
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              locationAccuracy: coords.accuracy,
+              locationCapturedAt: coords.capturedAt,
+            }
+          : {}),
+        addressSource: addressSource ?? "new",
         // نسجّل الأسعار بالعملة التي اختارها العميل وقت الطلب
         items: items.map((i) => ({ ...i, price: convert(i.price) })),
         shippingMethod: shippingMethod.name,
@@ -1142,7 +1151,9 @@ export function CheckoutClient({
                         تحديد موقع التوصيل الفعلي
                       </h3>
                       <p className="text-xs text-muted-foreground mt-1 mb-3">
-                        وجود إحداثيات صحيحة لموقع التوصيل مطلوب لإتمام الطلب.
+                        {pickup
+                          ? "الاستلام من المتجر لا يحتاج تحديد الموقع؛ يمكنك إرسال الطلب مباشرة بعد تعبئة بياناتك. تحديد الموقع مطلوب فقط لحفظ العنوان."
+                          : "وجود إحداثيات صحيحة لموقع التوصيل مطلوب لإتمام الطلب."}
                       </p>
 
                       {locationNotice && (
@@ -1380,7 +1391,9 @@ export function CheckoutClient({
               <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
               {!paymentReady
                 ? "أكمل بيانات الدفع: اختر حساب الدفع وأدخل اسم المرسل ورقم هاتفه ورقم الحوالة (صورة الإثبات اختيارية)."
-                : "اختر عنوانًا محفوظًا أو أضف عنوانًا جديدًا وحدد موقعه لإرسال الطلب."}
+                : pickup
+                  ? "أكمل الاسم والهاتف والمدينة والعنوان لإتمام الاستلام من المتجر."
+                  : "اختر عنوانًا محفوظًا أو أضف عنوانًا جديدًا وحدد موقعه لإرسال الطلب."}
             </p>
           )}
 

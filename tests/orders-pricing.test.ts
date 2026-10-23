@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeOrderPricing, couponDiscountBase, priceChanged, type PricingInput } from '@/lib/orders/pricing'
-import { FALLBACK_SHIPPING_METHODS, resolveShippingMethods } from '@/lib/shipping'
+import { FALLBACK_SHIPPING_METHODS, isPickupMethod, resolveShippingMethods } from '@/lib/shipping'
 import type { Coupon, ShippingZone } from '@/lib/types'
 
 const YER = { code: 'YER', name: 'ريال', symbol: 'ر.ي', rate: 1 }
@@ -101,5 +101,20 @@ describe('couponDiscountBase and priceChanged', () => {
     expect(priceChanged(server, { ...server, total: 101 })).toBe(false)
     expect(priceChanged(server, { ...server, total: 102 })).toBe(true)
     expect(priceChanged(server, { total: 1, subtotal: 1, shippingPrice: 0, discount: 0 })).toBe(true)
+  })
+})
+
+describe('isPickupMethod', () => {
+  it('is true only for the pickup icon', () => {
+    expect(isPickupMethod({ icon: 'pickup' })).toBe(true)
+    expect(isPickupMethod({ icon: 'express' })).toBe(false)
+    expect(isPickupMethod({ icon: 'standard' })).toBe(false)
+    expect(isPickupMethod(null)).toBe(false)
+    expect(isPickupMethod(undefined)).toBe(false)
+  })
+  it('is flagged by the server pricing by method, not by name', () => {
+    expect(ok(computeOrderPricing(base({ shippingMethodName: 'استلام' }))).pickup).toBe(true)
+    expect(ok(computeOrderPricing(base({ shippingMethodName: 'سريع' }))).pickup).toBe(false)
+    expect(FALLBACK_SHIPPING_METHODS.filter(isPickupMethod).map((m) => m.name)).toEqual(['استلام من المتجر'])
   })
 })

@@ -64,6 +64,32 @@ function finiteNum(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+type ParsedLocation =
+  | { ok: true; lat: number; lng: number; accuracy: number; capturedAt: Date }
+  | { ok: false; error: "LOCATION_REQUIRED" | "INVALID_LOCATION" }
+
+function parseLocation(body: Record<string, unknown>): ParsedLocation {
+  const lat = finiteNum(body.latitude)
+  const lng = finiteNum(body.longitude)
+  const capturedAt = str(body.locationCapturedAt, 60)
+  if (lat === null || lng === null || !capturedAt) return { ok: false, error: "LOCATION_REQUIRED" }
+  const accuracy = finiteNum(body.locationAccuracy)
+  const capturedTime = Date.parse(capturedAt)
+  if (
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180 ||
+    (lat === 0 && lng === 0) ||
+    accuracy === null ||
+    accuracy < 0 ||
+    Number.isNaN(capturedTime)
+  ) {
+    return { ok: false, error: "INVALID_LOCATION" }
+  }
+  return { ok: true, lat, lng, accuracy, capturedAt: new Date(capturedTime) }
+}
+
 function mapsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 }
@@ -148,27 +174,8 @@ export async function POST(req: Request) {
     return fail("INVALID_ADDRESS_SOURCE", 400)
   }
 
-  // ---- الموقع الجغرافي إلزامي وصالح ----
-  const lat = finiteNum(body.latitude)
-  const lng = finiteNum(body.longitude)
-  const capturedAt = str(body.locationCapturedAt, 60)
-  if (lat === null || lng === null || !capturedAt) {
-    return fail("LOCATION_REQUIRED", 400)
-  }
-  const accuracy = finiteNum(body.locationAccuracy)
-  const capturedTime = Date.parse(capturedAt)
-  if (
-    lat < -90 ||
-    lat > 90 ||
-    lng < -180 ||
-    lng > 180 ||
-    (lat === 0 && lng === 0) ||
-    accuracy === null ||
-    accuracy < 0 ||
-    Number.isNaN(capturedTime)
-  ) {
-    return fail("INVALID_LOCATION", 400)
-  }
+  // ---- الموقع الجغرافي: يُفحص هنا ويُفرض بعد التسعير، لأن «الاستلام من المتجر» معفى منه ----
+  const parsedLocation = parseLocation(body)
 
   // ---- طريقة الدفع (افتراضياً الدفع عند الاستلام) ----
   const requestedMethod = str(body.paymentMethod, 40)
@@ -229,7 +236,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const locationLink = mapsUrl(lat, lng)
 
   // ---- قاعدة البيانات غير مضبوطة (تطوير محلي) ----
   if (!isDbConfigured()) {
@@ -241,7 +247,7 @@ export async function POST(req: Request) {
         "خطأ في إعداد الموقع: لا يمكن استقبال الحوالات حالياً. الرجاء استخدام الدفع عند الاستلام.",
       )
     }
-    return NextResponse.json({ ok: true, skipped: true, locationLink })
+    return NextResponse.json({ ok: true, skipped: true, locationLink: parsedLocation.ok ? mapsUrl(parsedLocation.lat, parsedLocation.lng) : null })
   }
 
   // ---- التسعير من قاعدة البيانات: لا نثق بأي سعر أو مجموع أرسله المتصفح ----
@@ -281,6 +287,13 @@ export async function POST(req: Request) {
     }
     return fail("INVALID_SHIPPING_METHOD", 400, "طريقة التوصيل المختارة غير متاحة لهذه المدينة. اختر طريقة أخرى.")
   }
+
+  // الموقع إلزامي لكل طريقة توصيل ما عدا الاستلام من المتجر (يُهمل موقعه إن أُرسل ولا يُحفظ).
+  if (!pricing.pickup && !parsedLocation.ok) {
+    return fail(parsedLocation.error, 400)
+  }
+  const location = pricing.pickup || !parsedLocation.ok ? null : parsedLocation
+  const locationLink = location ? mapsUrl(location.lat, location.lng) : null
 
   // ---- إثبات الحوالة: فحص + تشفير على الخادم ثم رفعه إلى الـ bucket الخاص ----
   let proof: PaymentProofPayload | null = null
@@ -328,10 +341,10 @@ export async function POST(req: Request) {
         city,
         address,
         addressSource,
-        latitude: lat,
-        longitude: lng,
-        accuracy,
-        capturedAt: new Date(capturedTime),
+        latitude: location?.lat ?? null,
+        longitude: location?.lng ?? null,
+        accuracy: location?.accuracy ?? null,
+        capturedAt: location?.capturedAt ?? null,
         note: sanitizeCustomerNote(body.customerNote),
       },
       pricing,
