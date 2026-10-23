@@ -19,7 +19,7 @@ export type HealthReport = {
   checkedAt: string
 }
 
-const DB_TIMEOUT_MS = 3000
+const DB_TIMEOUT_MS = 2500
 
 export async function checkDb(): Promise<{ state: DbState; latencyMs: number | null }> {
   if (!isDbConfigured()) return { state: "unconfigured", latencyMs: null }
