@@ -20,20 +20,17 @@ import { EMPTY_ADMIN_WALLETS, getAdminWalletOverview } from "@/lib/admin-wallet"
 import { EMPTY_ADMIN_MARKETING, getAdminMarketing } from "@/lib/admin-marketing"
 import { EMPTY_ADMIN_NOTIFICATIONS, getAdminNotifications } from "@/lib/admin-notifications"
 import { getAdminUsers } from "@/lib/manage-users"
+import { classifyDbError, DB_ERROR_HINTS } from "@/lib/db-error"
 import { Dashboard } from "./dashboard"
+import { LoadFailure } from "./load-failure"
 
 // قراءة الكوكي في isManageAuthed تجعل الصفحة ديناميكية تلقائياً،
 // وبيانات الإدارة تُجلب بـ no-store، فتظل اللوحة خارج استراتيجية On-Demand Revalidation.
 
-export default async function ManagePage() {
-  const ctx = await getManageContext()
-  if (!ctx) {
-    redirect("/manage/login")
-  }
-  const can = (screen: Screen) => ctx.permissions.includes(screen)
-  // لا نستعلم ولا نرسل للمتصفح إلا بيانات الشاشات المسموحة (أسرع وأكثر أماناً).
-  const need = <T,>(allowed: boolean, empty: T, load: () => Promise<T>) => (allowed ? load() : Promise.resolve(empty))
-
+async function loadAll(
+  can: (screen: Screen) => boolean,
+  need: <T>(allowed: boolean, empty: T, load: () => Promise<T>) => Promise<T>,
+) {
   const wantsCategories = can("products") || can("categories") || can("ads")
   const [
     products,
@@ -83,6 +80,29 @@ export default async function ManagePage() {
     need(can("payment-accounts"), [], getAdminPaymentAccounts),
     need(can("notifications"), EMPTY_ADMIN_NOTIFICATIONS, getAdminNotifications),
   ])
+  return { products, categories, brands, slides, coupons, reviews, ads, settings, shipping, walletOverview, marketing, sizeCharts, ordersPage, orderStats, couriers, users, paymentAccounts, notifications }
+}
+
+export default async function ManagePage() {
+  const ctx = await getManageContext()
+  if (!ctx) {
+    redirect("/manage/login")
+  }
+  const can = (screen: Screen) => ctx.permissions.includes(screen)
+  // لا نستعلم ولا نرسل للمتصفح إلا بيانات الشاشات المسموحة (أسرع وأكثر أماناً).
+  const need = <T,>(allowed: boolean, empty: T, load: () => Promise<T>) => (allowed ? load() : Promise.resolve(empty))
+
+  let data: Awaited<ReturnType<typeof loadAll>>
+  try {
+    data = await loadAll(can, need)
+  } catch (error) {
+    // صفحة بيضاء لا تخبر المدير بشيء: نشخّص السبب (ترحيلات/اتصال/صلاحية) ونعرضه، ونسجّل التفاصيل في سجلات الخادم.
+    console.error("manage page load failed:", error)
+    const kind = classifyDbError(error)
+    const digest = typeof (error as { digest?: unknown })?.digest === "string" ? (error as { digest: string }).digest : null
+    return <LoadFailure hint={DB_ERROR_HINTS[kind]} kind={kind} digest={digest} />
+  }
+  const { products, categories, brands, slides, coupons, reviews, ads, settings, shipping, walletOverview, marketing, sizeCharts, ordersPage, orderStats, couriers, users, paymentAccounts, notifications } = data
 
   return (
     <Dashboard
