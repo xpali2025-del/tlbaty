@@ -343,6 +343,7 @@ describe('auth API routes', () => {
   })
 
   it('logs a Saudi customer in with a number typed in any format', async () => {
+    await db.insert(s.siteSettings).values({ id: 1, loginCountries: ['967', '966'] }).onConflictDoUpdate({ target: s.siteSettings.id, set: { loginCountries: ['967', '966'] } })
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     expect((await sendRoute.POST(json({ phone: '٠٥١٢٣٤٥٦٧٨' }))).status).toBe(200) // Arabic digits, local format
     const code = log.mock.calls.map((c) => String(c[0])).find((l) => l.includes('code for 966512345678'))!.split(': ')[1]
@@ -352,6 +353,7 @@ describe('auth API routes', () => {
     const me = await (await meRoute.GET()).json()
     expect(me.customer.phone).toBe('966512345678')
     expect(me.customer.phoneMasked).toBe('+966 51•••••78')
+    await db.update(s.siteSettings).set({ loginCountries: ['967'] })
   })
 
   it('validates input and refuses blocked accounts', async () => {

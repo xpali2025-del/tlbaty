@@ -27,6 +27,7 @@ import { productsMissingPalette, refreshProductPalette } from "@/lib/product-pal
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
 import { isCategoryCode } from "@/lib/product-code"
 import { isRole, normalizePermissions, ROLE_PRESETS, type Role } from "@/lib/permissions"
+import { SUPPORTED_COUNTRIES } from "@/lib/phone"
 import {
   bool,
   englishSlug,
@@ -707,6 +708,15 @@ export async function saveSettings(_id: string | null, form: FormData) {
   const botRaw = (str(form, "loginBotNumber") ?? "").replace(/[\s+()-]/g, "")
   if (botRaw && !/^[0-9]{8,15}$/.test(botRaw)) throw new Error("رقم بوت الدخول: أرقام دولية فقط بلا رموز (مثل 967777000000)")
   const loginBotNumber = botRaw || null
+  // دول تسجيل الدخول: تُحدَّث فقط إذا أُرسل حقل الدول (علامة loginCountriesPresent)، لأن الخانة غير المعلّمة لا تُرسَل أصلاً.
+  // الأكواد المدعومة فقط ودولة واحدة على الأقل (الافتراضي اليمن).
+  let loginCountries: string[] | undefined
+  if (form.get("loginCountriesPresent") === "1") {
+    const wantedCountries = form.getAll("loginCountries").map(String)
+    if (wantedCountries.some((c) => !SUPPORTED_COUNTRIES.some((s) => s.code === c))) throw new Error("دولة غير مدعومة لتسجيل الدخول")
+    loginCountries = SUPPORTED_COUNTRIES.filter((c) => wantedCountries.includes(c.code)).map((c) => c.code as string)
+    if (loginCountries.length === 0) throw new Error("اختر دولة واحدة على الأقل لتسجيل دخول العملاء")
+  }
   // حذف صور الإثبات تلقائياً: غير مفعّل افتراضياً؛ عند التفعيل المدة بين 7 و365 يوماً.
   let proofRetentionDays: number | null = null
   if (bool(form, "proofRetentionEnabled")) {
@@ -740,6 +750,7 @@ export async function saveSettings(_id: string | null, form: FormData) {
     walletEnabled,
     proofRetentionDays,
     loginBotNumber,
+    ...(loginCountries ? { loginCountries } : {}),
     updatedAt: new Date(),
   }
 

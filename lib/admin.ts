@@ -171,6 +171,8 @@ export type AdminSettings = {
   proofRetentionDays: number | null
   /** رقم بوت الدخول المحفوظ في الإعدادات (فارغ = من متغير البيئة). */
   loginBotNumber: string | null
+  /** أكواد الدول المفعّلة لتسجيل دخول العملاء (اليمن افتراضياً). */
+  loginCountries: string[]
   /** عدد صور الإثبات المخزَّنة حالياً. */
   storedProofs: number
 } | null
@@ -393,6 +395,7 @@ export const getAdminSettings = () =>
       payments: { cashOnDelivery: x.codEnabled, manualTransfer: x.transferEnabled, wallet: x.walletEnabled },
       proofRetentionDays: x.proofRetentionDays ?? null,
       loginBotNumber: x.loginBotNumber ?? null,
+      loginCountries: x.loginCountries?.length ? x.loginCountries : ["967"],
       storedProofs: (await db.select({ n: count() }).from(orderPaymentProofs))[0].n,
     }
   })

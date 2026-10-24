@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { normalizeInternationalPhone } from "@/lib/phone"
+import { isLoginCountryAllowed } from "@/lib/otp/countries"
 import { isAuthConfigured, OTP_RESEND } from "@/lib/otp/config"
 import { consumeSendAttempt } from "@/lib/otp/rate-limit"
 import { createAndSendOtp } from "@/lib/otp/generate"
@@ -27,6 +28,9 @@ export async function POST(req: Request) {
   const phone = normalizeInternationalPhone(body.phone)
   if (!phone) {
     return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 })
+  }
+  if (!(await isLoginCountryAllowed(phone))) {
+    return NextResponse.json({ ok: false, error: "COUNTRY_NOT_ALLOWED" }, { status: 403 })
   }
 
   const purpose = body.purpose === "change_phone" ? ("change_phone" as const) : ("login" as const)

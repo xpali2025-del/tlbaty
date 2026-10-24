@@ -3,7 +3,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { maskPhone } from '@/lib/phone'
 
@@ -154,7 +154,9 @@ describe('claim (called by the WhatsApp worker)', () => {
 })
 
 describe('Saudi customers', () => {
+  afterEach(async () => { await db.update(s.siteSettings).set({ loginCountries: ['967'] }) })
   it('log in through the same flow with a +966 number', async () => {
+    await db.insert(s.siteSettings).values({ id: 1, loginCountries: ['967', '966'] }).onConflictDoUpdate({ target: s.siteSettings.id, set: { loginCountries: ['967', '966'] } })
     const { data } = await startFlow()
     const saudi = '966512345678'
     const { text } = await (await claim.POST(post({ phone: saudi, token: data.token }, asWorker))).json()
@@ -162,6 +164,16 @@ describe('Saudi customers', () => {
     expect((await verify.POST(post({ code: codeFrom(text) }))).status).toBe(200)
     const me = await (await import('@/app/api/auth/me/route')).GET()
     expect((await me.json()).customer.phone).toBe(saudi)
+  })
+})
+
+describe('login countries', () => {
+  it('refuses a Saudi number by default (Yemen only) without consuming the token', async () => {
+    const { data } = await startFlow()
+    const res = await claim.POST(post({ phone: '966512345678', token: data.token }, asWorker))
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe('COUNTRY_NOT_ALLOWED')
+    expect(await (await status.GET()).json()).toEqual({ state: 'waiting' })
   })
 })
 

@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { authErrorMessage } from "./auth-helpers"
-import { Loader2, Phone, ShieldCheck } from "lucide-react"
+import { composePhone, hasPhoneDigits, PhoneField, YEMEN_ONLY, type CountryOption } from "./phone-field"
+import { Loader2, ShieldCheck } from "lucide-react"
 
 type Step = "phone" | "otp"
 
@@ -15,14 +15,19 @@ export function LoginForm({
   next,
   otpLength,
   resendSeconds,
+  countries = YEMEN_ONLY,
 }: {
   next: string
   otpLength: number
   resendSeconds: number
+  /** الدول المفعّلة للدخول (اليمن وحده افتراضياً). */
+  countries?: CountryOption[]
 }) {
   const router = useRouter()
   const [step, setStep] = useState<Step>("phone")
   const [phone, setPhone] = useState("")
+  const [country, setCountry] = useState(countries[0]?.code ?? YEMEN_ONLY[0].code)
+  const fullPhone = composePhone(country, phone)
   const [displayPhone, setDisplayPhone] = useState("")
   const [code, setCode] = useState("")
   const [error, setError] = useState("")
@@ -61,13 +66,13 @@ export function LoginForm({
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: fullPhone }),
       })
       const data = await res.json()
       if (!res.ok) {
         // رمز فعّال بالفعل: ننتقل لشاشة الإدخال ونضبط العدّاد بالمدة المتبقية.
         if (data.error === "RESEND_TOO_SOON") {
-          setDisplayPhone(phone)
+          setDisplayPhone(fullPhone)
           setStep("otp")
           startCountdown(typeof data.retryAfter === "number" ? data.retryAfter : resendSeconds)
           return
@@ -75,7 +80,7 @@ export function LoginForm({
         setError(authErrorMessage(data.error))
         return
       }
-      setDisplayPhone(phone)
+      setDisplayPhone(fullPhone)
       setStep("otp")
       setCode("")
       startCountdown(resendSeconds)
@@ -94,7 +99,7 @@ export function LoginForm({
       const res = await fetch("/api/auth/resend-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: fullPhone }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -118,7 +123,7 @@ export function LoginForm({
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code: value, next }),
+        body: JSON.stringify({ phone: fullPhone, code: value, next }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -147,23 +152,9 @@ export function LoginForm({
       <form onSubmit={sendOtp} className="flex flex-col gap-5" noValidate>
         <div className="flex flex-col gap-2">
           <Label htmlFor="phone">رقم الهاتف</Label>
-          <div className="relative">
-            <Phone className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="phone"
-              type="tel"
-              inputMode="tel"
-              dir="ltr"
-              autoComplete="tel"
-              placeholder="7XXXXXXXX"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="pr-10 text-left"
-              required
-            />
-          </div>
+          <PhoneField id="phone" value={phone} onChange={setPhone} country={country} onCountryChange={setCountry} countries={countries} />
           <p className="text-xs text-muted-foreground">
-            أدخل رقم هاتفك اليمني لإرسال رمز التحقق عبر رسالة نصية.
+            أدخل رقم هاتفك (بدون كود الدولة) لإرسال رمز التحقق.
           </p>
         </div>
 
@@ -173,7 +164,7 @@ export function LoginForm({
           </p>
         ) : null}
 
-        <Button type="submit" disabled={loading || phone.trim().length < 9} className="w-full">
+        <Button type="submit" disabled={loading || !hasPhoneDigits(phone)} className="w-full">
           {loading ? <Loader2 className="size-4 animate-spin" /> : null}
           إرسال الرمز
         </Button>
