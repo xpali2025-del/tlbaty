@@ -116,7 +116,8 @@ export default async function SettingsPage() {
           )}
           <SettingsRow href="/account/addresses" icon={MapPinned} label="عناويني" description="المنزل والعمل وغيرها، لاختيارها بنقرة عند الطلب" trailing={loggedIn ? <AddressCount /> : undefined} locked={!loggedIn} />
           <SettingsRow href="/wishlist" icon={Heart} label="قائمة الرغبات" description="المنتجات التي أعجبتك" trailing={loggedIn ? <WishlistCount /> : undefined} locked={!loggedIn} />
-          <SettingsRow href="/recently-viewed" icon={Clock3} label="شوهد مؤخراً" description="منتجات تصفحتها حديثاً" trailing={loggedIn ? <RecentCount /> : undefined} locked={!loggedIn} />
+          {/* لا يتطلب حساباً: يُحفظ في متصفح الزائر نفسه */}
+          <SettingsRow href="/recently-viewed" icon={Clock3} label="شوهد مؤخراً" description="منتجات تصفحتها حديثاً" trailing={<RecentCount />} />
         </SettingsGroup>
 
         {/* القسم C: التفضيلات والتسوّق (متاح للجميع) */}
