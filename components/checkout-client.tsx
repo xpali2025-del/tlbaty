@@ -1445,6 +1445,7 @@ function SavedAddressCard({
   return (
     <div className="rounded-xl border border-border p-4">
       <div className="space-y-1 text-sm">
+        {address.label && <span className="inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">{address.label}</span>}
         <p className="font-bold">{address.customerName}</p>
         <p className="text-muted-foreground" dir="ltr">{address.phone}</p>
         <p className="text-muted-foreground">{address.city}</p>

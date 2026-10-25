@@ -2,14 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ShoppingBag, FolderClosed, Home, Heart, ShoppingCart } from "lucide-react"
+import { ShoppingBag, FolderClosed, Home, Settings, ShoppingCart } from "lucide-react"
 import { useCart } from "./cart-provider"
-import { useWishlist } from "./wishlist-provider"
 
 // القائمة بترتيب العرض من اليسار إلى اليمين (dir="ltr")؛ فيقرأها العربي من اليمين:
-// المنتجات ← الأقسام ← الرئيسية ← السلة ← الرغبات.
+// المنتجات ← الأقسام ← الرئيسية ← السلة ← الإعدادات (الرغبات صارت في صفحة الإعدادات).
 const ITEMS = [
-  { href: "/wishlist", label: "الرغبات", icon: Heart },
+  { href: "/account", label: "الإعدادات", icon: Settings },
   { href: "/cart", label: "السلة", icon: ShoppingCart },
   { href: "/", label: "الرئيسية", icon: Home, center: true },
   { href: "/shop", label: "الأقسام", icon: FolderClosed },
@@ -19,7 +18,6 @@ const ITEMS = [
 export function MobileNav() {
   const pathname = usePathname()
   const { totalItems } = useCart()
-  const { totalItems: wishlistCount } = useWishlist()
 
   return (
     <nav
@@ -32,9 +30,9 @@ export function MobileNav() {
       >
         {ITEMS.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href.split("?")[0]
+          const base = item.href.split("?")[0]
+          const isActive = pathname === base || (base !== "/" && pathname.startsWith(`${base}/`))
           const isCart = item.href === "/cart"
-          const isWishlist = item.href === "/wishlist"
 
           if (item.center) {
             return (
@@ -64,11 +62,6 @@ export function MobileNav() {
                   {isCart && totalItems > 0 && (
                     <span className="absolute -top-2 -left-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                       {totalItems}
-                    </span>
-                  )}
-                  {isWishlist && wishlistCount > 0 && (
-                    <span className="absolute -top-2 -left-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                      {wishlistCount}
                     </span>
                   )}
                 </span>

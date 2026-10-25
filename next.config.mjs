@@ -11,7 +11,11 @@ const nextConfig = {
       ...(r2Url ? [{ protocol: r2Url.protocol.replace(':', ''), hostname: r2Url.hostname }] : []),
     ],
   },
-  env: { NEXT_PUBLIC_IMAGE_RESIZING: resizing ? 'cloudflare' : '' },
+  env: {
+    NEXT_PUBLIC_IMAGE_RESIZING: resizing ? 'cloudflare' : '',
+    // رقم النسخة المعروض في «عن المتجر»: أول 7 خانات من commit النشر على Vercel (فارغ محلياً).
+    NEXT_PUBLIC_BUILD_ID: (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7),
+  },
   async headers() {
     const common = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },

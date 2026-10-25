@@ -11,8 +11,16 @@ import { useCallback, useEffect, useState } from "react"
 
 export const SAVED_ADDRESSES_KEY = "tagelin_saved_addresses"
 
+/** تسميات جاهزة للعنوان؛ الحقل اختياري فالعناوين القديمة بلا تسمية تبقى صالحة. */
+export const ADDRESS_LABELS = ["المنزل", "العمل", "أخرى"] as const
+export const MAX_ADDRESS_LABEL = 30
+/** سقف الخادم لعناوين الحساب (lib/customer-data-server.ts) — تجاوزه يرفض المزامنة كلها. */
+export const MAX_SAVED_ADDRESSES = 20
+
 export type SavedAddress = {
   id: string
+  /** تسمية العنوان (المنزل/العمل/أخرى أو نص حر قصير). */
+  label?: string
   customerName: string
   phone: string
   city: string
