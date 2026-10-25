@@ -19,7 +19,7 @@ import { Header } from "@/components/header"
 import { MobileNav } from "@/components/mobile-nav"
 import { AccountActions } from "@/components/auth/account-actions"
 import { MarketingConsent } from "@/components/auth/marketing-consent"
-import { AddressCount, Balance, CurrencyRow, RecentCount, ShareRow, WishlistCount } from "@/components/account/settings-client"
+import { AddressCount, Balance, CurrencyCard, RecentCount, ShareRow, WishlistCount } from "@/components/account/settings-client"
 import { CountPill, SettingsGroup, SettingsRow } from "@/components/account/settings-ui"
 import { getCurrentCustomer } from "@/lib/otp/session"
 import { countOrdersForCustomer, getCustomerDisplayName } from "@/lib/otp/customer-orders"
@@ -90,6 +90,9 @@ export default async function SettingsPage() {
           </section>
         )}
 
+        {/* العملة: بارزة أعلى الصفحة وبنقرة واحدة */}
+        <CurrencyCard />
+
         <SettingsGroup title="حسابي">
           <SettingsRow href="/change-phone" icon={PencilLine} label="تغيير رقم الهاتف" description="تحديث الرقم المسجّل بحسابك" locked={!loggedIn} />
         </SettingsGroup>
@@ -116,15 +119,14 @@ export default async function SettingsPage() {
           )}
           <SettingsRow href="/account/addresses" icon={MapPinned} label="عناويني" description="المنزل والعمل وغيرها، لاختيارها بنقرة عند الطلب" trailing={loggedIn ? <AddressCount /> : undefined} locked={!loggedIn} />
           <SettingsRow href="/wishlist" icon={Heart} label="قائمة الرغبات" description="المنتجات التي أعجبتك" trailing={loggedIn ? <WishlistCount /> : undefined} locked={!loggedIn} />
-          {/* لا يتطلب حساباً: يُحفظ في متصفح الزائر نفسه */}
-          <SettingsRow href="/recently-viewed" icon={Clock3} label="شوهد مؤخراً" description="منتجات تصفحتها حديثاً" trailing={<RecentCount />} />
         </SettingsGroup>
 
-        {/* القسم C: التفضيلات والتسوّق (متاح للجميع) */}
-        <SettingsGroup title="التفضيلات والتسوّق">
-          <CurrencyRow />
+        {/* القسم C: اكتشف وتابع (متاح للجميع): الإشعارات والماركات وما شاهدته في مكان واحد */}
+        <SettingsGroup title="اكتشف وتابع">
           <SettingsRow href="/notifications" icon={Bell} label="الإشعارات" description="عروض المتجر وتحديثات طلباتك" />
           <SettingsRow href="/brands" icon={Store} label="الماركات" description="تصفّح ماركات المتجر" />
+          {/* لا يتطلب حساباً: يُحفظ في متصفح الزائر نفسه */}
+          <SettingsRow href="/recently-viewed" icon={Clock3} label="شوهد مؤخراً" description="منتجات تصفحتها حديثاً" trailing={<RecentCount />} />
         </SettingsGroup>
         {customer && (
           <div className="-mt-3 mb-6">
