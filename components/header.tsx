@@ -24,13 +24,10 @@ export function Header() {
     <>
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between gap-4">
-          {/* الهاتف: البحث والعملة بأيقونتين فقط مكان زر القائمة (الروابط في الشريط السفلي وصفحة الإعدادات) */}
-          <div className="-mr-2 flex items-center lg:hidden">
-            <Link href="/search" className="p-2 text-foreground transition-colors hover:text-primary" aria-label="البحث">
-              <Search className="h-6 w-6" aria-hidden="true" />
-            </Link>
-            <CurrencyIconMenu align="start" />
-          </div>
+          {/* الهاتف: أيقونة البحث وحدها مكان زر القائمة (الروابط في الشريط السفلي وصفحة الإعدادات) */}
+          <Link href="/search" className="-mr-2 p-2 text-foreground transition-colors hover:text-primary lg:hidden" aria-label="البحث">
+            <Search className="h-6 w-6" aria-hidden="true" />
+          </Link>
 
           <Logo />
 
@@ -80,6 +77,10 @@ export function Header() {
             >
               <User className="w-6 h-6" />
             </Link>
+            {/* الهاتف: العملة في الطرف الآخر مع الجرس والسلة (على سطح المكتب لها مكان في مجموعة البحث أعلاه) */}
+            <div className="lg:hidden">
+              <CurrencyIconMenu />
+            </div>
             {/* الجرس بجانب السلة — ظاهر على الهاتف وسطح المكتب */}
             <NotificationsBell />
             <Link
