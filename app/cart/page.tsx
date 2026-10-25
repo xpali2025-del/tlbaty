@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Minus, Plus, Trash2, ArrowLeft, ShoppingBag } from "lucide-react"
+import { Minus, Plus, Trash2, ArrowLeft, ShoppingCart } from "lucide-react"
 import { SafeImage } from "@/components/safe-image"
 import { Header } from "@/components/header"
 import { FooterClient } from "@/components/footer-client"
@@ -23,7 +23,7 @@ export default function CartPage() {
 
         {items.length === 0 ? (
           <div className="bg-secondary rounded-3xl p-12 text-center">
-            <ShoppingBag className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+            <ShoppingCart className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
             <h2 className="text-xl font-bold mb-2">السلة فارغة</h2>
             <p className="text-muted-foreground mb-6">ابدأ التسوق وأضف منتجاتك المفضلة</p>
             <Link

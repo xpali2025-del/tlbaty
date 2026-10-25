@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Minus, Plus, ShoppingBag } from "lucide-react"
+import { Minus, Plus, ShoppingCart } from "lucide-react"
 import type { WishlistItem } from "@/lib/types"
 import { useCart } from "./cart-provider"
 import { useCurrency } from "./currency-provider"
@@ -175,7 +175,7 @@ export function ProductOptionsDialog({ item, mode, open, onOpenChange }: Product
         onClick={handleConfirm}
         className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
       >
-        <ShoppingBag className="h-5 w-5" />
+        <ShoppingCart className="h-5 w-5" />
         {mode === "order" ? "متابعة الطلب" : "إضافة إلى السلة"}
       </button>
     </div>

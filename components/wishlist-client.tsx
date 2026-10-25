@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Trash2, ArrowLeft, Heart, ShoppingBag } from "lucide-react"
+import { Trash2, ArrowLeft, Heart, ShoppingCart } from "lucide-react"
 import { SafeImage } from "@/components/safe-image"
 import { Header } from "@/components/header"
 import { FooterClient } from "@/components/footer-client"
@@ -102,7 +102,7 @@ export function WishlistClient() {
                         onClick={() => openOptions(item, "cart")}
                         className="inline-flex items-center gap-1.5 rounded-full border-2 border-primary bg-background px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
                       >
-                        <ShoppingBag className="h-4 w-4" />
+                        <ShoppingCart className="h-4 w-4" />
                         إضافة إلى السلة
                       </button>
                       <button
