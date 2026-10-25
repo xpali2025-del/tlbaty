@@ -161,3 +161,20 @@ export async function getOrderForCustomer(owner: OrderOwner, orderNumber: string
     return null
   }
 }
+
+/** الاسم الذي كتبه العميل في آخر طلب له (لا يوجد حقل اسم في الحساب نفسه؛ الدخول بالهاتف). null إن لم يطلب بعد. */
+export async function getCustomerDisplayName(customer: { id: string }): Promise<string | null> {
+  if (!isDbConfigured()) return null
+  try {
+    const [row] = await db
+      .select({ name: orders.customerName })
+      .from(orders)
+      .where(eq(orders.customerId, customer.id))
+      .orderBy(desc(orders.createdAt))
+      .limit(1)
+    const name = row?.name?.trim()
+    return name ? name : null
+  } catch {
+    return null
+  }
+}

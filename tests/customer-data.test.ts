@@ -107,6 +107,12 @@ describe('/api/account/data', () => {
     expect((await db.select().from(s.customerData)).length).toBe(1)
   })
 
+  it('keeps the address label (home/work) through a save and reload', async () => {
+    const withLabel = { ...addr('L1', '2026-02-01'), label: 'العمل' }
+    expect((await put({ data: { addresses: [withLabel] } })).status).toBe(200)
+    expect((await (await route.GET()).json()).data.addresses[0]).toMatchObject({ id: 'L1', label: 'العمل' })
+  })
+
   it('rejects malformed, oversized and unsafe payloads without writing', async () => {
     const before = (await db.select().from(s.customerData).where(eq(s.customerData.customerId, customerId)))[0].updatedAt
     const bad: unknown[] = [

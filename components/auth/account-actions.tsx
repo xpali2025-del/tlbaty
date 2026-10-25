@@ -2,11 +2,10 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { flushCustomerSync } from "@/components/customer-sync"
 import { clearLocalData } from "@/lib/customer-local-data"
-import { Loader2, LogOut, MonitorSmartphone, PencilLine } from "lucide-react"
+import { Loader2, LogOut, MonitorSmartphone } from "lucide-react"
 
 export function AccountActions() {
   const router = useRouter()
@@ -40,17 +39,10 @@ export function AccountActions() {
   }
 
   return (
-    <div className="mt-8 flex flex-col gap-3">
-      <Button asChild variant="outline" className="min-h-11 justify-start">
-        <Link href="/change-phone">
-          <PencilLine className="size-4" />
-          تغيير رقم الهاتف
-        </Link>
-      </Button>
-
+    <div className="mb-8 flex flex-col gap-3">
       <Button
         variant="outline"
-        className="min-h-11 justify-start"
+        className="min-h-12 justify-center gap-2 border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive"
         onClick={() => logout("one")}
         disabled={loading !== null}
       >
@@ -60,7 +52,7 @@ export function AccountActions() {
 
       <Button
         variant="ghost"
-        className="min-h-11 justify-start text-muted-foreground"
+        className="min-h-11 justify-center text-muted-foreground"
         onClick={() => logout("all")}
         disabled={loading !== null}
       >
