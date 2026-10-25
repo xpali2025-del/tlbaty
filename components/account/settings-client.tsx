@@ -1,11 +1,9 @@
 "use client"
 
-import { useState } from "react"
 import { Check, Coins, Share2 } from "lucide-react"
 import { CountPill, SettingsButtonRow } from "@/components/account/settings-ui"
 import { useCurrency } from "@/components/currency-provider"
 import { useWishlist } from "@/components/wishlist-provider"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed"
 import { useSavedAddresses } from "@/hooks/use-saved-addresses"
 import { useToast } from "@/hooks/use-toast"
@@ -32,52 +30,46 @@ export function Balance({ base }: { base: number }) {
   return <span className="shrink-0 text-sm font-bold tabular-nums text-primary">{format(base)}</span>
 }
 
-/** صف تغيير العملة: يفتح قائمة العملات. عملة واحدة فقط → صف معلومات بلا فعل. */
-export function CurrencyRow() {
+/**
+ * بطاقة العملة بارزة أعلى الصفحة: كل العملات المتاحة أزرار تُختار بنقرة واحدة وتتحوّل الأسعار فوراً.
+ * عملة واحدة فقط → لا تُعرض (لا خيار يُقدَّم).
+ */
+export function CurrencyCard() {
   const { currencies, currency, setCurrencyCode } = useCurrency()
-  const [open, setOpen] = useState(false)
-  const single = currencies.length < 2
+  if (currencies.length < 2) return null
   return (
-    <>
-      <SettingsButtonRow
-        icon={Coins}
-        label="العملة"
-        description={single ? "عملة المتجر الوحيدة" : "اختر العملة التي تُعرض بها الأسعار"}
-        trailing={<span className="shrink-0 text-xs text-muted-foreground">{currency.name} ({currency.symbol})</span>}
-        onClick={() => !single && setOpen(true)}
-      />
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" dir="rtl" className="max-h-[80vh] gap-0 overflow-y-auto rounded-t-2xl p-0 sm:mx-auto sm:max-w-md">
-          <SheetHeader className="border-b p-4 pr-14 text-right">
-            <SheetTitle>اختر العملة</SheetTitle>
-            <SheetDescription className="sr-only">تُحوَّل كل أسعار المتجر إلى العملة المختارة.</SheetDescription>
-          </SheetHeader>
-          <ul className="p-2" role="radiogroup" aria-label="العملة">
-            {currencies.map((c) => {
-              const active = c.code === currency.code
-              return (
-                <li key={c.code}>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => {
-                      setCurrencyCode(c.code)
-                      setOpen(false)
-                    }}
-                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-right text-sm ${active ? "bg-primary/10 font-bold text-primary" : "hover:bg-muted"}`}
-                  >
-                    <span className="flex-1">{c.name}</span>
-                    <span className="text-xs text-muted-foreground">{c.symbol}</span>
-                    {active && <Check className="h-4 w-4" aria-hidden="true" />}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </SheetContent>
-      </Sheet>
-    </>
+    <section aria-label="العملة" className="mb-6 rounded-2xl border border-border bg-card p-4">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Coins className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold">عملة عرض الأسعار</h2>
+          <p className="text-xs text-muted-foreground">تتحوّل كل أسعار المتجر فوراً</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="العملة">
+        {currencies.map((c) => {
+          const active = c.code === currency.code
+          return (
+            <button
+              key={c.code}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setCurrencyCode(c.code)}
+              className={`flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition ${
+                active ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
+              }`}
+            >
+              {active && <Check className="h-4 w-4" aria-hidden="true" />}
+              <span>{c.name}</span>
+              <span className={active ? "text-xs opacity-90" : "text-xs text-muted-foreground"}>{c.symbol}</span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
