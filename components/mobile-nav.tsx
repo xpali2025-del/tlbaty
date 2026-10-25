@@ -6,12 +6,14 @@ import { ShoppingBag, FolderClosed, Home, Heart, ShoppingCart } from "lucide-rea
 import { useCart } from "./cart-provider"
 import { useWishlist } from "./wishlist-provider"
 
+// القائمة بترتيب العرض من اليسار إلى اليمين (dir="ltr")؛ فيقرأها العربي من اليمين:
+// المنتجات ← الأقسام ← الرئيسية ← السلة ← الرغبات.
 const ITEMS = [
-  { href: "/categories", label: "المنتجات", icon: ShoppingBag },
-  { href: "/shop", label: "الأقسام", icon: FolderClosed },
-  { href: "/", label: "الرئيسية", icon: Home, center: true },
   { href: "/wishlist", label: "الرغبات", icon: Heart },
   { href: "/cart", label: "السلة", icon: ShoppingCart },
+  { href: "/", label: "الرئيسية", icon: Home, center: true },
+  { href: "/shop", label: "الأقسام", icon: FolderClosed },
+  { href: "/categories", label: "المنتجات", icon: ShoppingBag },
 ]
 
 export function MobileNav() {
