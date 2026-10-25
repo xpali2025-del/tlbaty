@@ -27,10 +27,32 @@ beforeAll(async () => {
 describe('params', () => {
   it('parses, validates and round-trips', () => {
     const p = parseSearchParams(new URLSearchParams('q=%20%D9%81%D8%B3%D8%AA%D8%A7%D9%86%20&category=women&color=a&color=b&size=M&min=500&max=100&stock=1&sort=price_asc&limit=9999&brand=%3Cscript%3E'))
-    expect(p).toMatchObject({ q: 'فستان', category: 'women', colors: ['a', 'b'], sizes: ['M'], minPrice: 100, maxPrice: 500, inStock: true, sort: 'price_asc', limit: 120 })
+    expect(p).toMatchObject({ q: 'فستان', categories: ['women'], colors: ['a', 'b'], sizes: ['M'], minPrice: 100, maxPrice: 500, inStock: true, sort: 'price_asc', limit: 120 })
     expect(p.brand).toBeUndefined()
     expect(parseSearchParams({ sort: 'evil', min: '-5', max: 'abc', limit: '0' })).toEqual({})
     expect(parseSearchParams(new URLSearchParams(buildSearchQuery(p)))).toEqual({ ...p, limit: 120 })
+  })
+})
+
+describe('params: multiple categories, quick filters and legacy links', () => {
+  it('keeps several categories, de-duplicated, and round-trips them', () => {
+    const p = parseSearchParams(new URLSearchParams('category=a&category=b&category=a&category=%3Cx%3E'))
+    expect(p.categories).toEqual(['a', 'b'])
+    expect(buildSearchQuery(p)).toBe('category=a&category=b')
+    expect(parseSearchParams(new URLSearchParams(buildSearchQuery(p)))).toEqual(p)
+  })
+  it('reads the bestseller chip and maps the old /categories?filter= links', () => {
+    expect(parseSearchParams({ bestseller: '1' })).toEqual({ bestseller: true })
+    expect(parseSearchParams({ filter: 'offers' })).toEqual({ onSale: true })
+    expect(parseSearchParams({ filter: 'bestsellers' })).toEqual({ bestseller: true })
+    expect(parseSearchParams({ filter: 'new' })).toEqual({ sort: 'newest' })
+    expect(parseSearchParams({ filter: 'new', sort: 'price_asc' })).toEqual({ sort: 'price_asc' })
+    expect(parseSearchParams({ filter: 'all' })).toEqual({})
+  })
+  it('counts filter groups (not each value) for the filter button badge', async () => {
+    const { activeFilterCount } = await import('@/lib/search-params')
+    expect(activeFilterCount({ categories: ['a', 'b'], colors: ['x', 'y'], sizes: ['M'], minPrice: 1, maxPrice: 5, sort: 'newest' })).toBe(5)
+    expect(activeFilterCount({ onSale: true, bestseller: true, q: 'x' })).toBe(0)
   })
 })
 
@@ -73,7 +95,7 @@ describe('searchProducts', () => {
   it('filters by category, brand, price, stock and sale', async () => {
     const facets = await getSearchFacets()
     const cat = facets.categories[0]
-    const inCat = await searchProducts({ category: cat.slug, limit: 100 })
+    const inCat = await searchProducts({ categories: [cat.slug], limit: 100 })
     expect(inCat.total).toBe(cat.count)
     expect(inCat.items.every((p) => p.category === cat.slug)).toBe(true)
 
@@ -87,12 +109,34 @@ describe('searchProducts', () => {
     expect(range.items.every((p) => p.price >= facets.price.max)).toBe(true)
 
     await db.update(s.products).set({ stock: 0 }).where(eq(s.products.productNumber, inCat.items[0].id))
-    const inStock = await searchProducts({ category: cat.slug, inStock: true, limit: 100 })
+    const inStock = await searchProducts({ categories: [cat.slug], inStock: true, limit: 100 })
     expect(inStock.total).toBe(cat.count - 1)
 
     const sale = await searchProducts({ onSale: true, limit: 100 })
     expect(sale.items.every((p) => p.oldPrice !== undefined && p.oldPrice > p.price)).toBe(true)
     expect(sale.total).toBeGreaterThan(0)
+  })
+
+  it('filters by several categories at once', async () => {
+    const facets = await getSearchFacets()
+    const [a, b] = facets.categories
+    const both = await searchProducts({ categories: [a.slug, b.slug], limit: 200 })
+    expect(both.total).toBe(a.count + b.count)
+    expect(both.items.every((p) => p.category === a.slug || p.category === b.slug)).toBe(true)
+    expect((await searchProducts({ categories: ['no-such-category'] })).items).toEqual([])
+  })
+
+  it('bestseller filter and popular sort use the flag or the legacy tag; offers include tagged offers', async () => {
+    const [x, y] = await db.select().from(s.products).limit(2)
+    await db.update(s.products).set({ isBestseller: false, tags: [] })
+    await db.update(s.products).set({ isBestseller: true }).where(eq(s.products.productNumber, x.productNumber))
+    await db.update(s.products).set({ tags: ['bestseller', 'offer'] }).where(eq(s.products.productNumber, y.productNumber))
+    const best = await searchProducts({ bestseller: true, limit: 200 })
+    expect(best.items.map((p) => p.id).sort()).toEqual([x.productNumber, y.productNumber].sort())
+    const popular = await searchProducts({ sort: 'popular', limit: 200 })
+    expect(new Set(popular.items.slice(0, 2).map((p) => p.id))).toEqual(new Set([x.productNumber, y.productNumber]))
+    const offers = await searchProducts({ onSale: true, limit: 200 })
+    expect(offers.items.map((p) => p.id)).toContain(y.productNumber)
   })
 
   it('filters by one color (grouped by normalized name) and by size', async () => {
@@ -154,7 +198,7 @@ describe('searchByPalette', () => {
     const cat = (await db.select().from(s.categories).where(eq(s.categories.id, b.categoryId)))[0]
     const other = await db.select().from(s.categories)
     const elsewhere = other.find((c) => c.id !== cat.id)!
-    expect((await searchByPalette([{ hex: '#2030c0', weight: 1 }], { category: elsewhere.slug })).items.find((p) => p.id === b.productNumber)).toBeUndefined()
+    expect((await searchByPalette([{ hex: '#2030c0', weight: 1 }], { categories: [elsewhere.slug] })).items.find((p) => p.id === b.productNumber)).toBeUndefined()
     expect((await searchByPalette([])).items).toEqual([])
   })
 })

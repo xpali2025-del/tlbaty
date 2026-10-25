@@ -8,7 +8,8 @@ export const SEARCH_MAX_LIMIT = 120
 
 export type SearchParams = {
   q?: string
-  category?: string
+  /** أقسام متعددة (slug) — يظهر المنتج إن كان في أي منها؛ الفارغ = كل الأقسام. */
+  categories?: string[]
   subcategory?: string
   brand?: string
   /** مفاتيح ألوان (اسم اللون موحّداً) — يظهر المنتج إن كان فيه أي منها. */
@@ -19,6 +20,8 @@ export type SearchParams = {
   maxPrice?: number
   inStock?: boolean
   onSale?: boolean
+  /** الأكثر مبيعاً (علامة المنتج أو وسم bestseller). */
+  bestseller?: boolean
   sort?: SearchSort
   limit?: number
 }
@@ -47,10 +50,12 @@ export function parseSearchParams(raw: Raw): SearchParams {
   const out: SearchParams = {}
   const q = first(raw, "q")?.trim().slice(0, 100)
   if (q) out.q = q
-  for (const key of ["category", "subcategory", "brand"] as const) {
+  for (const key of ["subcategory", "brand"] as const) {
     const v = first(raw, key)?.trim()
     if (v && slugLike.test(v)) out[key] = v
   }
+  const cats = getAll(raw, "category").map((c) => c.trim()).filter((c) => slugLike.test(c))
+  if (cats.length) out.categories = [...new Set(cats)].slice(0, 20)
   const colors = getAll(raw, "color").map((c) => c.trim().slice(0, 40)).filter(Boolean)
   if (colors.length) out.colors = [...new Set(colors)].slice(0, 6)
   const sizes = getAll(raw, "size").map((c) => c.trim().slice(0, 20)).filter(Boolean)
@@ -64,7 +69,12 @@ export function parseSearchParams(raw: Raw): SearchParams {
   }
   if (first(raw, "stock") === "1") out.inStock = true
   if (first(raw, "sale") === "1") out.onSale = true
-  const sort = first(raw, "sort")
+  if (first(raw, "bestseller") === "1") out.bestseller = true
+  // روابط الأزرار القديمة (/categories?filter=new|offers|bestsellers) تبقى تعمل.
+  const legacy = first(raw, "filter")
+  if (legacy === "offers") out.onSale = true
+  else if (legacy === "bestsellers") out.bestseller = true
+  const sort = first(raw, "sort") ?? (legacy === "new" ? "newest" : undefined)
   if (sort && (SEARCH_SORTS as readonly string[]).includes(sort)) out.sort = sort as SearchSort
   const limit = Number(first(raw, "limit"))
   if (Number.isInteger(limit) && limit > 0) out.limit = Math.min(limit, SEARCH_MAX_LIMIT)
@@ -75,7 +85,7 @@ export function parseSearchParams(raw: Raw): SearchParams {
 export function buildSearchQuery(p: SearchParams): string {
   const u = new URLSearchParams()
   if (p.q) u.set("q", p.q)
-  if (p.category) u.set("category", p.category)
+  for (const c of p.categories ?? []) u.append("category", c)
   if (p.subcategory) u.set("subcategory", p.subcategory)
   if (p.brand) u.set("brand", p.brand)
   for (const c of p.colors ?? []) u.append("color", c)
@@ -84,21 +94,25 @@ export function buildSearchQuery(p: SearchParams): string {
   if (p.maxPrice !== undefined) u.set("max", String(p.maxPrice))
   if (p.inStock) u.set("stock", "1")
   if (p.onSale) u.set("sale", "1")
+  if (p.bestseller) u.set("bestseller", "1")
   if (p.sort && p.sort !== "relevance") u.set("sort", p.sort)
   if (p.limit && p.limit > SEARCH_PAGE_SIZE) u.set("limit", String(p.limit))
   return u.toString()
 }
 
-/** عدد الفلاتر الفعّالة (بدون النص والترتيب) لعرضه على زر الفلاتر. */
+/**
+ * عدد مجموعات الفلاتر الفعّالة لعرضه على زر الفلتر (الأقسام، الألوان، المقاسات، السعر، الماركة، المتوفر، الترتيب).
+ * الشرائح السريعة (العروض/الأكثر مبيعاً) تُرى مباشرة فلا تُعدّ، والنص خارج الفلاتر.
+ */
 export function activeFilterCount(p: SearchParams): number {
   return (
-    (p.category ? 1 : 0) +
+    (p.categories?.length ? 1 : 0) +
     (p.subcategory ? 1 : 0) +
     (p.brand ? 1 : 0) +
-    (p.colors?.length ?? 0) +
-    (p.sizes?.length ?? 0) +
+    (p.colors?.length ? 1 : 0) +
+    (p.sizes?.length ? 1 : 0) +
     (p.minPrice !== undefined || p.maxPrice !== undefined ? 1 : 0) +
     (p.inStock ? 1 : 0) +
-    (p.onSale ? 1 : 0)
+    (p.sort && p.sort !== "relevance" ? 1 : 0)
   )
 }
