@@ -14,7 +14,7 @@ import {
   Shield,
   Headphones,
   RotateCcw,
-  ShoppingBag,
+  ShoppingCart,
 } from "lucide-react"
 
 import type { Product } from "@/lib/types"
@@ -319,7 +319,7 @@ export function ProductDetail({
               disabled={outOfStock}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border-2 border-primary bg-background py-3 font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-background disabled:hover:text-primary"
             >
-              <ShoppingBag className="h-5 w-5" />
+              <ShoppingCart className="h-5 w-5" />
               إضافة للسلة
             </button>
             <button

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, Search, ShoppingBag, Heart, Clock3, X, Bell, PackageSearch, User } from "lucide-react"
+import { Menu, Search, ShoppingCart, Heart, Clock3, X, Bell, PackageSearch, User } from "lucide-react"
 import { useState } from "react"
 import { useCart } from "./cart-provider"
 import { useWishlist } from "./wishlist-provider"
@@ -95,7 +95,7 @@ export function Header() {
               className="p-2 text-foreground hover:text-primary transition-colors relative"
               aria-label={`السلة (${totalItems} منتج)`}
             >
-              <ShoppingBag className="w-6 h-6" />
+              <ShoppingCart className="w-6 h-6" />
               {totalItems > 0 && (
                 <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {totalItems}
