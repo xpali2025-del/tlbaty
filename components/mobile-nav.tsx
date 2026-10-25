@@ -2,13 +2,12 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Settings, FolderClosed, Home, Heart, ShoppingCart } from "lucide-react"
+import { ShoppingBag, FolderClosed, Home, Heart, ShoppingCart } from "lucide-react"
 import { useCart } from "./cart-provider"
 import { useWishlist } from "./wishlist-provider"
 
 const ITEMS = [
-  // لا زر للمنتجات هنا كما في المتاجر العالمية: كل المنتجات من «عرض الكل» في الرئيسية ومن أيقونة البحث والقائمة.
-  { href: "/account", label: "الإعدادات", icon: Settings },
+  { href: "/categories", label: "المنتجات", icon: ShoppingBag },
   { href: "/shop", label: "الأقسام", icon: FolderClosed },
   { href: "/", label: "الرئيسية", icon: Home, center: true },
   { href: "/wishlist", label: "الرغبات", icon: Heart },
@@ -31,8 +30,7 @@ export function MobileNav() {
       >
         {ITEMS.map((item) => {
           const Icon = item.icon
-          const base = item.href.split("?")[0]
-          const isActive = pathname === base || (base !== "/" && pathname.startsWith(`${base}/`))
+          const isActive = pathname === item.href.split("?")[0]
           const isCart = item.href === "/cart"
           const isWishlist = item.href === "/wishlist"
 
