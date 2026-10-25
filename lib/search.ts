@@ -104,7 +104,7 @@ export const getSearchFacets = (): Promise<SearchFacets> =>
 /** شروط الفلاتر (بدون النص). */
 async function filterConditions(p: SearchParams): Promise<SQL[]> {
   const conds: SQL[] = []
-  if (p.category) conds.push(eq(categories.slug, p.category))
+  if (p.categories?.length) conds.push(inArray(categories.slug, p.categories))
   if (p.subcategory) conds.push(eq(subcategories.slug, p.subcategory))
   if (p.brand) conds.push(eq(brands.slug, p.brand))
   if (p.colors?.length) {
@@ -121,7 +121,9 @@ async function filterConditions(p: SearchParams): Promise<SQL[]> {
   if (p.minPrice !== undefined) conds.push(gte(products.price, p.minPrice))
   if (p.maxPrice !== undefined) conds.push(lte(products.price, p.maxPrice))
   if (p.inStock) conds.push(gt(products.stock, 0))
-  if (p.onSale) conds.push(sql`${products.oldPrice} is not null and ${products.oldPrice} > ${products.price}`)
+  // نفس تعريف قوائم الصفحة الرئيسية (lib/data.ts): تخفيض فعلي أو وسم offer / علامة أو وسم bestseller.
+  if (p.onSale) conds.push(sql`((${products.oldPrice} is not null and ${products.oldPrice} > ${products.price}) or 'offer' = any(${products.tags}))`)
+  if (p.bestseller) conds.push(sql`(${products.isBestseller} or 'bestseller' = any(${products.tags}))`)
   return conds
 }
 
@@ -143,7 +145,7 @@ function orderBy(sort: SearchParams["sort"]) {
     case "price_desc":
       return [desc(products.price), asc(products.name)]
     case "popular":
-      return [desc(products.isBestseller), desc(products.reviewsCount), asc(products.name)]
+      return [desc(sql`(${products.isBestseller} or 'bestseller' = any(${products.tags}))`), desc(products.reviewsCount), asc(products.name)]
     case "rating":
       return [desc(products.rating), desc(products.reviewsCount), asc(products.name)]
     default:
