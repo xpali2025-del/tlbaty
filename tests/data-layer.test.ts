@@ -192,6 +192,22 @@ describe('marketing content', () => {
   })
 })
 
+describe('video ads', () => {
+  it('maps video fields and hides ads outside their date window', async () => {
+    const base = { imageKey: 'ads/p.webp', active: true }
+    await db.insert(s.ads).values([
+      { ...base, title: 'v-live', kind: 'video', videoKey: 'ads/v.mp4', placements: ['grid'], startsOn: '2000-01-01', endsOn: '2999-12-31' },
+      { ...base, title: 'v-expired', endsOn: '2000-01-01' },
+      { ...base, title: 'v-future', startsOn: '2999-01-01' },
+    ])
+    const list = await data.getAds()
+    const live = list.find((a) => a.title === 'v-live')!
+    expect(live).toMatchObject({ kind: 'video', placements: ['grid'], startsOn: '2000-01-01', endsOn: '2999-12-31' })
+    expect(live.videoUrl).toContain('ads/v.mp4')
+    expect(list.some((a) => a.title === 'v-expired' || a.title === 'v-future')).toBe(false)
+  })
+})
+
 describe('shipping, payment accounts and currencies', () => {
   it('returns shipping zones, default first, with ordered methods', async () => {
     const [zone] = await db.insert(s.shippingZones).values({ governorate: 'صنعاء' }).returning()

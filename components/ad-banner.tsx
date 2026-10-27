@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { AdVideo } from "@/components/ad-video"
 import { SafeImage } from "@/components/safe-image"
 import type { Ad } from "@/lib/types"
 
@@ -7,6 +8,16 @@ import type { Ad } from "@/lib/types"
  * بحجم بانر مناسب. يلتفّ برابط فقط عند وجود href.
  */
 export function AdBanner({ ad }: { ad: Ad }) {
+  if (ad.kind === "video" && ad.videoUrl) {
+    return (
+      <AdVideo
+        src={ad.videoUrl}
+        title={ad.title}
+        href={ad.href}
+        poster={<SafeImage src={ad.image} alt={ad.title} fill sizes="100vw" className="object-cover" />}
+      />
+    )
+  }
   const media = (
     <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-secondary shadow-sm">
       <span className="absolute right-3 top-3 z-10 rounded-full bg-background/80 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">

@@ -39,10 +39,23 @@ export const ads = store.table('ads', {
   active: boolean('active').notNull().default(true),
   frequency: integer('frequency').notNull().default(6),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** 'image' (الافتراضي) أو 'video': الفيديو يعرض image_key كغلاف (poster) قبل التشغيل وعند تعذّره. */
+  kind: text('kind').notNull().default('image'),
+  /** مفتاح ملف MP4 في R2 (ads/<uuid>.mp4)؛ مطلوب لنوع video فقط. */
+  videoKey: text('video_key'),
+  /** أماكن العرض (انظر lib/ads.ts)؛ الفارغ = كل الأماكن (سلوك الإعلانات القديمة). */
+  placements: text('placements').array().notNull().default(sql`'{}'::text[]`),
+  /** نافذة العرض بالتاريخ (توقيت عدن، شاملة الطرفين)؛ null = مفتوحة. */
+  startsOn: date('starts_on'),
+  endsOn: date('ends_on'),
   ...timestamps(),
 }, (t) => [
   index('ads_active_sort_idx').on(t.sortOrder).where(sql`${t.active}`),
   check('ads_frequency_min', sql`${t.frequency} >= 1`),
+  check('ads_kind_valid', sql`${t.kind} in ('image', 'video')`),
+  check('ads_video_needs_key', sql`${t.kind} <> 'video' or ${t.videoKey} is not null`),
+  check('ads_placements_valid', sql`${t.placements} <@ array['home_new','home_bestsellers','home_offers','home_categories','grid','category']::text[]`),
+  check('ads_dates_order', sql`${t.startsOn} is null or ${t.endsOn} is null or ${t.startsOn} <= ${t.endsOn}`),
 ])
 
 export const adCategories = store.table('ad_categories', {

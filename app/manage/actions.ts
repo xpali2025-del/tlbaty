@@ -26,6 +26,8 @@ import { refreshProductSearch } from "@/lib/search-index"
 import { productsMissingPalette, refreshProductPalette } from "@/lib/product-palette"
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
 import { isCategoryCode } from "@/lib/product-code"
+import { normalizePlacements, parseDateOnly } from "@/lib/ads"
+import { isValidVideoKey } from "@/lib/storage/keys"
 import { isRole, normalizePermissions, ROLE_PRESETS, type Role } from "@/lib/permissions"
 import { SUPPORTED_COUNTRIES } from "@/lib/phone"
 import {
@@ -614,6 +616,16 @@ export async function saveAd(id: string | null, form: FormData) {
   const adId = id ? uuidParam(id) : null
   const imageKey = newImageKey(form, "imageKey")
 
+  const kind = str(form, "kind") === "video" ? "video" : "image"
+  const newVideoKey = str(form, "videoKey")
+  if (newVideoKey && !isValidVideoKey(newVideoKey)) throw new Error("مفتاح الفيديو غير صالح")
+  const placements = normalizePlacements(json<unknown>(form, "placements", []))
+  const startsOn = parseDateOnly(str(form, "startsOn")) ?? null
+  const endsOn = parseDateOnly(str(form, "endsOn")) ?? null
+  if (str(form, "startsOn") && !startsOn) throw new Error("تاريخ البداية غير صالح")
+  if (str(form, "endsOn") && !endsOn) throw new Error("تاريخ النهاية غير صالح")
+  if (startsOn && endsOn && startsOn > endsOn) throw new Error("تاريخ النهاية يجب ألا يسبق تاريخ البداية")
+
   // نبقي فقط الأقسام الموجودة فعلاً، ونتجاهل أي معرّف غريب.
   const requested = json<string[]>(form, "categoryIds", []).filter((c) => typeof c === "string")
   const categoryIds = requested.length
@@ -626,28 +638,39 @@ export async function saveAd(id: string | null, form: FormData) {
     active: bool(form, "active"),
     frequency: Math.max(1, Math.trunc(num(form, "frequency") ?? 6)),
     sortOrder: Math.trunc(num(form, "sortOrder") ?? 0),
+    kind,
+    placements,
+    startsOn,
+    endsOn,
     updatedAt: new Date(),
   }
 
   let oldImage: string | null = null
+  let oldVideo: string | null = null
   await db.transaction(async (tx) => {
     let rowId: string
     if (adId) {
       const [existing] = await tx.select().from(ads).where(eq(ads.id, adId)).limit(1)
       if (!existing) throw new Error("الإعلان غير موجود")
-      await tx.update(ads).set({ ...values, ...(imageKey ? { imageKey } : {}) }).where(eq(ads.id, adId))
+      // الصورة العادية تمسح الفيديو؛ الفيديو يحتاج مفتاحاً جديداً أو قائماً.
+      const videoKey = kind === "video" ? (newVideoKey ?? existing.videoKey) : null
+      if (kind === "video" && !videoKey) throw new Error("فيديو الإعلان مطلوب")
+      await tx.update(ads).set({ ...values, videoKey, ...(imageKey ? { imageKey } : {}) }).where(eq(ads.id, adId))
       if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
+      if (existing.videoKey && existing.videoKey !== videoKey) oldVideo = existing.videoKey
       rowId = adId
     } else {
-      if (!imageKey) throw new Error("صورة الإعلان مطلوبة")
-      ;[{ id: rowId }] = await tx.insert(ads).values({ ...values, imageKey }).returning({ id: ads.id })
+      if (!imageKey) throw new Error(kind === "video" ? "صورة الغلاف مطلوبة" : "صورة الإعلان مطلوبة")
+      if (kind === "video" && !newVideoKey) throw new Error("فيديو الإعلان مطلوب")
+      const videoKey = kind === "video" ? (newVideoKey ?? null) : null
+      ;[{ id: rowId }] = await tx.insert(ads).values({ ...values, imageKey, videoKey }).returning({ id: ads.id })
     }
     await tx.delete(adCategories).where(eq(adCategories.adId, rowId))
     if (categoryIds.length) await tx.insert(adCategories).values(categoryIds.map((categoryId) => ({ adId: rowId, categoryId })))
   })
 
   revalidateStore()
-  await removeObjects([oldImage])
+  await removeObjects([oldImage, oldVideo])
 }
 
 export async function toggleAdActive(id: string, value: boolean) {
@@ -663,7 +686,7 @@ export async function deleteAd(id: string) {
   if (!existing) return
   await db.delete(ads).where(eq(ads.id, adId))
   revalidateStore()
-  await removeObjects([existing.imageKey])
+  await removeObjects([existing.imageKey, existing.videoKey])
 }
 
 // ---------- إعدادات المتجر (صف واحد) ----------

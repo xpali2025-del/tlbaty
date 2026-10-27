@@ -6,6 +6,7 @@ import { LayoutGrid } from "lucide-react"
 import type { Ad, Product, Subcategory } from "@/lib/types"
 import { ProductCard } from "@/components/product-card"
 import { AdBanner, interleaveAds } from "@/components/ad-banner"
+import { adsForPlacement } from "@/lib/ads"
 
 type SubWithCount = Subcategory & { count: number }
 
@@ -40,7 +41,7 @@ export function CategoryProducts({
 
   const hasSubcategories = subcategories.length > 0
 
-  const gridItems = useMemo(() => interleaveAds(results, ads), [results, ads])
+  const gridItems = useMemo(() => interleaveAds(results, adsForPlacement(ads, "category")), [results, ads])
 
   return (
     <div>

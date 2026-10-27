@@ -37,3 +37,10 @@ export function isImageFolder(value: string): value is ImageFolder {
 export function isValidImageKey(key: string): boolean {
   return KEY_PATTERN.test(key) && !key.includes("..")
 }
+
+/** مفتاح فيديو إعلان: مجلد الإعلانات فقط وبامتداد mp4. */
+const VIDEO_KEY_PATTERN = /^ads\/[A-Za-z0-9._-]+\.mp4$/
+
+export function isValidVideoKey(key: string): boolean {
+  return VIDEO_KEY_PATTERN.test(key) && !key.includes("..")
+}

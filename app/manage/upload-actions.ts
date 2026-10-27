@@ -3,7 +3,8 @@
 import { isR2Configured } from "@/lib/env"
 import { assertManageAuthenticated } from "@/lib/manage-auth"
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, isImageFolder } from "@/lib/storage/keys"
-import { createImageUpload } from "@/lib/storage/r2"
+import { createImageUpload, createVideoUpload } from "@/lib/storage/r2"
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/ads"
 
 /**
  * يعيد رابط رفع موقَّعاً (PUT، صالح 5 دقائق) ومفتاح الكائن لرفع صورة من المتصفح مباشرة إلى R2.
@@ -18,4 +19,15 @@ export async function requestImageUpload(folder: string, contentType: string, si
   }
   if (!isR2Configured()) throw new Error("تخزين الصور (R2) غير مضبوط على الخادم")
   return createImageUpload(contentType, size, folder)
+}
+
+/** رابط رفع موقَّع لفيديو إعلان (MP4 فقط، مجلد الإعلانات). */
+export async function requestVideoUpload(contentType: string, size: number) {
+  await assertManageAuthenticated()
+  if (!ALLOWED_VIDEO_TYPES[contentType]) throw new Error("نوع الفيديو غير مدعوم (MP4 فقط)")
+  if (!Number.isFinite(size) || size <= 0 || size > MAX_VIDEO_BYTES) {
+    throw new Error(`حجم الفيديو يجب ألا يتجاوز ${MAX_VIDEO_BYTES / 1024 / 1024} ميغابايت`)
+  }
+  if (!isR2Configured()) throw new Error("تخزين الصور (R2) غير مضبوط على الخادم")
+  return createVideoUpload(contentType, size)
 }

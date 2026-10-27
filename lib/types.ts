@@ -126,6 +126,14 @@ export interface Ad {
   frequency?: number
   /** ترتيب ظهور الإعلانات عند وجود أكثر من واحد */
   order?: number
+  /** نوع الإعلان: صورة (الافتراضي) أو فيديو صامت يعمل تلقائياً (image = صورة الغلاف) */
+  kind?: "image" | "video"
+  videoUrl?: string
+  /** أماكن العرض؛ فارغ = كل الأماكن */
+  placements?: string[]
+  /** نافذة العرض YYYY-MM-DD بتوقيت عدن (شاملة، فارغ = مفتوح) */
+  startsOn?: string
+  endsOn?: string
 }
 
 export interface Review {
