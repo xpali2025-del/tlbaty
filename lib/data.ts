@@ -33,6 +33,7 @@ import {
 } from "@/lib/cache-tags"
 import { dbCached } from "@/lib/db-cache"
 import { resolveImageUrl, resolveOptionalImageUrl } from "@/lib/images"
+import { isAdLive, todayInAden } from "@/lib/ads"
 import type { Product, Category, Subcategory, Slide, Coupon, Review, Ad, Brand, ShippingZone } from "./types"
 import type { PaymentAccount } from "./payment"
 import {
@@ -668,11 +669,19 @@ export const getAds = cache(async (categorySlug?: string): Promise<Ad[]> => {
         active: a.active,
         frequency: a.frequency,
         order: a.sortOrder,
+        kind: a.kind === "video" && a.videoKey ? ("video" as const) : ("image" as const),
+        videoUrl: a.kind === "video" ? resolveOptionalImageUrl(a.videoKey) : undefined,
+        placements: a.placements,
+        startsOn: nullToUndefined(a.startsOn),
+        endsOn: nullToUndefined(a.endsOn),
       }))
     },
   })
+  const today = todayInAden()
   return all
     .filter((a) => Boolean(a.image))
+    .filter((a) => a.kind !== "video" || Boolean(a.videoUrl))
+    .filter((a) => isAdLive(a, today))
     .filter((a) => {
       if (!categorySlug) return true
       const cats = a.categories

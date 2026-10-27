@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: mocks.revalidateTag, revalidatePath: mocks.revalidatePath }))
 vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'tester' }))
-vi.mock('@/lib/storage/r2', () => ({ deleteImageObject: mocks.deleteImageObject, createImageUpload: vi.fn(async (type: string, size: number, folder: string) => ({ uploadUrl: `https://r2/${folder}/${type}/${size}`, objectKey: `${folder}/new.png` })) }))
+vi.mock('@/lib/storage/r2', () => ({ deleteImageObject: mocks.deleteImageObject, createImageUpload: vi.fn(async (type: string, size: number, folder: string) => ({ uploadUrl: `https://r2/${folder}/${type}/${size}`, objectKey: `${folder}/new.png` })), createVideoUpload: vi.fn(async (type: string, size: number) => ({ uploadUrl: `https://r2/video/${type}/${size}`, objectKey: 'ads/new.mp4' })) }))
 vi.mock('ai', () => ({ generateText: vi.fn(async () => ({ text: 'Women Dress Nike!' })) }))
 
 const A = await import('@/app/manage/actions')
@@ -333,6 +333,32 @@ describe('ads and settings', () => {
     expect(deleted()).toEqual([KEY('ads', 'a1')])
   })
 
+  it('saves video ads with a validated video key, placements and dates, and removes replaced videos', async () => {
+    const poster = KEY('ads', 'p1')
+    await expect(A.saveAd(null, form({ title: 'ف', kind: 'video', imageKey: poster }))).rejects.toThrow('فيديو الإعلان مطلوب')
+    await expect(A.saveAd(null, form({ title: 'ف', kind: 'video', imageKey: poster, videoKey: KEY('ads', 'x') }))).rejects.toThrow('مفتاح الفيديو غير صالح')
+    await expect(A.saveAd(null, form({ title: 'ف', kind: 'video', videoKey: 'ads/v1.mp4' }))).rejects.toThrow('صورة الغلاف مطلوبة')
+    await expect(A.saveAd(null, form({ title: 'ف', imageKey: poster, startsOn: '2026-02-30' }))).rejects.toThrow('تاريخ البداية غير صالح')
+    await expect(A.saveAd(null, form({ title: 'ف', imageKey: poster, startsOn: '2026-05-02', endsOn: '2026-05-01' }))).rejects.toThrow('النهاية')
+
+    await A.saveAd(null, form({ title: 'فيديو', kind: 'video', imageKey: poster, videoKey: 'ads/v1.mp4', placements: ['grid', 'bogus', 'grid'], startsOn: '2026-05-01', endsOn: '2026-05-31' }))
+    const ad = (await rows(s.ads)).find((x) => x.title === 'فيديو')!
+    expect(ad).toMatchObject({ kind: 'video', videoKey: 'ads/v1.mp4', placements: ['grid'], startsOn: '2026-05-01', endsOn: '2026-05-31' })
+
+    await A.saveAd(ad.id, form({ title: 'فيديو', kind: 'video', videoKey: 'ads/v2.mp4' }))
+    expect((await rows(s.ads)).find((x) => x.id === ad.id)).toMatchObject({ videoKey: 'ads/v2.mp4', placements: [], startsOn: null })
+    expect(deleted()).toEqual(['ads/v1.mp4'])
+
+    await A.saveAd(ad.id, form({ title: 'فيديو', kind: 'image' }))
+    expect((await rows(s.ads)).find((x) => x.id === ad.id)).toMatchObject({ kind: 'image', videoKey: null })
+    expect(deleted()).toEqual(['ads/v1.mp4', 'ads/v2.mp4'])
+
+    await A.saveAd(ad.id, form({ title: 'فيديو', kind: 'video', videoKey: 'ads/v3.mp4' }))
+    mocks.deleteImageObject.mockClear()
+    await A.deleteAd(ad.id)
+    expect(deleted()).toEqual([poster, 'ads/v3.mp4'].sort())
+  })
+
   it('upserts the single settings row and removes a replaced logo', async () => {
     await A.saveSettings(null, form({ name: 'متجر', whatsapp: '967700000000', instagram: 'https://instagram.com/x', logoKey: KEY('site', 'l1'), codEnabled: 'true' }))
     await A.saveSettings('anything', form({ name: 'متجر 2', logoKey: KEY('site', 'l2'), transferEnabled: 'true' }))
@@ -419,6 +445,20 @@ describe('requestImageUpload', () => {
     expect(await uploads.requestImageUpload('brands', 'image/png', 1000)).toEqual({ uploadUrl: 'https://r2/brands/image/png/1000', objectKey: 'brands/new.png' })
     delete process.env.R2_BUCKET
     await expect(uploads.requestImageUpload('products', 'image/png', 1000)).rejects.toThrow('غير مضبوط')
+    Object.assign(process.env, saved)
+  })
+})
+
+describe('requestVideoUpload', () => {
+  it('accepts only MP4 within the size limit and a configured bucket', async () => {
+    const saved = { ...process.env }
+    Object.assign(process.env, { R2_ACCOUNT_ID: 'a', R2_ACCESS_KEY_ID: 'b', R2_SECRET_ACCESS_KEY: 'c', R2_BUCKET: 'd', R2_PUBLIC_URL: 'https://cdn.example.com' })
+    await expect(uploads.requestVideoUpload('video/webm', 1000)).rejects.toThrow('MP4 فقط')
+    await expect(uploads.requestVideoUpload('video/mp4', 0)).rejects.toThrow('حجم الفيديو')
+    await expect(uploads.requestVideoUpload('video/mp4', 9 * 1024 * 1024)).rejects.toThrow('حجم الفيديو')
+    expect(await uploads.requestVideoUpload('video/mp4', 1000)).toEqual({ uploadUrl: 'https://r2/video/video/mp4/1000', objectKey: 'ads/new.mp4' })
+    delete process.env.R2_BUCKET
+    await expect(uploads.requestVideoUpload('video/mp4', 1000)).rejects.toThrow('غير مضبوط')
     Object.assign(process.env, saved)
   })
 })

@@ -6,6 +6,7 @@ import { BrandSection } from "@/components/brand-section"
 import { CustomerReviews } from "@/components/customer-reviews"
 import { CategoryList } from "@/components/category-list"
 import { AdBanner } from "@/components/ad-banner"
+import { createAdPicker, type AdPlacement } from "@/lib/ads"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
@@ -43,12 +44,10 @@ export default async function HomePage() {
     ])
 
   // الإعلانات (مفلترة ومرتبة مسبقاً من getAds) نعرضها بالتناوب في مواضع مختلفة من الصفحة
-  const homeAds = ads
-  const cursor = { n: 0 }
-  const renderAd = () => {
-    if (homeAds.length === 0) return null
-    const ad = homeAds[cursor.n % homeAds.length]
-    cursor.n += 1
+  const pickAd = createAdPicker(ads)
+  const renderAd = (placement: AdPlacement) => {
+    const ad = pickAd(placement)
+    if (!ad) return null
     return (
       <section className="mx-auto max-w-7xl px-4 py-4" aria-label={ad.title}>
         <AdBanner ad={ad} />
@@ -80,7 +79,7 @@ export default async function HomePage() {
         />
 
         {/* إعلان بعد المضاف حديثاً */}
-        {renderAd()}
+        {renderAd("home_new")}
 
         {/* 5. الأكثر مبيعاً */}
         <ProductSection
@@ -91,7 +90,7 @@ export default async function HomePage() {
         />
 
         {/* إعلان بعد الأكثر مبيعاً */}
-        {renderAd()}
+        {renderAd("home_bestsellers")}
 
         {/* 6. العروض — 6 منتجات عليها خصم */}
         {offers.length > 0 && (
@@ -104,7 +103,7 @@ export default async function HomePage() {
         )}
 
         {/* إعلان بعد العروض */}
-        {renderAd()}
+        {renderAd("home_offers")}
 
         {/* 7. قسم لكل تصنيف — 6 منتجات من كل قسم (بدون استعلام إضافي من قاعدة البيانات) */}
         {/* نقتطع لأول 6 منتجات فقط قبل التمرير لتقليل حجم بيانات الصفحة */}
@@ -122,7 +121,7 @@ export default async function HomePage() {
                 viewAllHref={`/category/${category.slug}`}
               />
               {/* إعلان يظهر بالتناوب بين أقسام المنتجات */}
-              {index % 2 === 1 && renderAd()}
+              {index % 2 === 1 && renderAd("home_categories")}
             </Fragment>
           )
         })}

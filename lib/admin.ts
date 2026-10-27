@@ -148,6 +148,11 @@ export type AdminAd = {
   frequency?: number
   sortOrder?: number
   categoryIds: string[]
+  kind: "image" | "video"
+  videoUrl?: string
+  placements: string[]
+  startsOn?: string
+  endsOn?: string
 }
 
 export type AdminSettings = {
@@ -362,6 +367,11 @@ export const getAdminAds = () =>
       frequency: a.frequency,
       sortOrder: a.sortOrder,
       categoryIds: links.filter((l) => l.adId === a.id).map((l) => l.categoryId),
+      kind: a.kind === "video" ? ("video" as const) : ("image" as const),
+      videoUrl: resolveOptionalImageUrl(a.videoKey),
+      placements: a.placements,
+      startsOn: opt(a.startsOn),
+      endsOn: opt(a.endsOn),
     }))
   })
 

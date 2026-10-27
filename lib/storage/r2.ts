@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { getR2Env } from '@/lib/env'
-import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, isImageFolder, isValidImageKey, type ImageFolder } from './keys'
+import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, isImageFolder, isValidImageKey, isValidVideoKey, type ImageFolder } from './keys'
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES } from '@/lib/ads'
 
 let client: S3Client | undefined
 
@@ -47,10 +48,30 @@ export async function createImageUpload(contentType: string, size: number, folde
   return { uploadUrl, objectKey }
 }
 
-/** Deletes an uploaded image. Silently ignores values that are not valid public image keys (legacy paths, URLs). */
+/** Presigned PUT for an ad video (MP4, ads/ folder only). */
+export async function createVideoUpload(contentType: string, size: number) {
+  const ext = ALLOWED_VIDEO_TYPES[contentType]
+  if (!ext) throw new Error('Unsupported video type')
+  if (size <= 0 || size > MAX_VIDEO_BYTES) throw new Error('Invalid video size')
+
+  const objectKey = `ads/${randomUUID()}.${ext}`
+  const uploadUrl = await getSignedUrl(
+    getClient(),
+    new PutObjectCommand({
+      Bucket: getR2Env().R2_BUCKET,
+      Key: objectKey,
+      ContentType: contentType,
+      ContentLength: size,
+    }),
+    { expiresIn: 300 },
+  )
+  return { uploadUrl, objectKey }
+}
+
+/** Deletes an uploaded image or ad video. Silently ignores values that are not valid public keys (legacy paths, URLs). */
 export async function deleteImageObject(objectKey: string | null | undefined) {
   if (!objectKey) return
-  if (!isValidImageKey(objectKey)) return
+  if (!isValidImageKey(objectKey) && !isValidVideoKey(objectKey)) return
   await getClient().send(new DeleteObjectCommand({ Bucket: getR2Env().R2_BUCKET, Key: objectKey }))
 }
 

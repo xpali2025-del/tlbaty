@@ -9,6 +9,7 @@ import * as s from '@/lib/db/store'
 const pg = new PGlite()
 const db = drizzle(pg)
 vi.mock('@/lib/db/client', () => ({ db }))
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
 const proofs = vi.hoisted(() => ({ del: vi.fn(async (_k: string | null | undefined) => {}) }))
 vi.mock('@/lib/storage/proofs', () => ({ deletePaymentProof: proofs.del }))
 const { purgeExpiredAuthData, purgeOldPaymentProofs, PROOF_PURGE_BATCH } = await import('@/lib/maintenance')

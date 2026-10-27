@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Camera, Flame, LayoutGrid, Loader2, Search as SearchIcon, SlidersHorizontal, Tag, X } from "lucide-react"
 import { ProductCard } from "@/components/product-card"
 import { AdBanner, interleaveAds } from "@/components/ad-banner"
+import { adsForPlacement } from "@/lib/ads"
 import { BrandCard } from "@/components/brand-card"
 import { useCurrency } from "@/components/currency-provider"
 import { SearchFilterSheet, type FilterDraft } from "@/components/search-filter-sheet"
@@ -79,7 +80,7 @@ export function SearchClient({
   // الإعلانات داخل الشبكة: بلا أقسام محددة تظهر العامة فقط، ومع أقسام تظهر العامة + إعلانات هذه الأقسام.
   const visibleAds = useMemo(() => {
     const selected = params.categories ?? []
-    return ads.filter((a) => {
+    return adsForPlacement(ads, "grid").filter((a) => {
       const cats = a.categories
       const isGlobal = !cats || cats.length === 0 || cats.includes("all")
       if (selected.length === 0) return isGlobal
