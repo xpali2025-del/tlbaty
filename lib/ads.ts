@@ -80,7 +80,8 @@ export function isAdLive(ad: { startsOn?: string | null; endsOn?: string | null 
 
 export const MAX_VIDEO_BYTES = 8 * 1024 * 1024
 export const MAX_VIDEO_SECONDS = 20
-export const ALLOWED_VIDEO_TYPES: Record<string, string> = { "video/mp4": "mp4" }
+// بلا prototype كي لا يمر مفتاح مثل "constructor" من فحص النوع.
+export const ALLOWED_VIDEO_TYPES: Record<string, string> = Object.freeze(Object.assign(Object.create(null) as Record<string, string>, { "video/mp4": "mp4" }))
 
 /** رسالة خطأ بالعربية إن خالف الملف الحدود، وإلا null. المدة بالثواني (تُقاس في المتصفح). */
 export function validateVideoFile(file: { type: string; size: number; duration?: number }): string | null {

@@ -21,8 +21,17 @@ function claim(id: number, pause: () => void) {
   current = { id, pause }
 }
 
+// الفيديوهات الظاهرة فعلاً (≥40%) ودوال استئنافها: إذا أوقف فيديو آخر هذا الفيديو ثم غادر الأخير، نستأنف الظاهر.
+const inView = new Map<number, () => void>()
+
 function release(id: number) {
   if (current?.id === id) current = null
+}
+
+function resumeNext() {
+  if (current) return
+  const next = inView.values().next()
+  if (!next.done) next.value()
 }
 
 function prefersLightMode(): boolean {
@@ -55,6 +64,11 @@ export function AdVideo({
   const userPausedRef = useRef(false)
   const manualOnlyRef = useRef(false)
 
+  const getId = useCallback(() => {
+    if (idRef.current < 0) idRef.current = nextId++
+    return idRef.current
+  }, [])
+
   const pause = useCallback(() => {
     videoRef.current?.pause()
   }, [])
@@ -62,10 +76,9 @@ export function AdVideo({
   const tryPlay = useCallback(() => {
     const video = videoRef.current
     if (!video || !visibleRef.current || userPausedRef.current || manualOnlyRef.current) return
-    if (idRef.current < 0) idRef.current = nextId++
-    claim(idRef.current, pause)
+    claim(getId(), pause)
     video.play().catch(() => setPlaying(false))
-  }, [pause])
+  }, [pause, getId])
 
   useEffect(() => {
     manualOnlyRef.current = prefersLightMode()
@@ -73,14 +86,23 @@ export function AdVideo({
     const root = video?.parentElement
     if (!video || !root || typeof IntersectionObserver === "undefined") return
     const observer = new IntersectionObserver(
-      ([entry]) => {
+      (entries) => {
+        // قد تصل عدة سجلات دفعة واحدة؛ الأخير هو الحالة الحالية.
+        const entry = entries[entries.length - 1]
         visibleRef.current = entry.isIntersecting
+        const id = getId()
         if (entry.isIntersecting) {
           // نحمّل المصدر قبل الوصول إليه بقليل؛ التشغيل عند الظهور فعلاً.
           setArmed(true)
-          if (entry.intersectionRatio >= 0.4) tryPlay()
+          if (entry.intersectionRatio >= 0.4) {
+            inView.set(id, tryPlay)
+            tryPlay()
+          } else inView.delete(id)
         } else {
+          inView.delete(id)
           video.pause()
+          release(id)
+          resumeNext()
         }
       },
       { rootMargin: "200px 0px", threshold: [0, 0.4] },
@@ -88,9 +110,11 @@ export function AdVideo({
     observer.observe(root)
     return () => {
       observer.disconnect()
+      inView.delete(idRef.current)
       release(idRef.current)
+      resumeNext()
     }
-  }, [tryPlay])
+  }, [tryPlay, getId])
 
   // بعد إرفاق المصدر (armed) نحاول التشغيل فوراً (preload=none لا يحمّل قبل play()) ثم عند جاهزية البيانات.
   useEffect(() => {

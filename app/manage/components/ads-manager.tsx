@@ -202,7 +202,7 @@ function AdDialog({
           if (!videoFile && !ad?.videoUrl) throw new Error("اختر ملف الفيديو (MP4)")
           if (videoFile) {
             form.set("videoKey", await uploadAdVideo(videoFile))
-            if (!hasPoster) form.set("image", await extractVideoPoster(videoFile))
+            if (!hasPoster && !ad?.image) form.set("image", await extractVideoPoster(videoFile))
           }
         }
         await uploadFormImages(form, [
