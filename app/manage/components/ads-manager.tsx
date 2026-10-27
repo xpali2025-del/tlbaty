@@ -183,6 +183,9 @@ function AdDialog({
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <ImageField current={ad?.image} label="صورة الإعلان" required={!ad} />
+          <p className="-mt-2 text-xs text-muted-foreground">
+            المقاس المناسب: 1200×600 بكسل (نسبة 2:1). يظهر كاملاً على الجوال، ويُقصّ قليلاً من الأعلى والأسفل على الشاشات الكبيرة.
+          </p>
 
           <div className="flex flex-col gap-2">
             <Label>

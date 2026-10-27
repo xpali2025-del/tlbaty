@@ -12,7 +12,8 @@ export function AdBanner({ ad }: { ad: Ad }) {
       <span className="absolute right-3 top-3 z-10 rounded-full bg-background/80 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
         إعلان
       </span>
-      <div className="relative aspect-[851/315] w-full">
+      {/* أطول على الجوال (2:1 ≈ 180px على شاشة 360)، ثم يخفّ تدريجياً إلى النسبة العريضة الأصلية على الشاشات الكبيرة */}
+      <div className="relative aspect-[2/1] w-full sm:aspect-[5/2] lg:aspect-[851/315]">
         <SafeImage
           src={ad.image}
           alt={ad.title}
