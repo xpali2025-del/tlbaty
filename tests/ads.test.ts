@@ -66,6 +66,7 @@ describe('video limits', () => {
   it('validates type, size and duration with Arabic messages', () => {
     expect(validateVideoFile({ type: 'video/mp4', size: 1000, duration: 10 })).toBeNull()
     expect(validateVideoFile({ type: 'video/webm', size: 1000 })).toContain('MP4')
+    for (const proto of ['constructor', 'toString', '__proto__']) expect(validateVideoFile({ type: proto, size: 1000 })).toContain('MP4')
     expect(validateVideoFile({ type: 'video/mp4', size: 0 })).toContain('فارغ')
     expect(validateVideoFile({ type: 'video/mp4', size: 9 * 1024 * 1024 })).toContain('8')
     expect(validateVideoFile({ type: 'video/mp4', size: 1000, duration: 21 })).toContain('20')
