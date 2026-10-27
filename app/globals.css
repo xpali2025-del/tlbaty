@@ -118,3 +118,13 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* الجوال: حقول الإدخال بخط 16px على الأقل، وإلا يكبّر iOS Safari الصفحة تلقائياً عند الضغط على الحقل.
+   القاعدة خارج أي @layer فتغلب أدوات Tailwind (text-sm...) بلا !important. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='hidden']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

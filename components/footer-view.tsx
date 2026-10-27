@@ -36,7 +36,7 @@ export function FooterView({ categories }: { categories: FooterLink[] }) {
                 <Phone className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
                 <a
                   href={`tel:${cfg.contact.phone}`}
-                  className="inline-flex min-h-11 items-center hover:text-primary transition-colors"
+                  className="inline-flex min-h-11 min-w-11 items-center -mx-2 px-2 hover:text-primary transition-colors"
                   itemProp="telephone"
                   dir="ltr"
                 >
@@ -61,7 +61,7 @@ export function FooterView({ categories }: { categories: FooterLink[] }) {
                 <li key={link.href}>
                   <Link prefetch={false}
                     href={link.href}
-                    className="inline-flex min-h-11 items-center text-footer-foreground/80 hover:text-primary transition-colors"
+                    className="inline-flex min-h-11 min-w-11 items-center -mx-2 px-2 text-footer-foreground/80 hover:text-primary transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -78,7 +78,7 @@ export function FooterView({ categories }: { categories: FooterLink[] }) {
                 <li key={`${link.label}-${link.href}`}>
                   <Link prefetch={false}
                     href={link.href}
-                    className="inline-flex min-h-11 items-center text-footer-foreground/80 hover:text-primary transition-colors"
+                    className="inline-flex min-h-11 min-w-11 items-center -mx-2 px-2 text-footer-foreground/80 hover:text-primary transition-colors"
                   >
                     {link.label}
                   </Link>
