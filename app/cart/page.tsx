@@ -57,7 +57,7 @@ export default function CartPage() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => removeItem(item.productId, item.size, item.color)}
-                          className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                          className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
                           aria-label="حذف"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -67,7 +67,7 @@ export default function CartPage() {
                             onClick={() =>
                               updateQuantity(item.productId, item.size, item.color, item.quantity - 1)
                             }
-                            className="w-8 h-8 flex items-center justify-center hover:text-primary transition-colors"
+                            className="w-10 h-10 flex items-center justify-center hover:text-primary transition-colors"
                             aria-label="تقليل"
                           >
                             <Minus className="w-3.5 h-3.5" />
@@ -77,7 +77,7 @@ export default function CartPage() {
                             onClick={() =>
                               updateQuantity(item.productId, item.size, item.color, item.quantity + 1)
                             }
-                            className="w-8 h-8 flex items-center justify-center hover:text-primary transition-colors"
+                            className="w-10 h-10 flex items-center justify-center hover:text-primary transition-colors"
                             aria-label="زيادة"
                           >
                             <Plus className="w-3.5 h-3.5" />

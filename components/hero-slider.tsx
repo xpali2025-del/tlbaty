@@ -67,7 +67,7 @@ export function HeroSlider({ slides }: { slides: Slide[] }) {
               onClick={() => emblaApi?.scrollTo(i)}
               aria-label={`الانتقال إلى الشريحة ${i + 1}`}
               aria-current={i === selectedIndex}
-              className="pointer-events-auto flex h-11 items-center justify-center px-1"
+              className="pointer-events-auto flex h-11 min-w-6 items-center justify-center px-2"
             >
               <span
                 aria-hidden="true"

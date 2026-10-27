@@ -21,7 +21,7 @@ export function MobileNav() {
 
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-40 px-4 pb-3 pt-0 lg:hidden pointer-events-none"
+      className="fixed bottom-0 inset-x-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-0 lg:hidden pointer-events-none"
       aria-label="التنقل السفلي"
     >
       <ul
@@ -43,7 +43,7 @@ export function MobileNav() {
                   className="-mt-8 flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-full bg-gradient-to-b from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/40 ring-4 ring-background transition-transform active:scale-95"
                 >
                   <Icon className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
-                  <span className="text-[10px] font-bold">{item.label}</span>
+                  <span className="text-[11px] font-bold">{item.label}</span>
                 </Link>
               </li>
             )
@@ -60,7 +60,7 @@ export function MobileNav() {
                 <span className="relative">
                   <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                   {isCart && totalItems > 0 && (
-                    <span className="absolute -top-2 -left-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                    <span className="absolute -top-2 -left-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
                       {totalItems}
                     </span>
                   )}

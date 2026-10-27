@@ -65,7 +65,7 @@ export function Header() {
             >
               <Heart className="w-6 h-6" />
               {wishlistCount > 0 && (
-                <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {wishlistCount}
                 </span>
               )}
@@ -90,7 +90,7 @@ export function Header() {
             >
               <ShoppingCart className="w-6 h-6" />
               {totalItems > 0 && (
-                <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {totalItems}
                 </span>
               )}
