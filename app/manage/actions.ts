@@ -145,7 +145,8 @@ async function saveProductImpl(id: string | null, form: FormData) {
     if (!c?.name?.trim() || !HEX.test(c.hex ?? "")) throw new Error("لون غير صالح: الاسم مطلوب واللون بصيغة #RRGGBB")
     return { name: c.name.trim(), hex: c.hex }
   })
-  const sizeList = json<string[]>(form, "sizes", []).map((x) => String(x).trim()).filter(Boolean)
+  // نفس القائمة (بعد الحذف وإزالة الفارغ والمكرر) للمنتج ولمخزون المقاسات، وإلا لم يطابق مقاس « M» صف «M» عند الطلب.
+  const sizeList = [...new Set(json<string[]>(form, "sizes", []).map((x) => String(x).trim()).filter(Boolean))]
   // مخزون كل لون/مقاس (اختياري): كل تركيبة يجب أن تكون من ألوان ومقاسات المنتج نفسه، بلا تكرار.
   const trackVariants = bool(form, "trackVariants")
   const variantInput = trackVariants ? json<{ color?: string; size?: string; stock?: number; base?: number }[]>(form, "variants", []) : []
@@ -197,7 +198,7 @@ async function saveProductImpl(id: string | null, form: FormData) {
     sku: str(form, "sku") ?? null,
     metaTitle: str(form, "metaTitle") ?? null,
     metaDescription: str(form, "metaDescription") ?? null,
-    sizes: json<string[]>(form, "sizes", []),
+    sizes: sizeList,
     sizeChartId,
     customSizeChart,
     keywords: json<string[]>(form, "keywords", []),

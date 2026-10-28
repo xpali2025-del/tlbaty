@@ -55,6 +55,13 @@ const productForm = (over: Record<string, string | string[]> = {}) =>
   form({ name: 'منتج اختبار', categoryId, price: '100', slug: 'test-product', ...over })
 
 describe('saveProduct with stock per colour and size', () => {
+  it('stores sizes trimmed and de-duplicated so variant stock matches the ordered size', async () => {
+    await A.saveProduct(null, productForm({ slug: 'trim-sizes', sizes: [' M', 'L ', 'M', ''], trackVariants: 'true', variants: JSON.stringify([{ size: 'M', stock: 2 }, { size: 'L', stock: 1 }]) }))
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'trim-sizes')
+    expect(p.sizes).toEqual(['M', 'L'])
+    expect((await rows(s.productVariants)).filter((v) => v.productId === p.id).map((v) => v.size).sort()).toEqual(['L', 'M'])
+  })
+
   const colors = JSON.stringify([{ name: 'أحمر', hex: '#FF0000' }, { name: 'أزرق', hex: '#0000FF' }])
   const variantsOf = async (id: string) => (await rows(s.productVariants)).filter((v) => v.productId === id).map((v) => `${v.color}|${v.size}|${v.stock}`).sort()
   const rowsInput = (v: { color: string; size: string; stock: number; base?: number }[]) => JSON.stringify(v)
