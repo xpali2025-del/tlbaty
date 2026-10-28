@@ -16,7 +16,7 @@ export class CouponUnavailableError extends Error {
  * يستهلك استعمالاً واحداً من الكود ذرياً داخل معاملة الطلب: UPDATE مشروط يقفل الصف، فلا يستعمل طلبان متزامنان
  * كوداً أحادي الاستعمال. الكود الشخصي لا يقبله غير صاحبه، والمنتهي يُرفض. يتراجع مع الطلب إن فشل أي شيء بعده.
  */
-export async function redeemCoupon(tx: Tx, code: string, customerId: string): Promise<void> {
+export async function redeemCoupon(tx: Tx, code: string, customerId: string): Promise<{ exhausted: boolean }> {
   const updated = await tx
     .update(coupons)
     .set({ usedCount: sql`${coupons.usedCount} + 1` })
@@ -28,8 +28,11 @@ export async function redeemCoupon(tx: Tx, code: string, customerId: string): Pr
         or(isNull(coupons.maxUses), lt(coupons.usedCount, coupons.maxUses)),
       ),
     )
-    .returning({ id: coupons.id })
+    .returning({ usedCount: coupons.usedCount, maxUses: coupons.maxUses })
   if (updated.length === 0) throw new CouponUnavailableError(code)
+  // استُهلك آخر استعمال: يُبطل كاش قائمة الأكواد بعد تثبيت الطلب فلا يظهر الكود صالحاً لغيره.
+  const { usedCount, maxUses } = updated[0]
+  return { exhausted: maxUses !== null && usedCount >= maxUses }
 }
 
 /** يعيد استعمال كود محدود العدد عند إلغاء/إرجاع الطلب (فلا يخسر العميل كوده الأحادي بإلغاء طلبه). */

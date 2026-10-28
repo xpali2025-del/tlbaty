@@ -117,6 +117,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
   }
 
   const soldSlugs: string[] = []
+  let couponExhausted = false
   try {
     const created = await db.transaction(async (tx) => {
       let duplicateTransferReference = false
@@ -176,7 +177,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
       if (!orderNumber) throw new Error("تعذّر توليد رقم طلب فريد")
 
       // الكود المستعمل يُستهلك ذرياً هنا (أحادي الاستعمال/مقيّد بعميل)؛ إن لم يعد صالحاً يتراجع الطلب كله.
-      if (pricing.couponCode) await redeemCoupon(tx, pricing.couponCode, input.customer.id)
+      couponExhausted = pricing.couponCode ? (await redeemCoupon(tx, pricing.couponCode, input.customer.id)).exhausted : false
 
       // البنود لقطة ثابتة (الاسم والسعر)، وتُربط بالمنتج الحي إن وُجد حتى لو حُذف لاحقاً.
       const numbers = pricing.lines.map((l) => l.productId)
@@ -259,6 +260,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
       return { id: orderId, orderNumber, paymentStatus }
     })
     invalidateStock(soldSlugs)
+    if (couponExhausted) invalidateCoupons()
     return created
   } catch (error) {
     if (proofKey) await deletePaymentProof(proofKey).catch(() => {})
@@ -274,6 +276,15 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
 }
 
 /** صفحات المنتجات تعرض المخزون؛ نبطل كاش المنتجات المباعة فقط (لا كاش المتجر كله). */
+/** قائمة الأكواد العامة مخزّنة في الكاش؛ تُبطل عند استهلاك آخر استعمال لكود. */
+export function invalidateCoupons() {
+  try {
+    revalidateTag(CACHE_TAGS.coupons, { expire: 0 })
+  } catch {
+    // خارج سياق طلب Next (اختبارات/سكربتات): لا كاش لإبطاله.
+  }
+}
+
 export function invalidateStock(slugs: string[]) {
   try {
     revalidateTag(CACHE_TAGS.products, { expire: 0 })
