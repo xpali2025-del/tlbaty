@@ -98,6 +98,11 @@ describe('deleteOrder stock', () => {
     await db.insert(s.orderItems).values({ orderId: delivered.id, position: 0, productId: p.id, name: 'منتج', quantity: 2, price: 5 })
     await A.deleteOrder(delivered.id)
     expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(7)
+    // «تعذر التسليم» ليست نهائية: وحداتها ما زالت محجوزة فتعود للمخزون عند الحذف
+    const failed = await order({ status: 'failed' })
+    await db.insert(s.orderItems).values({ orderId: failed.id, position: 0, productId: p.id, name: 'منتج', quantity: 2, price: 5 })
+    await A.deleteOrder(failed.id)
+    expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(9)
   })
 })
 

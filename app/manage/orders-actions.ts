@@ -15,7 +15,7 @@ import {
   type OrderStatus,
 } from "@/lib/order-status"
 import { invalidateStock } from "@/lib/orders/create"
-import { isOpenOrderStatus } from "@/lib/order-status"
+import { holdsStockAndPayment, isOpenOrderStatus } from "@/lib/order-status"
 import { planDistribution, type DistributionPlan } from "@/lib/distribution"
 import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZE } from "@/lib/admin-orders"
 import { canTransitionPayment, initialPaymentStatus, isPaymentStatus, type PaymentStatus } from "@/lib/payment"
@@ -359,12 +359,13 @@ async function deleteOrderImpl(id: string) {
       .where(eq(orders.id, orderId))
       .for("update")
     if (!current) return false
-    // طلب مدفوع من الرصيد ما زال مفتوحاً: يُعاد المبلغ لصاحبه قبل الحذف (لا يضيع رصيد العميل).
-    if (current.paymentMethod === "wallet" && isOpenOrderStatus(normalizeOrderStatus(current.status))) {
+    // ما زال يحجز مبلغه ومخزونه (مفتوح أو «تعذر التسليم»): يُعاد المبلغ لصاحبه والوحدات للمخزون قبل الحذف،
+    // وإلا ضاع رصيد العميل نهائياً بحذف الطلب. المسلَّم والملغي/المُرجَع لا يُعاد لهما شيء هنا (الإلغاء أعادهما أصلاً).
+    const holds = holdsStockAndPayment(normalizeOrderStatus(current.status))
+    if (current.paymentMethod === "wallet" && holds) {
       await refundOrder(tx, { orderId, orderNumber: current.orderNumber, actor: (await getManageSessionUser()) ?? "مدير", reason: "حذف الطلب" })
     }
-    // حذف طلب مفتوح (لم يُسلَّم ولم يُلغَ) يعيد وحداته للمخزون؛ المسلَّم والملغي/المُرجَع لا يُعاد لهما شيء هنا.
-    if (isOpenOrderStatus(normalizeOrderStatus(current.status))) {
+    if (holds) {
       slugs = await restoreStock(tx, orderId)
       await releaseCoupon(tx, current.couponCode)
     }

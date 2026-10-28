@@ -133,6 +133,14 @@ export function describeOrderStatus(value: unknown): string {
 }
 
 /** طلب «مفتوح»: ما زال يحتاج عملاً من المندوب (لم يُسلَّم ولم يُلغَ ولم يُرجَع ولم يفشل تسليمه). */
+/**
+ * هل ما زال الطلب يحجز مخزونه ومبلغه المدفوع؟ كل ما لم يُسلَّم ولم يُلغَ ولم يُرجَع.
+ * «تعذر التسليم» ليست نهائية (تنتقل بعدها إلى ملغي/مُرجَع/إعادة إسناد)، فتبقى تحجزهما — بخلاف isOpenOrderStatus.
+ */
+export function holdsStockAndPayment(status: OrderStatus): boolean {
+  return !["delivered", "cancelled", "returned"].includes(status)
+}
+
 export function isOpenOrderStatus(status: OrderStatus): boolean {
   return !["delivered", "cancelled", "returned", "failed"].includes(status)
 }

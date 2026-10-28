@@ -275,6 +275,17 @@ describe('paying an order from the wallet', () => {
     expect(await balance(c)).toBe(5000)
   })
 
+  it('deleting a wallet-paid order whose delivery failed still refunds it (failed is not final)', async () => {
+    const c = await newCustomer()
+    await credit(c, 5000)
+    const pricing = await price()
+    const o = await insertOrder({ customer: { id: c }, contact, pricing, payment: walletPay })
+    await db.update(s.orders).set({ status: 'failed' }).where(eq(s.orders.id, o.id))
+    expect(await balance(c)).toBe(5000 - pricing.base.total)
+    await O.deleteOrder(o.id)
+    expect(await balance(c)).toBe(5000)
+  })
+
   it('wallet payment status cannot be changed by hand', async () => {
     const { canTransitionPayment } = await import('@/lib/payment')
     for (const next of ['verified', 'rejected', 'refunded', 'cancelled', 'pending_verification'] as const) expect(canTransitionPayment('wallet', 'paid', next)).toBe(false)
