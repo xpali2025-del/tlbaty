@@ -13,6 +13,10 @@ import { SiteConfigProvider } from "@/components/site-config-provider"
 import { CustomerSync } from "@/components/customer-sync"
 import "./globals.css"
 
+// إعدادات المتجر تُقرأ من قاعدة البيانات، لذلك يجب ألا يحاول Next.js توليد
+// التخطيط أو صفحة 404 أثناء البناء قبل توفر مخطط قاعدة البيانات كاملاً.
+export const dynamic = "force-dynamic"
+
 const tajawal = Tajawal({
   subsets: ["arabic", "latin"],
   // الأوزان المستعملة فعلاً فقط (لا font-light/extrabold في الواجهة): كل وزن إضافي ملف خط آخر على كل صفحة.
