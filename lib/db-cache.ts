@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache"
 
 /** هل قاعدة البيانات مضبوطة؟ بدونها (بناء محلي مثلاً) تعيد القراءات قيمة افتراضية آمنة. */
 export function isDbConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL)
+  return Boolean(process.env.DATABASE_URL_2 || process.env.DATABASE_URL)
 }
 
 /**
