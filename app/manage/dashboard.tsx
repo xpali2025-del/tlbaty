@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Package,
@@ -27,24 +27,9 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Screen } from "@/lib/permissions"
+import type { ManageData } from "./page"
+import { DATA_KEYS, SCREEN_DATA, TAB_PARAM, type DataKey } from "./screen-data"
 import { Button } from "@/components/ui/button"
-import type {
-  AdminProduct,
-  AdminCategory,
-  AdminBrand,
-  AdminSlide,
-  AdminCoupon,
-  AdminReview,
-  AdminAd,
-  AdminSettings,
-  AdminShipping,
-  AdminSizeChart,
-  AdminPaymentAccount,
-} from "@/lib/admin"
-import type { OrderStats, OrdersPage } from "@/lib/admin-orders"
-import type { Courier } from "@/lib/courier"
-import type { AdminNotificationsResult } from "@/lib/admin-notifications"
-import type { AdminUser } from "@/lib/manage-users"
 import { logout } from "./auth-actions"
 import { ProductsManager } from "./components/products-manager"
 import { CategoriesManager } from "./components/categories-manager"
@@ -58,8 +43,6 @@ import { CurrenciesManager } from "./components/currencies-manager"
 import { WalletsManager } from "./components/wallets-manager"
 import { MarketingManager } from "./components/marketing-manager"
 import { SizeChartsManager } from "./components/size-charts-manager"
-import type { AdminMarketing } from "@/lib/admin-marketing"
-import type { AdminWalletOverview } from "@/lib/admin-wallet"
 import { SettingsManager } from "./components/settings-manager"
 import { OrdersManager } from "./components/orders-manager"
 import { CouriersManager } from "./components/couriers-manager"
@@ -67,54 +50,46 @@ import { UsersManager } from "./components/users-manager"
 import { PaymentAccountsManager } from "./components/payment-accounts-manager"
 import { NotificationsManager } from "./components/notifications-manager"
 
-type TabId =
-  | "orders"
-  | "couriers"
-  | "notifications"
-  | "payment-accounts"
-  | "products"
-  | "categories"
-  | "brands"
-  | "slides"
-  | "coupons"
-  | "reviews"
-  | "ads"
-  | "users"
-  | "shipping"
-  | "currencies"
-  | "wallets"
-  | "marketing"
-  | "size-charts"
-  | "settings"
+type TabId = Screen
 
 type DashboardProps = {
-  products: AdminProduct[]
-  categories: AdminCategory[]
-  brands: AdminBrand[]
-  slides: AdminSlide[]
-  coupons: AdminCoupon[]
-  reviews: AdminReview[]
-  ads: AdminAd[]
-  settings: AdminSettings
-  shipping: AdminShipping
-  wallets: AdminWalletOverview
-  marketing: AdminMarketing
-  sizeCharts: AdminSizeChart[]
-  /** الدفعة الأولى من الطلبات فقط — الباقي يُحمَّل من الخادم عند الحاجة. */
-  ordersPage: OrdersPage
-  orderStats: OrderStats
-  couriers: Courier[]
-  users: AdminUser[]
-  paymentAccounts: AdminPaymentAccount[]
-  notifications: AdminNotificationsResult
+  /** بيانات الشاشات التي حمّلها الخادم في هذا الرسم (كلها عند فتح الصفحة، أو الشاشة المفتوحة فقط بعد حفظ). */
+  data: Partial<ManageData>
+  loaded: readonly DataKey[]
+  /** رسم بعد إجراء (حفظ/حذف): ما لم يُحمَّل قد يكون تغيّر. */
+  afterAction: boolean
+  initialTab: Screen | null
   currentUser: string | null
   /** الشاشات المسموحة لهذا المستخدم (البيانات الأخرى لا تُرسل للمتصفح أصلاً). */
   permissions: Screen[]
   roleLabel: string
 }
 
-export function Dashboard(props: DashboardProps) {
+type Store = { data: ManageData; stale: ReadonlySet<DataKey> }
+
+/**
+ * يدمج ما وصل من الخادم مع ما في المتصفح. ما وصل صار حديثاً؛ وبعد إجراء يُعلَّم كل ما لم يصل قديماً
+ * (حفظ في شاشة قد يغيّر أخرى، كإلغاء طلب يعيد رصيد المحفظة) فيُحدَّث عند فتح شاشته.
+ */
+function merge(prev: Store | null, data: Partial<ManageData>, loaded: readonly DataKey[], afterAction: boolean): Store {
+  const stale = new Set(prev?.stale)
+  for (const key of DATA_KEYS) {
+    if (loaded.includes(key)) stale.delete(key)
+    else if (afterAction) stale.add(key)
+  }
+  return { data: { ...prev?.data, ...data } as ManageData, stale }
+}
+
+export function Dashboard({ data: incoming, loaded, afterAction, initialTab, currentUser, permissions, roleLabel }: DashboardProps) {
   const router = useRouter()
+  const [, startRefresh] = useTransition()
+  const [received, setReceived] = useState(incoming)
+  const [store, setStore] = useState(() => merge(null, incoming, loaded, afterAction))
+  if (incoming !== received) {
+    setReceived(incoming)
+    setStore((prev) => merge(prev, incoming, loaded, afterAction))
+  }
+  const props = store.data
   const nav: { id: TabId; label: string; icon: typeof Package; count?: number }[] = ([
     { id: "orders", label: "الطلبات", icon: ClipboardList, count: props.orderStats.total },
     { id: "couriers", label: "المناديب والتوزيع", icon: Bike, count: props.couriers.length },
@@ -144,8 +119,33 @@ export function Dashboard(props: DashboardProps) {
     { id: "marketing", label: "التذكيرات والعروض", icon: BellRing },
     { id: "wallets", label: "المحافظ والرصيد", icon: PiggyBank, count: props.wallets.totals.pendingCount || undefined },
     { id: "settings", label: "إعدادات الموقع", icon: Settings },
-  ] as { id: TabId; label: string; icon: typeof Package; count?: number }[]).filter((item) => props.permissions.includes(item.id))
-  const [tab, setTab] = useState<TabId>(nav[0]?.id ?? "orders")
+  ] as { id: TabId; label: string; icon: typeof Package; count?: number }[]).filter((item) => permissions.includes(item.id))
+  const [tab, setTab] = useState<TabId>(initialTab ?? nav[0]?.id ?? "orders")
+
+  // الرابط يحمل الشاشة المفتوحة، فيعرف الخادم بعد أي حفظ أي بيانات يعيد تحميلها (وتبقى الشاشة بعد إعادة التحميل).
+  const syncUrl = (screen: TabId) => {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get(TAB_PARAM) === screen) return
+    url.searchParams.set(TAB_PARAM, screen)
+    window.history.replaceState(null, "", url)
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مرة عند الفتح: الشاشة الافتراضية أيضاً في الرابط
+  useEffect(() => syncUrl(tab), [])
+
+  // لوحة بدأت من رسم جزئي (رجوع بالمتصفح من صفحة أخرى أعاد شاشة واحدة) لا تملك بيانات بقية الشاشات: تحميل كامل.
+  const incomplete = DATA_KEYS.some((key) => store.data[key] === undefined)
+  useEffect(() => {
+    if (incomplete) window.location.reload()
+  }, [incomplete])
+
+  const openTab = (next: TabId) => {
+    setTab(next)
+    syncUrl(next)
+    // بيانات تغيّرت منذ تحميلها (حفظ في شاشة أخرى): تُحدَّث في الخلفية وتبقى المعروضة حتى تصل.
+    if (SCREEN_DATA[next].some((key) => store.stale.has(key))) startRefresh(() => router.refresh())
+  }
+
+  if (incomplete) return <p className="p-6 text-sm text-muted-foreground">جارٍ تحميل اللوحة…</p>
 
   return (
     <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col lg:flex-row">
@@ -157,7 +157,7 @@ export function Dashboard(props: DashboardProps) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">لوحة الإدارة</p>
-            <p className="truncate text-xs text-muted-foreground">{props.currentUser ? `${props.currentUser} · ${props.roleLabel}` : "لوحة تحكم المتجر"}</p>
+            <p className="truncate text-xs text-muted-foreground">{currentUser ? `${currentUser} · ${roleLabel}` : "لوحة تحكم المتجر"}</p>
           </div>
         </div>
 
@@ -169,7 +169,7 @@ export function Dashboard(props: DashboardProps) {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setTab(item.id)}
+                onClick={() => openTab(item.id)}
                 className={cn(
                   "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors lg:w-full",
                   active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
@@ -246,7 +246,7 @@ export function Dashboard(props: DashboardProps) {
         {tab === "coupons" && <CouponsManager coupons={props.coupons} />}
         {tab === "reviews" && <ReviewsManager reviews={props.reviews} />}
         {tab === "ads" && <AdsManager ads={props.ads} categories={props.categories} />}
-        {tab === "users" && <UsersManager users={props.users} currentUser={props.currentUser} />}
+        {tab === "users" && <UsersManager users={props.users} currentUser={currentUser} />}
         {tab === "shipping" && <ShippingManager data={props.shipping} />}
         {tab === "currencies" && (
           <CurrenciesManager currencies={props.shipping.currencies} defaultCurrency={props.shipping.defaultCurrency} />

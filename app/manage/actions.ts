@@ -24,6 +24,7 @@ import {
 } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
 import { refreshProductSearch } from "@/lib/search-index"
+import { buildSearchText } from "@/lib/search-text"
 import { productsMissingPalette, refreshProductPalette } from "@/lib/product-palette"
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
 import { isCategoryCode } from "@/lib/product-code"
@@ -121,21 +122,8 @@ async function saveProductImpl(id: string | null, form: FormData) {
   const categoryId = uuidParam(categoryRaw, "القسم غير صالح")
   const productId = id ? uuidParam(id) : null
 
-  const [category] = await db.select().from(categories).where(eq(categories.id, categoryId)).limit(1)
-  if (!category) throw new Error("القسم غير موجود")
-
   const subSlug = str(form, "subcategory")
-  let subcategoryId: string | null = null
-  if (subSlug) {
-    const [sub] = await db
-      .select({ id: subcategories.id })
-      .from(subcategories)
-      .where(and(eq(subcategories.categoryId, categoryId), eq(subcategories.slug, subSlug)))
-      .limit(1)
-    subcategoryId = sub?.id ?? null
-  }
   const brandId = str(form, "brandId") ? uuidParam(str(form, "brandId"), "البراند غير صالح") : null
-
   const slug = slugify(str(form, "slug") ?? name)
   const mainKey = newImageKey(form, "imageKey")
   const addedKeys = newImageKeys(form, "newImageKeys")
@@ -170,13 +158,29 @@ async function saveProductImpl(id: string | null, form: FormData) {
   let customSizeChart: SizeChart | null = null
   if (guide.mode === "chart") {
     sizeChartId = uuidParam(guide.chartId, "جدول المقاسات غير صالح")
-    const [chart] = await db.select({ id: sizeCharts.id }).from(sizeCharts).where(eq(sizeCharts.id, sizeChartId)).limit(1)
-    if (!chart) throw new Error("جدول المقاسات المختار غير موجود")
   } else if (guide.mode === "custom") {
     customSizeChart = parseSizeChart(guide.custom)
     const problem = customSizeChart ? validateSizeChart(customSizeChart) : "بيانات جدول المقاسات غير صالحة"
     if (problem) throw new Error(problem)
   }
+  // قراءات التحقق مستقلة: تُرسل معاً (كل نداء للقاعدة ذهاب وإياب كامل، وعبر الـ pooler اثنان).
+  const [[category], [sub], [brand], [chart]] = await Promise.all([
+    db.select({ name: categories.name }).from(categories).where(eq(categories.id, categoryId)).limit(1),
+    subSlug
+      ? db
+          .select({ id: subcategories.id, name: subcategories.name })
+          .from(subcategories)
+          .where(and(eq(subcategories.categoryId, categoryId), eq(subcategories.slug, subSlug)))
+          .limit(1)
+      : Promise.resolve([]),
+    brandId ? db.select({ name: brands.name }).from(brands).where(eq(brands.id, brandId)).limit(1) : Promise.resolve([]),
+    sizeChartId ? db.select({ id: sizeCharts.id }).from(sizeCharts).where(eq(sizeCharts.id, sizeChartId)).limit(1) : Promise.resolve([]),
+  ])
+  if (!category) throw new Error("القسم غير موجود")
+  if (brandId && !brand) throw new Error("البراند غير موجود")
+  if (sizeChartId && !chart) throw new Error("جدول المقاسات المختار غير موجود")
+  const subcategoryId = sub?.id ?? null
+
   const flags = { isNew: bool(form, "isNew"), isBestseller: bool(form, "isBestseller") }
   const stockBaseRaw = num(form, "stockBase")
   const stockBase = stockBaseRaw === undefined ? undefined : Math.max(0, Math.trunc(stockBaseRaw))
@@ -207,22 +211,57 @@ async function saveProductImpl(id: string | null, form: FormData) {
 
   const removed: (string | null)[] = []
   let savedId: string | null = null
+  const nextVariants = trackVariants ? [...variants.values()] : null
+  const searchText = (code: string, tags: string[]) =>
+    buildSearchText({
+      name,
+      description: base.description,
+      code,
+      sku: base.sku,
+      category: category.name,
+      subcategory: sub?.name ?? null,
+      brand: brand?.name ?? null,
+      colors: colors.map((c) => c.name),
+      sizes: sizeList,
+      tags,
+      keywords: base.keywords,
+    })
   try {
+    // كل جملة داخل المعاملة تنتظر سابقتها على نفس الاتصال، فنقلّل عددها: لا نعيد كتابة الصور والألوان إن لم تتغيّر،
+    // ومخزون المتغيّرات بجملة واحدة، ونص البحث يُحسب هنا بدل قراءته من القاعدة.
     await db.transaction(async (tx) => {
       let rowId: string
       let existingKeys: string[] = []
+      let sameColors = false
+      // المتغيّرات تُقفل قبل المنتج، بنفس ترتيب إنشاء الطلب (متغيّرات ← منتج) فلا يتعارض الحفظ مع طلب متزامن.
+      const lockedVariants = productId ? await tx.select().from(productVariants).where(eq(productVariants.productId, productId)).for("update") : []
+      const applied = applyVariantStock(lockedVariants, nextVariants)
+      const stock = applied?.total ?? null
       if (productId) {
-        const [existing] = await tx.select().from(products).where(eq(products.id, productId)).limit(1)
+        const [existing] = await tx
+          .select({
+            tags: products.tags,
+            mainImageKey: products.mainImageKey,
+            productNumber: products.productNumber,
+            imageKeys: sql<string[]>`coalesce((select array_agg(${productImages.imageKey} order by ${productImages.sortOrder}, ${productImages.id}) from ${productImages} where ${productImages.productId} = ${productId}), '{}')`,
+            colors: sql<{ name: string; hex: string }[]>`coalesce((select json_agg(json_build_object('name', ${productColors.name}, 'hex', ${productColors.hex}) order by ${productColors.sortOrder}, ${productColors.id}) from ${productColors} where ${productColors.productId} = ${productId}), '[]')`,
+          })
+          .from(products)
+          .where(eq(products.id, productId))
+          .for("update")
         if (!existing) throw new Error("المنتج غير موجود")
-        existingKeys = (await tx.select().from(productImages).where(eq(productImages.productId, productId))).map((i) => i.imageKey)
+        existingKeys = existing.imageKeys
+        sameColors = existing.colors.length === colors.length && existing.colors.every((c, i) => c.name === colors[i].name && c.hex === colors[i].hex)
+        const tags = syncTags(existing.tags, flags)
         await tx
           .update(products)
           .set({
             ...base,
             // المخزون يُطبَّق كفرق عمّا رآه المدير عند فتح النموذج، لا كقيمة مطلقة: وإلا مسح حفظ تعديل سعر
-            // خصم الطلبات التي جرت أثناء فتح النموذج وسمح ببيع ما نفد.
-            stock: stockBase === undefined ? base.stock : sql`greatest(0, ${products.stock} + ${base.stock - stockBase})`,
-            tags: syncTags(existing.tags, flags),
+            // خصم الطلبات التي جرت أثناء فتح النموذج وسمح ببيع ما نفد. المتتبَّع لكل لون/مقاس = مجموع متغيّراته.
+            stock: stock ?? (stockBase === undefined ? base.stock : sql`greatest(0, ${products.stock} + ${base.stock - stockBase})`),
+            tags,
+            searchText: searchText(existing.productNumber, tags),
             ...(mainKey ? { mainImageKey: mainKey } : {}),
           })
           .where(eq(products.id, productId))
@@ -233,7 +272,16 @@ async function saveProductImpl(id: string | null, form: FormData) {
         const productNumber = await allocateProductCode(tx, categoryId)
         const [inserted] = await tx
           .insert(products)
-          .values({ ...base, productNumber, rating: 5, reviewsCount: 0, tags: [], mainImageKey: mainKey ?? null })
+          .values({
+            ...base,
+            stock: stock ?? base.stock,
+            productNumber,
+            rating: 5,
+            reviewsCount: 0,
+            tags: [],
+            searchText: searchText(productNumber, []),
+            mainImageKey: mainKey ?? null,
+          })
           .returning({ id: products.id })
         rowId = inserted.id
       }
@@ -242,16 +290,16 @@ async function saveProductImpl(id: string | null, form: FormData) {
       const kept = keptRefs.filter((k) => existingKeys.includes(k))
       removed.push(...existingKeys.filter((k) => !kept.includes(k)))
       const gallery = [...kept, ...addedKeys]
-      await tx.delete(productImages).where(eq(productImages.productId, rowId))
-      await tx.delete(productColors).where(eq(productColors.productId, rowId))
-      if (gallery.length) {
-        await tx.insert(productImages).values(gallery.map((imageKey, i) => ({ productId: rowId, imageKey, sortOrder: i })))
+      const sameGallery = gallery.length === existingKeys.length && gallery.every((k, i) => k === existingKeys[i])
+      if (!sameGallery) {
+        if (existingKeys.length) await tx.delete(productImages).where(eq(productImages.productId, rowId))
+        if (gallery.length) await tx.insert(productImages).values(gallery.map((imageKey, i) => ({ productId: rowId, imageKey, sortOrder: i })))
       }
-      if (colors.length) {
-        await tx.insert(productColors).values(colors.map((c, i) => ({ productId: rowId, name: c.name, hex: c.hex, sortOrder: i })))
+      if (!sameColors) {
+        if (productId) await tx.delete(productColors).where(eq(productColors.productId, rowId))
+        if (colors.length) await tx.insert(productColors).values(colors.map((c, i) => ({ productId: rowId, name: c.name, hex: c.hex, sortOrder: i })))
       }
-      await saveVariantStock(tx, rowId, trackVariants ? [...variants.values()] : null)
-      await refreshProductSearch(tx, { productIds: [rowId] })
+      await saveVariantStock(tx, rowId, lockedVariants, applied?.rows ?? null)
       savedId = rowId
     })
   } catch (e) {
@@ -269,40 +317,44 @@ async function saveProductImpl(id: string | null, form: FormData) {
   if (paletteFor) await runAfterResponse(() => refreshProductPalette(paletteFor.id, paletteFor.key).catch(() => false))
 }
 
+type VariantInput = { color: string; size: string; stock: number; base: number | undefined }
+type VariantRow = typeof productVariants.$inferSelect
+
 /**
- * يحفظ مخزون ألوان/مقاسات المنتج. كالمخزون الواحد، يُطبَّق كفرق عمّا رآه المدير عند فتح النموذج (base)
- * فلا يمسح الحفظ خصم طلبات جرت أثناء فتح النموذج. تركيبة جديدة تأخذ القيمة المدخلة. المحذوفة تُحذف.
- * `null` = إيقاف التتبع (حذف المتغيّرات والعودة للمخزون الواحد). المخزون الإجمالي يصير مجموع المتغيّرات.
+ * مخزون كل تركيبة بعد الحفظ. كالمخزون الواحد، يُطبَّق كفرق عمّا رآه المدير عند فتح النموذج (base)
+ * فلا يمسح الحفظ خصم طلبات جرت أثناء فتح النموذج؛ التركيبة الجديدة تأخذ القيمة المدخلة.
+ * يعيد المخزون النهائي لكل تركيبة ومجموعها (= products.stock للمنتج المتتبَّع)، أو null إن لم يكن التتبع مفعّلاً.
+ * الصفوف مقفلة (FOR UPDATE) فالمجموع المحسوب هنا هو ما سيُحفظ.
+ */
+function applyVariantStock(locked: VariantRow[], next: VariantInput[] | null): { total: number; rows: VariantInput[] } | null {
+  if (next === null) return null
+  const existing = new Map(locked.map((v) => [`${v.color}\u0000${v.size}`, v]))
+  const rows = next.map((v) => {
+    const row = existing.get(`${v.color}\u0000${v.size}`)
+    return { ...v, stock: row && v.base !== undefined ? Math.max(0, row.stock + (v.stock - v.base)) : v.stock }
+  })
+  return { total: rows.reduce((sum, v) => sum + v.stock, 0), rows }
+}
+
+/**
+ * يكتب مخزون ألوان/مقاسات المنتج (بعد applyVariantStock): تركيبة واحدة أو مئة بجملة واحدة، والمحذوفة بجملة.
+ * `null` = إيقاف التتبع (حذف المتغيّرات والعودة للمخزون الواحد).
  */
 async function saveVariantStock(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   productId: string,
-  next: { color: string; size: string; stock: number; base: number | undefined }[] | null,
+  locked: VariantRow[],
+  next: VariantInput[] | null,
 ) {
-  if (next === null) {
-    await tx.delete(productVariants).where(eq(productVariants.productId, productId))
-    return
+  const keep = new Set((next ?? []).map((v) => `${v.color}\u0000${v.size}`))
+  const gone = locked.filter((v) => !keep.has(`${v.color}\u0000${v.size}`)).map((v) => v.id)
+  if (gone.length) await tx.delete(productVariants).where(inArray(productVariants.id, gone))
+  if (next?.length) {
+    await tx
+      .insert(productVariants)
+      .values(next.map((v) => ({ productId, color: v.color, size: v.size, stock: v.stock })))
+      .onConflictDoUpdate({ target: [productVariants.productId, productVariants.color, productVariants.size], set: { stock: sql`excluded.stock` } })
   }
-  const existing = new Map(
-    (await tx.select().from(productVariants).where(eq(productVariants.productId, productId)).for("update")).map((v) => [`${v.color}\u0000${v.size}`, v]),
-  )
-  const keep = new Set<string>()
-  for (const v of next) {
-    const key = `${v.color}\u0000${v.size}`
-    keep.add(key)
-    const row = existing.get(key)
-    if (!row) {
-      await tx.insert(productVariants).values({ productId, color: v.color, size: v.size, stock: v.stock })
-    } else {
-      const stock = v.base === undefined ? v.stock : Math.max(0, row.stock + (v.stock - v.base))
-      await tx.update(productVariants).set({ stock }).where(eq(productVariants.id, row.id))
-    }
-  }
-  for (const [key, row] of existing) if (!keep.has(key)) await tx.delete(productVariants).where(eq(productVariants.id, row.id))
-  await tx
-    .update(products)
-    .set({ stock: sql`coalesce((select sum(${productVariants.stock}) from ${productVariants} where ${productVariants.productId} = ${productId}), 0)` })
-    .where(eq(products.id, productId))
 }
 
 /** تعبئة بصمات الألوان للمنتجات القائمة (صورها موجودة وبلا بصمة) — دفعة من 40 في كل نداء. */
