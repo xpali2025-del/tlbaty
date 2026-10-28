@@ -6,6 +6,7 @@ import { consumeSendAttempt } from "@/lib/otp/rate-limit"
 import { createAndSendOtp } from "@/lib/otp/generate"
 import { logAuthEvent } from "@/lib/otp/audit"
 import { getClientContext } from "@/lib/otp/request-context"
+import { resolveSession } from "@/lib/otp/session"
 
 export const runtime = "nodejs"
 
@@ -20,7 +21,9 @@ export async function POST(req: Request) {
 
   let body: { phone?: unknown; purpose?: unknown }
   try {
-    body = (await req.json()) as typeof body
+    const parsed: unknown = await req.json()
+    if (typeof parsed !== "object" || parsed === null) throw new Error("not an object")
+    body = parsed as typeof body
   } catch {
     return NextResponse.json({ ok: false, error: "INVALID_JSON" }, { status: 400 })
   }
@@ -34,6 +37,10 @@ export async function POST(req: Request) {
   }
 
   const purpose = body.purpose === "change_phone" ? ("change_phone" as const) : ("login" as const)
+  // رمز تغيير الرقم لصاحب جلسة فقط (كما في /api/auth/change-phone)، وإلا أمكن لأي زائر إرسال رسائل لأي رقم بهذا الغرض.
+  if (purpose === "change_phone" && !(await resolveSession().catch(() => null))) {
+    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  }
   const { ip, userAgent } = getClientContext(req)
 
   const allowed = await consumeSendAttempt(phone, ip)
