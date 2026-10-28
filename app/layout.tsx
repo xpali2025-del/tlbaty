@@ -189,7 +189,8 @@ export default async function RootLayout({
       dir="rtl"
       className={`${tajawal.variable} bg-background`}
     >
-      <head>
+      <head />
+      <body className="font-sans antialiased">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: safeJsonLd(localBusinessJsonLd) }}
@@ -198,8 +199,6 @@ export default async function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: safeJsonLd(webSiteJsonLd) }}
         />
-      </head>
-      <body className="font-sans antialiased">
         <SiteConfigProvider config={toPublicSiteConfig(siteConfig)}>
         <CurrencyProvider currencies={currencies} defaultCode={defaultCode}>
           <CartProvider>
