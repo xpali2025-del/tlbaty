@@ -36,10 +36,13 @@ export async function redeemCoupon(tx: Tx, code: string, customerId: string): Pr
 }
 
 /** يعيد استعمال كود محدود العدد عند إلغاء/إرجاع الطلب (فلا يخسر العميل كوده الأحادي بإلغاء طلبه). */
-export async function releaseCoupon(tx: Tx, code: string | null | undefined): Promise<void> {
-  if (!code) return
-  await tx
+export async function releaseCoupon(tx: Tx, code: string | null | undefined): Promise<boolean> {
+  if (!code) return false
+  const rows = await tx
     .update(coupons)
     .set({ usedCount: sql`greatest(${coupons.usedCount} - 1, 0)` })
     .where(and(sql`lower(${coupons.code}) = lower(${code})`, sql`${coupons.maxUses} is not null`))
+    .returning({ id: coupons.id })
+  // أُعيد استعمال لكود محدود: على المستدعي إبطال كاش قائمة الأكواد بعد تثبيت المعاملة.
+  return rows.length > 0
 }

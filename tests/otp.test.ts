@@ -277,6 +277,21 @@ describe('rate limiting', () => {
     expect(n.status).toBe(400)
   })
 
+  it('applies the change-phone rules on resend: not the current number, not another customer’s number', async () => {
+    const me = await createCustomer(nextPhone())
+    const other = await createCustomer(nextPhone())
+    await createSession({ customerId: me.id, ...ctx })
+    const same = await resendRoute.POST(json({ phone: me.phone, purpose: 'change_phone' }))
+    expect([same.status, (await same.json()).error]).toEqual([400, 'SAME_PHONE'])
+    const taken = await resendRoute.POST(json({ phone: other.phone, purpose: 'change_phone' }))
+    expect([taken.status, (await taken.json()).error]).toEqual([409, 'PHONE_IN_USE'])
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const fresh = await resendRoute.POST(json({ phone: nextPhone(), purpose: 'change_phone' }))
+    log.mockRestore()
+    expect(fresh.status).toBe(200)
+    jar.clear()
+  })
+
   it('locks verification after 10 failures in 15 minutes', async () => {
     const phone = nextPhone()
     expect(await consumeVerifyAttempt(phone)).toBe(true)

@@ -7,6 +7,7 @@ import { createAndSendOtp } from "@/lib/otp/generate"
 import { logAuthEvent } from "@/lib/otp/audit"
 import { getClientContext } from "@/lib/otp/request-context"
 import { resolveSession } from "@/lib/otp/session"
+import { getCustomerByPhone } from "@/lib/otp/store"
 
 export const runtime = "nodejs"
 
@@ -37,9 +38,14 @@ export async function POST(req: Request) {
   }
 
   const purpose = body.purpose === "change_phone" ? ("change_phone" as const) : ("login" as const)
-  // رمز تغيير الرقم لصاحب جلسة فقط (كما في /api/auth/change-phone)، وإلا أمكن لأي زائر إرسال رسائل لأي رقم بهذا الغرض.
-  if (purpose === "change_phone" && !(await resolveSession().catch(() => null))) {
-    return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  // رمز تغيير الرقم بنفس شروط /api/auth/change-phone: صاحب جلسة، والرقم ليس رقمه الحالي ولا مسجّلاً لعميل آخر.
+  // وإلا أمكن إرسال رسائل لأي رقم (حتى أرقام عملاء آخرين) بهذا الغرض.
+  if (purpose === "change_phone") {
+    const resolved = await resolveSession().catch(() => null)
+    if (!resolved) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+    if (phone === resolved.customer.phone) return NextResponse.json({ ok: false, error: "SAME_PHONE" }, { status: 400 })
+    const existing = await getCustomerByPhone(phone)
+    if (existing && existing.id !== resolved.customer.id) return NextResponse.json({ ok: false, error: "PHONE_IN_USE" }, { status: 409 })
   }
   const { ip, userAgent } = getClientContext(req)
 

@@ -66,6 +66,8 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
 
 /** عدد الصور التي تُضغط معاً (ترميز الصور الكبيرة ثقيل على الذاكرة في الجوال) وعدد الرفوعات المتزامنة. */
 const PREPARE_CONCURRENCY = 2
+/** أقصى عدد روابط في نداء واحد (مطابق لـ MAX_BATCH في upload-actions). */
+const BATCH_SIZE = 30
 const UPLOAD_CONCURRENCY = 4
 
 /** أقصى بعد (بكسل) لكل مجلد: كافٍ للعرض على الشاشات الكبيرة (2x) ولا يرفع صور هاتف 12 ميغابكسل كما هي. */
@@ -161,9 +163,13 @@ export async function uploadFormImages(
   })
 
   const items = prepared.map((file, i) => ({ folder: jobs[i].field.folder, contentType: file.type, size: file.size }))
-  const slots = deps.requestBatch
-    ? await deps.requestBatch(items)
-    : await Promise.all(items.map((it) => deps.request(it.folder, it.contentType, it.size)))
+  const slots: { uploadUrl: string; objectKey: string }[] = []
+  if (deps.requestBatch) {
+    // دفعات من 30 (حد الخادم) بدل رفض المعرض الكبير كله.
+    for (let i = 0; i < items.length; i += BATCH_SIZE) slots.push(...(await deps.requestBatch(items.slice(i, i + BATCH_SIZE))))
+  } else {
+    slots.push(...(await Promise.all(items.map((it) => deps.request(it.folder, it.contentType, it.size)))))
+  }
   if (slots.length !== prepared.length) throw new Error("تعذّر تجهيز روابط الرفع، أعد المحاولة")
 
   await mapLimit(prepared, UPLOAD_CONCURRENCY, (file, i) => deps.put(slots[i].uploadUrl, file))

@@ -262,12 +262,11 @@ async function saveProductImpl(id: string | null, form: FormData) {
   }
 
   revalidateStore()
-  // أعمال غير حرجة بعد الرد: حذف الصور القديمة، وبصمة الألوان للبحث بالصورة (قراءة من R2 + معالجة) عند صورة رئيسية جديدة.
+  // أعمال غير حرجة بعد الرد: حذف الصور القديمة (removeObjects يؤجّل نفسه)، وبصمة الألوان للبحث بالصورة
+  // (قراءة من R2 + معالجة) عند صورة رئيسية جديدة.
+  await removeObjects(removed)
   const paletteFor = mainKey && savedId ? { id: savedId, key: mainKey } : null
-  await runAfterResponse(async () => {
-    await removeObjects(removed)
-    if (paletteFor) await refreshProductPalette(paletteFor.id, paletteFor.key).catch(() => false)
-  })
+  if (paletteFor) await runAfterResponse(() => refreshProductPalette(paletteFor.id, paletteFor.key).catch(() => false))
 }
 
 /**
@@ -324,7 +323,7 @@ async function deleteProductImpl(id: string) {
   const gallery = await db.select().from(productImages).where(eq(productImages.productId, productId))
   await db.delete(products).where(eq(products.id, productId))
   revalidateStore()
-  await runAfterResponse(() => removeObjects([existing.mainImageKey, ...gallery.map((g) => g.imageKey)]))
+  await removeObjects([existing.mainImageKey, ...gallery.map((g) => g.imageKey)])
 }
 
 async function toggleProductFlagImpl(id: string, field: "isNew" | "isBestseller", value: boolean) {

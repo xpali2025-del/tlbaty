@@ -157,6 +157,15 @@ describe('top-up requests', () => {
     expect((await db.select().from(s.orders).where(eq(s.orders.id, o.id)))[0].duplicateTransferReference).toBe(true)
   })
 
+  it('does not count a cancelled top-up as a duplicate of a later order', async () => {
+    const c = await newCustomer()
+    const transfer = (reference: string) => ({ method: 'manual_transfer' as const, account, senderName: 'علي', senderPhone: '967771111111', reference, proof: null })
+    const t = await topupReq(c, { reference: '44455566' })
+    await cancelTopup(c, t.id)
+    const o = await insertOrder({ customer: { id: c }, contact, pricing: await price(), payment: transfer('44455566') })
+    expect((await db.select().from(s.orders).where(eq(s.orders.id, o.id)))[0].duplicateTransferReference).toBe(false)
+  })
+
   it('limits pending requests, daily requests and repeated rejections', async () => {
     const c = await newCustomer()
     await topupReq(c)
@@ -316,6 +325,9 @@ describe('admin actions and monitoring', () => {
     expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', '22222222-2222-4222-8222-222222222222')).ok).toBe(true)
     expect(await balance(c)).toBe(2000)
     expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', 'not-a-uuid')).ok).toBe(false)
+    // نفس المعرّف لعملية مختلفة (خصم) تُطبَّق ولا تُعامل كمكررة
+    expect((await W.adjustWallet(c, 'debit', 1000, 'تعويض عن تأخير', id1)).ok).toBe(true)
+    expect(await balance(c)).toBe(1000)
   })
 
   it('check the wallets permission, require a reason, cap adjustments and write the ledger under the admin name', async () => {

@@ -64,6 +64,8 @@ describe('variant stock helpers', () => {
     const colorless = [{ color: '', size: 'M', stock: 2 }]
     expect(normalizeVariantKey(colorless, 'default', 'M')).toEqual({ color: '', size: 'M' })
     expect(availableFor({ stock: 2, variantStock: colorless }, 'default', 'M')).toBe(2)
+    // منتج قديم مقاسه محفوظ بمسافة طرفية يطابق صف المخزون المنقّح
+    expect(availableFor({ stock: 2, variantStock: colorless }, 'default', ' M ')).toBe(2)
   })
   it('low-stock wording', () => {
     expect(lowStockMessage(0)).toBe('نفد المخزون')
@@ -73,6 +75,11 @@ describe('variant stock helpers', () => {
 })
 
 describe('orders against variant stock', () => {
+  it('matches a legacy size stored with surrounding spaces', async () => {
+    await insertOrder({ customer: { id: customerId }, contact, pricing: pricingFor([{ color: 'أسود ', size: ' M', quantity: 1 }]), payment: cod })
+    expect(await variants()).toEqual(['أبيض|M|5', 'أسود|L|0', 'أسود|M|2'])
+  })
+
   it('deducts only the ordered colour/size and mirrors the total on the product', async () => {
     await insertOrder({ customer: { id: customerId }, contact, pricing: pricingFor([{ color: 'أسود', size: 'M', quantity: 2 }]), payment: cod })
     expect(await variants()).toEqual(['أبيض|M|5', 'أسود|L|0', 'أسود|M|1'])

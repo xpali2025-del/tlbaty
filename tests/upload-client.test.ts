@@ -106,6 +106,14 @@ describe('uploadFormImages performance behaviour', () => {
     expect(keys).toEqual([0, 1, 2, 3, 4, 5].map((i) => `products/k${i}.png`))
   })
 
+  it('splits more than 30 files into batches of 30 instead of failing', async () => {
+    const form = many(31)
+    const requestBatch = vi.fn(async (items: { folder: string }[]) => items.map((_, i) => ({ uploadUrl: `https://r2/${i}`, objectKey: `products/b${i}.png` })))
+    const keys = await uploadFormImages(form, field, { request: vi.fn(), requestBatch, put: async () => {} })
+    expect(requestBatch.mock.calls.map((c) => c[0].length)).toEqual([30, 1])
+    expect(keys).toHaveLength(31)
+  })
+
   it('uploads in parallel but never more than 4 at once', async () => {
     const form = many(10)
     let inFlight = 0

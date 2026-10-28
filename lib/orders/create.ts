@@ -127,7 +127,11 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
         // نفس الحوالة قد تُكتب بأرقام عربية مرة ولاتينية مرة، أو تُستعمل لشحن رصيد: نقارن بعد التطبيع وفي الجدولين.
         const reference = normalizeReference(payment.reference)
         const [{ n }] = await tx.select({ n: count() }).from(orders).where(sql`${normalizedReferenceSql(orders.transferReference)} = ${reference}`)
-        const [{ t }] = await tx.select({ t: count() }).from(walletTopups).where(eq(walletTopups.reference, reference))
+        // الشحن المرفوض أو الملغى لم يستعمل الحوالة، فلا يُحتسب تكراراً.
+        const [{ t }] = await tx
+          .select({ t: count() })
+          .from(walletTopups)
+          .where(and(eq(walletTopups.reference, reference), inArray(walletTopups.status, ["pending", "approved"])))
         duplicateTransferReference = n > 0 || t > 0
       }
 
@@ -280,8 +284,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
   }
 }
 
-/** صفحات المنتجات تعرض المخزون؛ نبطل كاش المنتجات المباعة فقط (لا كاش المتجر كله). */
-/** قائمة الأكواد العامة مخزّنة في الكاش؛ تُبطل عند استهلاك آخر استعمال لكود. */
+/** قائمة الأكواد العامة مخزّنة في الكاش؛ تُبطل عند استهلاك آخر استعمال لكود أو إعادة استعمال له. */
 export function invalidateCoupons() {
   try {
     revalidateTag(CACHE_TAGS.coupons, { expire: 0 })
@@ -290,6 +293,7 @@ export function invalidateCoupons() {
   }
 }
 
+/** صفحات المنتجات تعرض المخزون؛ نبطل كاش المنتجات المباعة فقط (لا كاش المتجر كله). */
 export function invalidateStock(slugs: string[]) {
   try {
     revalidateTag(CACHE_TAGS.products, { expire: 0 })

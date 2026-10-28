@@ -108,10 +108,14 @@ export function syncTags(tags: string[], flags: { isNew?: boolean; isBestseller?
   return next
 }
 
-/** حذف صور من R2 بأفضل جهد: فشل الحذف لا يُفشل العملية (يبقى كائن يتيم فقط). */
+/**
+ * حذف صور من R2 بأفضل جهد: فشل الحذف لا يُفشل العملية (يبقى كائن يتيم فقط).
+ * يُنفَّذ بعد إرسال الرد (runAfterResponse) فلا ينتظره المدير بعد «حفظ» أو «حذف» في أي شاشة.
+ */
 export async function removeObjects(keys: (string | null | undefined)[]): Promise<void> {
   const unique = [...new Set(keys.filter((k): k is string => Boolean(k)))]
-  await Promise.allSettled(unique.map((k) => deleteImageObject(k)))
+  if (unique.length === 0) return
+  await runAfterResponse(() => Promise.allSettled(unique.map((k) => deleteImageObject(k))))
 }
 
 /**

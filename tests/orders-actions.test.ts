@@ -86,6 +86,26 @@ describe('stock restore', () => {
   })
 })
 
+describe('limited coupons come back on cancel or delete', () => {
+  it('releases the use and invalidates the coupon list cache so the code shows as valid again', async () => {
+    const { revalidateTag } = await import('next/cache')
+    const { CACHE_TAGS } = await import('@/lib/cache-tags')
+    await db.insert(s.coupons).values({ code: 'LIMIT1', discount: 5, type: 'percent', description: 'مرة', maxUses: 1, usedCount: 1 })
+    const o = await order({ couponCode: 'LIMIT1' })
+    vi.mocked(revalidateTag).mockClear()
+    expect((await A.updateOrderStatus(o.id, 'cancelled')).ok).toBe(true)
+    expect((await db.select().from(s.coupons).where(eq(s.coupons.code, 'LIMIT1')))[0].usedCount).toBe(0)
+    expect(vi.mocked(revalidateTag).mock.calls.map((c) => c[0])).toContain(CACHE_TAGS.coupons)
+
+    await db.update(s.coupons).set({ usedCount: 1 }).where(eq(s.coupons.code, 'LIMIT1'))
+    const o2 = await order({ couponCode: 'LIMIT1' })
+    vi.mocked(revalidateTag).mockClear()
+    await A.deleteOrder(o2.id)
+    expect((await db.select().from(s.coupons).where(eq(s.coupons.code, 'LIMIT1')))[0].usedCount).toBe(0)
+    expect(vi.mocked(revalidateTag).mock.calls.map((c) => c[0])).toContain(CACHE_TAGS.coupons)
+  })
+})
+
 describe('deleteOrder stock', () => {
   it('returns the units of an open order to stock when it is deleted, but not those of a delivered one', async () => {
     const [cat] = await db.insert(s.categories).values({ name: 'ق2', slug: 'c-del' }).returning()

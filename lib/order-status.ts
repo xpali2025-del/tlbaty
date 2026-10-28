@@ -132,7 +132,6 @@ export function describeOrderStatus(value: unknown): string {
   return ORDER_STATUS_LABELS[normalizeOrderStatus(value)]
 }
 
-/** طلب «مفتوح»: ما زال يحتاج عملاً من المندوب (لم يُسلَّم ولم يُلغَ ولم يُرجَع ولم يفشل تسليمه). */
 /** المرحلة التي يراها العميل لحالة الطلب: «تم إسناد المندوب» تُعرض ضمن «جاهز للتوصيل» (تفصيل داخلي للتوزيع). */
 export function customerStageOf(status: OrderStatus): OrderStatus {
   return status === "assigned" ? "ready" : status
@@ -146,6 +145,7 @@ export function holdsStockAndPayment(status: OrderStatus): boolean {
   return !["delivered", "cancelled", "returned"].includes(status)
 }
 
+/** طلب «مفتوح»: ما زال يحتاج عملاً من المندوب (لم يُسلَّم ولم يُلغَ ولم يُرجَع ولم يفشل تسليمه). */
 export function isOpenOrderStatus(status: OrderStatus): boolean {
   return !["delivered", "cancelled", "returned", "failed"].includes(status)
 }

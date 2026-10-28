@@ -14,7 +14,7 @@ import {
   ORDER_STATUS_LABELS,
   type OrderStatus,
 } from "@/lib/order-status"
-import { invalidateStock } from "@/lib/orders/create"
+import { invalidateCoupons, invalidateStock } from "@/lib/orders/create"
 import { holdsStockAndPayment } from "@/lib/order-status"
 import { planDistribution, type DistributionPlan } from "@/lib/distribution"
 import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZE } from "@/lib/admin-orders"
@@ -97,6 +97,8 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
     const admin = (await getManageSessionUser()) ?? "مدير"
 
     const restoredSlugs: string[] = []
+    let couponReleased = false
+
     await db.transaction(async (tx) => {
       const [current] = await tx
         .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod, paymentStatus: orders.paymentStatus, couponCode: orders.couponCode })
@@ -116,8 +118,9 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
         .where(eq(orders.id, orderId))
       // إلغاء الطلب أو إرجاعه يعيد المخزون (الحالتان نهائيتان فلا يتكرر الإرجاع).
       if (next === "cancelled" || next === "returned") {
+        // ترتيب الأقفال مطابق لإنشاء الطلب: الكوبون ← المخزون ← المحفظة (وإلا تعارض الإلغاء مع طلب جديد يستعمل نفس الكوبون).
+        couponReleased = await releaseCoupon(tx, current.couponCode)
         restoredSlugs.push(...(await restoreStock(tx, orderId)))
-        await releaseCoupon(tx, current.couponCode)
         // ما دُفع من الرصيد يعود للمحفظة تلقائياً (مرة واحدة) ويُسجَّل في سجل الدفع.
         if (current.paymentMethod === "wallet") {
           const refunded = await refundOrder(tx, {
@@ -150,6 +153,7 @@ export async function updateOrderStatus(id: string, next: OrderStatus, note?: st
 
     revalidateOrders()
     if (restoredSlugs.length) invalidateStock(restoredSlugs) // صفحات المنتج تعرض «نفد المخزون» من الكاش
+    if (couponReleased) invalidateCoupons() // كود محدود عاد له استعمال: يظهر صالحاً من جديد
     return `تم تحديث الحالة إلى "${ORDER_STATUS_LABELS[next]}"`
   })
 }
@@ -354,6 +358,7 @@ async function deleteOrderImpl(id: string) {
   const orderId = idSchema.parse(id)
   const [proof] = await db.select().from(orderPaymentProofs).where(eq(orderPaymentProofs.orderId, orderId)).limit(1)
   let slugs: string[] = []
+  let couponReleased = false
   const deleted = await db.transaction(async (tx) => {
     const [current] = await tx
       .select({ status: orders.status, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod, couponCode: orders.couponCode })
@@ -364,18 +369,20 @@ async function deleteOrderImpl(id: string) {
     // ما زال يحجز مبلغه ومخزونه (مفتوح أو «تعذر التسليم»): يُعاد المبلغ لصاحبه والوحدات للمخزون قبل الحذف،
     // وإلا ضاع رصيد العميل نهائياً بحذف الطلب. المسلَّم والملغي/المُرجَع لا يُعاد لهما شيء هنا (الإلغاء أعادهما أصلاً).
     const holds = holdsStockAndPayment(normalizeOrderStatus(current.status))
+    // ترتيب الأقفال مطابق لإنشاء الطلب: الكوبون ← المخزون ← المحفظة.
+    if (holds) {
+      couponReleased = await releaseCoupon(tx, current.couponCode)
+      slugs = await restoreStock(tx, orderId)
+    }
     if (current.paymentMethod === "wallet" && holds) {
       await refundOrder(tx, { orderId, orderNumber: current.orderNumber, actor: (await getManageSessionUser()) ?? "مدير", reason: "حذف الطلب" })
-    }
-    if (holds) {
-      slugs = await restoreStock(tx, orderId)
-      await releaseCoupon(tx, current.couponCode)
     }
     await tx.delete(orders).where(eq(orders.id, orderId))
     return true
   })
   if (deleted && proof) await deletePaymentProof(proof.objectKey).catch(() => {})
   if (slugs.length) invalidateStock(slugs)
+  if (couponReleased) invalidateCoupons()
   revalidateOrders()
 }
 

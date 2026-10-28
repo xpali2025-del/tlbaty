@@ -58,7 +58,8 @@ export async function adjustWallet(customerId: string, direction: "credit" | "de
     const id = uuid.parse(customerId)
     const amount = z.number().positive("المبلغ يجب أن يكون موجباً").max(MAX_ADMIN_ADJUST_BASE, `أقصى تعديل في العملية الواحدة ${MAX_ADMIN_ADJUST_BASE.toLocaleString("en-US")}`).parse(amountBase)
     const why = z.string().trim().min(5, "اكتب سبب التعديل (5 أحرف على الأقل)").max(500).parse(reason)
-    const idempotencyKey = requestId === undefined ? undefined : `admin:${uuid.parse(requestId)}`
+    // المفتاح يشمل الاتجاه والمبلغ: معرّف أُعيد استعماله خطأً لعملية مختلفة (خصم بعد إضافة) لا يُبتلع كأنه مكرر.
+    const idempotencyKey = requestId === undefined ? undefined : `admin:${uuid.parse(requestId)}:${direction}:${amount}`
     const by = await admin()
     const done = direction === "credit" ? "تمت إضافة الرصيد" : "تم خصم الرصيد"
     if (idempotencyKey && (await alreadyApplied(id, idempotencyKey))) return { message: done }
