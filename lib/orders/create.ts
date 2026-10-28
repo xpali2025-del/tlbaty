@@ -200,7 +200,9 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
       })
       const tracked = await deductVariantStock(tx, variantLines)
       soldSlugs.push(...(await syncProductStock(tx, [...tracked])))
-      for (const [number, { qty, name }] of [...wanted].sort(([a], [b]) => a.localeCompare(b))) {
+      // بترتيب معرّف المنتج (كما في إعادة المخزون عند الإلغاء) كي لا تتعاكس الأقفال بين العمليتين.
+      const byUuid = (n: string) => uuidByNumber.get(n) ?? n
+      for (const [number, { qty, name }] of [...wanted].sort(([a], [b]) => byUuid(a).localeCompare(byUuid(b)))) {
         if (tracked.has(uuidByNumber.get(number) ?? "")) continue
         const updated = await tx
           .update(products)

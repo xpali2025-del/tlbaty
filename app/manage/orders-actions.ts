@@ -68,8 +68,16 @@ async function restoreStock(tx: Tx, orderId: string): Promise<string[]> {
     .where(eq(orderItems.orderId, orderId))
   const restore = new Map<string, number>()
   for (const l of lines) if (l.productId) restore.set(l.productId, (restore.get(l.productId) ?? 0) + l.quantity)
-  const slugs: string[] = []
+  // نفس ترتيب أقفال إنشاء الطلب (insertOrder): المتغيّرات ← المنتجات المتتبَّعة ← بقية المنتجات بترتيب المعرّف.
+  // الترتيب المعاكس كان يجعل إلغاء طلب وطلباً جديداً لنفس المنتج ينتظر كل منهما الآخر فيُلغي PostgreSQL أحدهما (deadlock).
+  // منتجات مخزونها لكل لون/مقاس: تعود الكمية لصف اللون/المقاس نفسه، ثم يُضبط الإجمالي على مجموع المتغيّرات.
+  const tracked = await restoreVariantStock(
+    tx,
+    lines.flatMap((l) => (l.productId ? [{ productUuid: l.productId, name: l.name, color: l.color ?? "", size: l.size ?? "", quantity: l.quantity }] : [])),
+  )
+  const slugs = await syncProductStock(tx, [...tracked])
   for (const [productId, qty] of [...restore].sort(([a], [b]) => a.localeCompare(b))) {
+    if (tracked.has(productId)) continue
     const [row] = await tx
       .update(products)
       .set({ stock: sql`${products.stock} + ${qty}` })
@@ -77,12 +85,6 @@ async function restoreStock(tx: Tx, orderId: string): Promise<string[]> {
       .returning({ slug: products.slug })
     if (row) slugs.push(row.slug)
   }
-  // منتجات مخزونها لكل لون/مقاس: تعود الكمية لصف اللون/المقاس نفسه، ثم يُضبط الإجمالي على مجموع المتغيّرات.
-  const tracked = await restoreVariantStock(
-    tx,
-    lines.flatMap((l) => (l.productId ? [{ productUuid: l.productId, name: l.name, color: l.color ?? "", size: l.size ?? "", quantity: l.quantity }] : [])),
-  )
-  slugs.push(...(await syncProductStock(tx, [...tracked])))
   return slugs
 }
 
