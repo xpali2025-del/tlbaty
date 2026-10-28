@@ -35,11 +35,11 @@ beforeAll(async () => {
   await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
 })
 beforeEach(() => {
-  process.env.SMS_GATE_USERNAME = 'user'
-  process.env.SMS_GATE_PASSWORD = 'pass'
-  delete process.env.SMS_GATE_URL
-  process.env.WHATSAPP_WORKER_URL = WA_URL
-  process.env.WHATSAPP_WORKER_TOKEN = 'tok'
+  vi.stubEnv('SMS_GATE_USERNAME', 'user')
+  vi.stubEnv('SMS_GATE_PASSWORD', 'pass')
+  vi.stubEnv('SMS_GATE_URL', '')
+  vi.stubEnv('WHATSAPP_WORKER_URL', WA_URL)
+  vi.stubEnv('WHATSAPP_WORKER_TOKEN', 'tok')
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -52,6 +52,7 @@ describe('SMS Gateway provider', () => {
     expect(await smsProvider.send(input)).toEqual({ ok: true, provider: 'sms' })
     expect(calls).toHaveLength(1)
     expect(calls[0].url).toBe(SMS_URL)
+    expect(calls[0].init.redirect).toBe('error')
     const headers = calls[0].init.headers as Record<string, string>
     expect(headers.Authorization).toBe(`Basic ${Buffer.from('user:pass').toString('base64')}`)
     const body = JSON.parse(calls[0].init.body as string)
@@ -61,7 +62,7 @@ describe('SMS Gateway provider', () => {
   })
 
   it('honours a custom gateway URL (local or self-hosted)', async () => {
-    process.env.SMS_GATE_URL = 'https://sms.example.com/messages'
+    vi.stubEnv('SMS_GATE_URL', 'https://sms.example.com/messages')
     const calls = stubFetch(() => ({ ok: true }))
     await smsProvider.send(input)
     expect(calls[0].url).toBe('https://sms.example.com/messages')
@@ -75,7 +76,7 @@ describe('SMS Gateway provider', () => {
   })
 
   it('refuses to send in production when credentials are missing', async () => {
-    delete process.env.SMS_GATE_USERNAME
+    vi.stubEnv('SMS_GATE_USERNAME', '')
     vi.stubEnv('NODE_ENV', 'production')
     expect(isSmsConfigured()).toBe(false)
     expect(await smsProvider.send(input)).toEqual({ ok: false, provider: 'sms', errorCode: 'SMS_NOT_CONFIGURED' })
@@ -110,8 +111,12 @@ describe('OTP channel switching', () => {
     expect(await sendOtp(input)).toEqual({ ok: true, provider: 'whatsapp' })
     expect(calls.map((c) => c.url)).toEqual([`${WA_URL}/send`])
 
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     calls = stubFetch((url) => (url.startsWith(WA_URL) ? { ok: false, status: 502 } : { ok: true }))
     expect(await sendOtp(input)).toEqual({ ok: true, provider: 'sms' })
+    expect(log.mock.calls.map((c) => String(c[0])).join()).toContain('HTTP_502')
+    expect(log.mock.calls.flat().join(' ')).not.toContain('123456')
+    log.mockRestore()
     expect(calls.map((c) => c.url)).toEqual([`${WA_URL}/send`, SMS_URL])
   })
 })

@@ -2,7 +2,8 @@ import "server-only"
 import { asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
-import { isOtpChannel } from "@/lib/otp/channel"
+import { isOtpChannel, type OtpChannel } from "@/lib/otp/channel"
+import { isSmsConfigured } from "@/lib/otp/providers/sms"
 import {
   adCategories,
   ads,
@@ -180,7 +181,7 @@ export type AdminSettings = {
   /** أكواد الدول المفعّلة لتسجيل دخول العملاء (اليمن افتراضياً). */
   loginCountries: string[]
   /** قناة إرسال رمز التحقق المحفوظة. */
-  otpChannel: "whatsapp" | "sms" | "whatsapp_sms"
+  otpChannel: OtpChannel
   /** هل مفاتيح SMS Gateway مضبوطة في البيئة؟ */
   smsConfigured: boolean
   /** عدد صور الإثبات المخزَّنة حالياً. */
@@ -412,7 +413,7 @@ export const getAdminSettings = () =>
       loginBotNumber: x.loginBotNumber ?? null,
       loginCountries: x.loginCountries?.length ? x.loginCountries : ["967"],
       otpChannel: isOtpChannel(x.otpChannel) ? x.otpChannel : "whatsapp",
-      smsConfigured: Boolean(process.env.SMS_GATE_USERNAME && process.env.SMS_GATE_PASSWORD),
+      smsConfigured: isSmsConfigured(),
       storedProofs: (await db.select({ n: count() }).from(orderPaymentProofs))[0].n,
     }
   })

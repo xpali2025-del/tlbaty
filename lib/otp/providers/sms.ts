@@ -22,7 +22,7 @@ export function buildSmsText(code: string, purpose: SendOtpInput["purpose"]): st
 }
 
 async function send(input: SendOtpInput): Promise<SendOtpResult> {
-  const { phone, code, purpose } = input
+  const { phone, code, purpose, timeoutMs } = input
   const username = process.env.SMS_GATE_USERNAME
   const password = process.env.SMS_GATE_PASSWORD
 
@@ -36,7 +36,7 @@ async function send(input: SendOtpInput): Promise<SendOtpResult> {
   }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs ?? TIMEOUT_MS)
   try {
     const res = await fetch((process.env.SMS_GATE_URL || DEFAULT_URL).trim(), {
       method: "POST",
@@ -47,6 +47,8 @@ async function send(input: SendOtpInput): Promise<SendOtpResult> {
       body: JSON.stringify({ textMessage: { text: buildSmsText(code, purpose) }, phoneNumbers: [`+${phone}`] }),
       signal: controller.signal,
       cache: "no-store",
+      // لا نتبع إعادة التوجيه: كي لا تُرسَل بيانات Basic إلى مضيف آخر.
+      redirect: "error",
     })
     if (!res.ok) return { ok: false, provider: "sms", errorCode: `HTTP_${res.status}` }
     return { ok: true, provider: "sms" }
