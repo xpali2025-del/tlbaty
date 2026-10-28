@@ -39,7 +39,7 @@ export function buildMessage(
 }
 
 async function send(input: SendOtpInput): Promise<SendOtpResult> {
-  const { phone, code, purpose } = input
+  const { phone, code, purpose, timeoutMs } = input
   const url = process.env.WHATSAPP_WORKER_URL
   const token = process.env.WHATSAPP_WORKER_TOKEN
 
@@ -53,7 +53,7 @@ async function send(input: SendOtpInput): Promise<SendOtpResult> {
   }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs ?? TIMEOUT_MS)
   try {
     const res = await fetch(`${url.replace(/\/$/, "")}/send`, {
       method: "POST",

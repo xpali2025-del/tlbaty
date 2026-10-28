@@ -27,6 +27,8 @@ import { productsMissingPalette, refreshProductPalette } from "@/lib/product-pal
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
 import { isCategoryCode } from "@/lib/product-code"
 import { normalizePlacements, parseDateOnly } from "@/lib/ads"
+import { isOtpChannel } from "@/lib/otp/channel"
+import { isSmsConfigured } from "@/lib/otp/providers/sms"
 import { isValidVideoKey } from "@/lib/storage/keys"
 import { isRole, normalizePermissions, ROLE_PRESETS, type Role } from "@/lib/permissions"
 import { SUPPORTED_COUNTRIES } from "@/lib/phone"
@@ -740,6 +742,13 @@ export async function saveSettings(_id: string | null, form: FormData) {
     loginCountries = SUPPORTED_COUNTRIES.filter((c) => wantedCountries.includes(c.code)).map((c) => c.code as string)
     if (loginCountries.length === 0) throw new Error("اختر دولة واحدة على الأقل لتسجيل دخول العملاء")
   }
+  // قناة إرسال رمز التحقق: تُحدَّث فقط إذا أُرسلت (النماذج القديمة لا تحملها).
+  const otpChannelRaw = str(form, "otpChannel")
+  if (otpChannelRaw && !isOtpChannel(otpChannelRaw)) throw new Error("قناة إرسال رمز التحقق غير صالحة")
+  // «SMS فقط» بلا مفاتيح مضبوطة يعطّل دخول كل العملاء في الإنتاج، فنرفضه.
+  if (otpChannelRaw === "sms" && process.env.NODE_ENV === "production" && !isSmsConfigured()) {
+    throw new Error("اضبط SMS_GATE_USERNAME و SMS_GATE_PASSWORD في إعدادات الاستضافة أولاً، ثم اختر SMS")
+  }
   // حذف صور الإثبات تلقائياً: غير مفعّل افتراضياً؛ عند التفعيل المدة بين 7 و365 يوماً.
   let proofRetentionDays: number | null = null
   if (bool(form, "proofRetentionEnabled")) {
@@ -774,6 +783,7 @@ export async function saveSettings(_id: string | null, form: FormData) {
     proofRetentionDays,
     loginBotNumber,
     ...(loginCountries ? { loginCountries } : {}),
+    ...(otpChannelRaw ? { otpChannel: otpChannelRaw } : {}),
     updatedAt: new Date(),
   }
 
