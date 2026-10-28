@@ -69,3 +69,19 @@ export function createInboundHandler({
     // Unknown/used token, rate limit, errors: no reply (avoids loops and probing).
   }
 }
+
+/**
+ * ينشئ دالة claim التي تستدعي الموقع: المصادقة بتوكن العامل (WHATSAPP_WORKER_TOKEN)،
+ * ورمز الدخول الذي أرسله العميل في جسم الطلب فقط. الاسمان منفصلان عمداً كي لا يحجب أحدهما الآخر.
+ */
+export function createAppClaim({ url, workerToken, fetchImpl = fetch, timeoutMs = 10_000 }) {
+  return async ({ phone, token: loginToken }) => {
+    const res = await fetchImpl(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${workerToken}` },
+      body: JSON.stringify({ phone, token: loginToken }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    return res.json().catch(() => ({ ok: false }))
+  }
+}

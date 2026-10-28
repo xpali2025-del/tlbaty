@@ -4,7 +4,7 @@ import http from 'node:http'
 import qrcode from 'qrcode-terminal'
 import pkg from 'whatsapp-web.js'
 import { createHandler } from './handler.mjs'
-import { createInboundHandler } from './inbound.mjs'
+import { createAppClaim, createInboundHandler } from './inbound.mjs'
 
 const { Client, LocalAuth } = pkg
 
@@ -76,15 +76,8 @@ if (claimUrl) {
   const onMessage = createInboundHandler({
     allowedCountryCodes,
     getContactNumber: async (message) => (await message.getContact()).number,
-    claim: async ({ phone, token }) => {
-      const res = await fetch(claimUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phone, token }),
-        signal: AbortSignal.timeout(10_000),
-      })
-      return res.json().catch(() => ({ ok: false }))
-    },
+    // توكن العامل للمصادقة، ورمز الدخول في الجسم (كان معامل الدالة يحجب توكن العامل فيُرفض كل طلب بـ401).
+    claim: createAppClaim({ url: claimUrl, workerToken: token }),
     reply: async (message, text) => {
       try {
         const chat = await message.getChat()

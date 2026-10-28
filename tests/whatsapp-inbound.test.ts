@@ -103,3 +103,25 @@ describe('inbound click-to-chat handler', () => {
     expect(reply).not.toHaveBeenCalled()
   })
 })
+
+describe('createAppClaim (worker → app request)', () => {
+  it('authenticates with the worker token and sends the login token only in the body', async () => {
+    const { createAppClaim } = await import('../worker/whatsapp/inbound.mjs')
+    const calls: { url: string; init: RequestInit }[] = []
+    const fetchImpl = async (url: string, init: RequestInit) => {
+      calls.push({ url, init })
+      return { json: async () => ({ ok: true, text: 'رمزك 123456' }) }
+    }
+    const claim = createAppClaim({ url: 'https://shop.example/api/auth/chat-login/claim', workerToken: 'worker-secret-token', fetchImpl })
+    expect(await claim({ phone: '967771234567', token: 'K7M2QX' })).toEqual({ ok: true, text: 'رمزك 123456' })
+    const headers = calls[0].init.headers as Record<string, string>
+    expect(headers.Authorization).toBe('Bearer worker-secret-token')
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ phone: '967771234567', token: 'K7M2QX' })
+  })
+
+  it('returns ok:false when the app answers with a non-JSON body', async () => {
+    const { createAppClaim } = await import('../worker/whatsapp/inbound.mjs')
+    const claim = createAppClaim({ url: 'https://x', workerToken: 't', fetchImpl: async () => ({ json: async () => { throw new Error('bad json') } }) })
+    expect(await claim({ phone: '967771234567', token: 'K7M2QX' })).toEqual({ ok: false })
+  })
+})
