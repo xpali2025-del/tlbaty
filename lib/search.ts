@@ -1,5 +1,6 @@
 import "server-only"
 
+import { isDbConfigured } from "@/lib/db-cache"
 import { and, arrayOverlaps, asc, count, desc, eq, exists, gt, gte, inArray, lte, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { brands, categories, productColors, products, subcategories } from "@/lib/db/store"
@@ -156,7 +157,7 @@ function orderBy(sort: SearchParams["sort"]) {
 export async function searchProducts(params: SearchParams): Promise<SearchResult> {
   const limit = Math.min(Math.max(params.limit ?? SEARCH_PAGE_SIZE, 1), 120)
   const empty: SearchResult = { items: [], total: 0, limit }
-  if (!process.env.DATABASE_URL) return empty
+  if (!isDbConfigured()) return empty
 
   const filters = await filterConditions(params)
   const tokens = params.q ? searchTokens(params.q) : []
@@ -230,7 +231,7 @@ export type ImageSearchResult = { items: (Product & { similarity: number })[]; t
  * بصمة المنتج: المحفوظة من صورته، وإلا ألوانه المُدخلة في اللوحة بأوزان متساوية.
  */
 export async function searchByPalette(palette: PaletteColor[], params: SearchParams = {}, limit = 24): Promise<ImageSearchResult> {
-  if (!process.env.DATABASE_URL || palette.length === 0) return { items: [], total: 0 }
+  if (!isDbConfigured() || palette.length === 0) return { items: [], total: 0 }
   const filters = await filterConditions({ ...params, q: undefined })
   const rows = await db
     .select({ number: products.productNumber, palette: products.imagePalette, stock: products.stock })

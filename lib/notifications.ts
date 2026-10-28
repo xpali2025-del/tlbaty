@@ -1,5 +1,6 @@
 import "server-only"
 
+import { isDbConfigured } from "@/lib/db-cache"
 import { and, count, desc, eq, gt, isNull, lte, or } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { notifications } from "@/lib/db/store"
@@ -58,7 +59,7 @@ export async function getPublicNotifications(
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 0
   const safeSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.min(50, Math.floor(pageSize)) : 10
   const start = safePage * safeSize
-  const configured = Boolean(process.env.DATABASE_URL)
+  const configured = isDbConfigured()
 
   // الدقيقة الحالية جزء من مفتاح الكاش حتى لا يتأخر ظهور المجدول/انتهاء الصلاحية أكثر من دقيقة.
   const minute = Math.floor(Date.now() / 60_000)
@@ -129,7 +130,7 @@ export async function getNotificationsSummary(): Promise<NotificationSummaryItem
 
 /** إشعارات هذا العميل الشخصية (تذكير السلة والرغبات…) الصالحة الآن، الأحدث أولاً. بلا كاش: تختلف من عميل لآخر. */
 export async function getPersonalNotifications(customerId: string, limit = 20): Promise<PublicNotification[]> {
-  if (!process.env.DATABASE_URL) return []
+  if (!isDbConfigured()) return []
   const now = new Date()
   const rows = await db
     .select()
