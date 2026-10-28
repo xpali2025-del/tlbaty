@@ -1,13 +1,14 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
-import { wallets } from "@/lib/db/store"
+import { wallets, walletTransactions } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser } from "@/lib/manage-auth"
 import { findWalletDetail, getAdminWalletOverview, type AdminWalletDetail, type AdminWalletOverview } from "@/lib/admin-wallet"
 import { applyEntry, audit } from "@/lib/wallet/ledger"
+import { uniqueViolation } from "@/lib/manage-helpers"
 import { approveTopup, rejectTopup } from "@/lib/wallet/topups"
 import { MAX_ADMIN_ADJUST_BASE, WalletError } from "@/lib/wallet/rules"
 
@@ -47,25 +48,39 @@ export async function rejectWalletTopup(topupId: string, reason: string) {
 }
 
 /** تعديل يدوي: سبب إلزامي، سقف للعملية، وكل شيء في الدفتر باسم المدير. */
-export async function adjustWallet(customerId: string, direction: "credit" | "debit", amountBase: number, reason: string) {
+/**
+ * تعديل يدوي للرصيد. `requestId` معرّف تولّده الشاشة لكل عملية: يُحفظ كمفتاح منع تكرار في السجل، فالضغط المزدوج
+ * أو إعادة الإرسال بنفس المعرّف لا يُضيف/يخصم مرة ثانية (يعيد نجاحاً دون تطبيق).
+ */
+export async function adjustWallet(customerId: string, direction: "credit" | "debit", amountBase: number, reason: string, requestId?: string) {
   return run(async () => {
     await assertManagePermission("wallets")
     const id = uuid.parse(customerId)
     const amount = z.number().positive("المبلغ يجب أن يكون موجباً").max(MAX_ADMIN_ADJUST_BASE, `أقصى تعديل في العملية الواحدة ${MAX_ADMIN_ADJUST_BASE.toLocaleString("en-US")}`).parse(amountBase)
     const why = z.string().trim().min(5, "اكتب سبب التعديل (5 أحرف على الأقل)").max(500).parse(reason)
+    const idempotencyKey = requestId === undefined ? undefined : `admin:${uuid.parse(requestId)}`
     const by = await admin()
-    await db.transaction(async (tx) => {
-      const { balance } = await applyEntry(tx, {
-        customerId: id,
-        kind: direction === "credit" ? "admin_credit" : "admin_debit",
-        amount: direction === "credit" ? amount : -amount,
-        actor: by,
-        reason: why,
-        note: direction === "credit" ? "إضافة من الإدارة" : "خصم من الإدارة",
+    const done = direction === "credit" ? "تمت إضافة الرصيد" : "تم خصم الرصيد"
+    if (idempotencyKey && (await alreadyApplied(id, idempotencyKey))) return { message: done }
+    try {
+      await db.transaction(async (tx) => {
+        const { balance } = await applyEntry(tx, {
+          customerId: id,
+          kind: direction === "credit" ? "admin_credit" : "admin_debit",
+          amount: direction === "credit" ? amount : -amount,
+          actor: by,
+          reason: why,
+          note: direction === "credit" ? "إضافة من الإدارة" : "خصم من الإدارة",
+          idempotencyKey,
+        })
+        await audit(tx, id, direction === "credit" ? "admin_credit" : "admin_debit", by, { amount, reason: why, balance })
       })
-      await audit(tx, id, direction === "credit" ? "admin_credit" : "admin_debit", by, { amount, reason: why, balance })
-    })
-    return { message: direction === "credit" ? "تمت إضافة الرصيد" : "تم خصم الرصيد" }
+    } catch (error) {
+      // طلب متزامن بنفس المعرّف سبقنا: فهرس التفرّد رفض قيدنا وتراجعت معاملتنا كلها (بما فيها الرصيد).
+      if (idempotencyKey && uniqueViolation(error) !== null && (await alreadyApplied(id, idempotencyKey))) return { message: done }
+      throw error
+    }
+    return { message: done }
   })
 }
 
@@ -98,4 +113,13 @@ export async function refreshWalletOverview(): Promise<WalletActionResult<AdminW
     await assertManagePermission("wallets")
     return { message: "تم التحديث", data: await getAdminWalletOverview() }
   })
+}
+
+async function alreadyApplied(customerId: string, idempotencyKey: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: walletTransactions.id })
+    .from(walletTransactions)
+    .where(and(eq(walletTransactions.customerId, customerId), eq(walletTransactions.idempotencyKey, idempotencyKey)))
+    .limit(1)
+  return Boolean(row)
 }

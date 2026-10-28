@@ -293,6 +293,18 @@ describe('paying an order from the wallet', () => {
 })
 
 describe('admin actions and monitoring', () => {
+  it('applies an admin adjustment once per request id (double click / retry), but twice for two requests', async () => {
+    const c = await newCustomer()
+    const id1 = '11111111-1111-4111-8111-111111111111'
+    const [a, b] = await Promise.all([W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', id1), W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', id1)])
+    expect([a.ok, b.ok]).toEqual([true, true])
+    expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', id1)).ok).toBe(true)
+    expect(await balance(c)).toBe(1000)
+    expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', '22222222-2222-4222-8222-222222222222')).ok).toBe(true)
+    expect(await balance(c)).toBe(2000)
+    expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', 'not-a-uuid')).ok).toBe(false)
+  })
+
   it('check the wallets permission, require a reason, cap adjustments and write the ledger under the admin name', async () => {
     const c = await newCustomer()
     expect((await W.adjustWallet(c, 'credit', 1000, 'abc')).ok).toBe(false)
