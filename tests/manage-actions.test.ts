@@ -28,6 +28,7 @@ const A = unwrapAll(await import('@/app/manage/actions'))
 const { hashPassword, verifyPasswordHash } = await import('@/lib/manage-users')
 const helpers = await import('@/lib/manage-helpers')
 const uploads = unwrapAll(await import('@/app/manage/upload-actions'))
+const { refreshProductSearch } = await import('@/lib/search-index')
 
 const seed = loadSeedData(path.resolve(__dirname, '../scripts/migration/data'))
 const KEY = (folder: string, name: string) => `${folder}/${name}.png`
@@ -103,6 +104,65 @@ describe('saveProduct with stock per colour and size', () => {
     expect(await variantsOf(p.id)).toEqual(['أزرق|M|2', 'أزرق|S|5'])
     await A.saveProduct(p.id, productForm({ slug: 'variant-product', colors, sizes: ['S', 'M'], stock: '6', stockBase: '7' }))
     expect(await variantsOf(p.id)).toEqual([])
+  })
+})
+
+describe('saveProduct: fewer statements, same result', () => {
+  const searchTextOf = async (id: string) => (await rows(s.products)).find((x) => x.id === id)!.searchText
+
+  it('stores the same search text the indexer computes, for a new product and after an edit', async () => {
+    const colors = JSON.stringify([{ name: 'ذهبي', hex: '#FFD700' }, { name: 'فضي', hex: '#C0C0C0' }])
+    await A.saveProduct(null, productForm({ slug: 'search-text', name: 'سوار ناعم', colors, sizes: ['S'], keywords: ['هدية'], subcategory: 'gold-accessories', brandId, sku: 'SKU-9', description: 'وصف قصير', isNew: 'true' }))
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'search-text')
+    const stored = await searchTextOf(p.id)
+    expect(stored).toContain('سوار')
+    await refreshProductSearch(db as never, { productIds: [p.id] })
+    expect(await searchTextOf(p.id)).toBe(stored)
+
+    await A.saveProduct(p.id, productForm({ slug: 'search-text', name: 'سوار معدّل', colors, sizes: ['S', 'M'], keywords: ['هدية'], brandId, isBestseller: 'true' }))
+    const edited = await searchTextOf(p.id)
+    expect(edited).toContain('معدل')
+    await refreshProductSearch(db as never, { productIds: [p.id] })
+    expect(await searchTextOf(p.id)).toBe(edited)
+  })
+
+  it('leaves unchanged images and colors untouched, and rewrites them only when they change', async () => {
+    const colors = JSON.stringify([{ name: 'أسود', hex: '#000000' }])
+    await A.saveProduct(null, productForm({ slug: 'keep-rows', colors, newImageKeys: [KEY('products', 'k1'), KEY('products', 'k2')] }))
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'keep-rows')
+    const ids = async () => ({
+      images: (await rows(s.productImages)).filter((i) => i.productId === p.id).sort((a, b) => a.sortOrder - b.sortOrder).map((i) => i.id),
+      colors: (await rows(s.productColors)).filter((c) => c.productId === p.id).map((c) => c.id),
+    })
+    const before = await ids()
+    await A.saveProduct(p.id, productForm({ slug: 'keep-rows', price: '55', colors, keptImages: [KEY('products', 'k1'), KEY('products', 'k2')] }))
+    expect(await ids()).toEqual(before)
+    expect(deleted()).toEqual([])
+
+    // reordering the gallery or changing a colour is a change
+    await A.saveProduct(p.id, productForm({ slug: 'keep-rows', colors: JSON.stringify([{ name: 'أسود', hex: '#111111' }]), keptImages: [KEY('products', 'k2'), KEY('products', 'k1')] }))
+    const after = await ids()
+    expect(after.images).not.toEqual(before.images)
+    expect(after.colors).not.toEqual(before.colors)
+    const imgs = (await rows(s.productImages)).filter((i) => i.productId === p.id).sort((a, b) => a.sortOrder - b.sortOrder)
+    expect(imgs.map((i) => i.imageKey)).toEqual([KEY('products', 'k2'), KEY('products', 'k1')])
+  })
+
+  it('saves many variants at once and the total stays the sum', async () => {
+    const sizes = ['XS', 'S', 'M', 'L', 'XL']
+    const colors = ['أحمر', 'أزرق', 'أخضر', 'أسود', 'أبيض'].map((name, i) => ({ name, hex: `#00000${i}` }))
+    const all = colors.flatMap((c) => sizes.map((size) => ({ color: c.name, size, stock: 2 })))
+    await A.saveProduct(null, productForm({ slug: 'many-variants', colors: JSON.stringify(colors), sizes, trackVariants: 'true', variants: JSON.stringify(all) }))
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'many-variants')
+    expect((await rows(s.productVariants)).filter((v) => v.productId === p.id)).toHaveLength(25)
+    expect(p.stock).toBe(50)
+    // drop one colour, raise one cell: removed rows go, the rest update in place
+    const next = all.filter((v) => v.color !== 'أبيض').map((v) => ({ ...v, base: 2, stock: v.color === 'أحمر' && v.size === 'M' ? 7 : 2 }))
+    await A.saveProduct(p.id, productForm({ slug: 'many-variants', colors: JSON.stringify(colors.slice(0, 4)), sizes, trackVariants: 'true', variants: JSON.stringify(next) }))
+    const left = (await rows(s.productVariants)).filter((v) => v.productId === p.id)
+    expect(left).toHaveLength(20)
+    expect(left.find((v) => v.color === 'أحمر' && v.size === 'M')!.stock).toBe(7)
+    expect((await rows(s.products)).find((x) => x.id === p.id)!.stock).toBe(45)
   })
 })
 
