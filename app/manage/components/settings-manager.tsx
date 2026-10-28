@@ -14,6 +14,7 @@ import { fetchWhatsappStatus, saveSettings } from "../actions"
 import type { WhatsappStatus } from "@/lib/whatsapp-status"
 import { ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { OTP_CHANNELS } from "@/lib/otp/channel"
 
 export function SettingsManager({ settings }: { settings: AdminSettings }) {
   const [isPending, startTransition] = useTransition()
@@ -169,6 +170,29 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
             <p className="text-xs text-muted-foreground">
               الافتراضي اليمن فقط. عند تفعيل أكثر من دولة تظهر للعميل قائمة لاختيار كود الدولة (مفيدة لاختبار رقم من دولة أخرى). يُفرض هذا على الخادم أيضاً.
               تعطيل دولة يمنع دخول عملائها الحاليين ما دامت معطّلة. رقم بوت واتساب يجب أن يستقبل رسائل من الدولة المفعّلة.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">قناة إرسال رمز التحقق</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {OTP_CHANNELS.map((c) => (
+              <label key={c.key} className="flex items-start gap-2 text-sm">
+                <input type="radio" name="otpChannel" value={c.key} defaultChecked={(settings?.otpChannel ?? "whatsapp") === c.key} className="mt-1 h-4 w-4" />
+                <span>
+                  <span className="font-medium">{c.label}</span>
+                  <span className="block text-xs text-muted-foreground">{c.hint}</span>
+                </span>
+              </label>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              تُستخدم هذه القناة لرمز الدخول وتغيير رقم الهاتف، وتسري فوراً بعد الحفظ.
+              {settings?.smsConfigured
+                ? " مفاتيح SMS Gateway مضبوطة على الخادم."
+                : " مفاتيح SMS Gateway غير مضبوطة بعد: أضف SMS_GATE_USERNAME و SMS_GATE_PASSWORD في إعدادات الاستضافة قبل اختيار SMS."}
             </p>
           </CardContent>
         </Card>

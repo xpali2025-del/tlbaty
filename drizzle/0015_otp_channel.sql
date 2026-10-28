@@ -1,0 +1,2 @@
+ALTER TABLE "store"."site_settings" ADD COLUMN "otp_channel" text DEFAULT 'whatsapp' NOT NULL;--> statement-breakpoint
+ALTER TABLE "store"."site_settings" ADD CONSTRAINT "site_settings_otp_channel_valid" CHECK ("store"."site_settings"."otp_channel" in ('whatsapp', 'sms', 'whatsapp_sms'));

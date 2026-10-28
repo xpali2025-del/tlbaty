@@ -2,7 +2,7 @@ import "server-only"
 import { randomInt } from "node:crypto"
 import { OTP_EXPIRE, OTP_LENGTH, OTP_RESEND } from "./config"
 import { createSalt, hashOtp } from "./hash"
-import { getOtpProvider, type OtpPurpose } from "./provider"
+import { sendOtp, type OtpPurpose } from "./provider"
 import { buildMessage } from "./providers/whatsapp"
 import { countRecentOtps, createOtp, getLastOtpCreatedAt, invalidatePreviousOtps } from "./store"
 
@@ -90,7 +90,7 @@ export async function createAndSendOtp(input: {
   const codeHash = hashOtp(code, salt)
 
   // نرسل أولاً؛ إن فشل الإرسال لا نحفظ رمزاً غير قابل للاستخدام.
-  const sent = await getOtpProvider().send({ phone, code, purpose })
+  const sent = await sendOtp({ phone, code, purpose })
   if (!sent.ok) return { ok: false, error: "SEND_FAILED" }
 
   await invalidatePreviousOtps(phone, purpose)

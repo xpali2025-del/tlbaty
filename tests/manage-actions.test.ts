@@ -333,6 +333,14 @@ describe('ads and settings', () => {
     expect(deleted()).toEqual([KEY('ads', 'a1')])
   })
 
+  it('validates and persists the OTP channel without touching it when omitted', async () => {
+    await expect(A.saveSettings(null, form({ name: 'م', codEnabled: 'true', otpChannel: 'telegram' }))).rejects.toThrow('قناة إرسال رمز التحقق غير صالحة')
+    await A.saveSettings(null, form({ name: 'م', codEnabled: 'true', otpChannel: 'whatsapp_sms' }))
+    expect((await rows(s.siteSettings))[0].otpChannel).toBe('whatsapp_sms')
+    await A.saveSettings(null, form({ name: 'م', codEnabled: 'true' }))
+    expect((await rows(s.siteSettings))[0].otpChannel).toBe('whatsapp_sms')
+  })
+
   it('saves video ads with a validated video key, placements and dates, and removes replaced videos', async () => {
     const poster = KEY('ads', 'p1')
     await expect(A.saveAd(null, form({ title: 'ف', kind: 'video', imageKey: poster }))).rejects.toThrow('فيديو الإعلان مطلوب')
