@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { normalizePermissions, ROLE_PRESETS, SCREENS } from '@/lib/permissions'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -29,7 +30,7 @@ vi.mock('@/lib/manage-auth', () => ({
   },
 }))
 
-const A = await import('@/app/manage/actions')
+const A = unwrapAll(await import('@/app/manage/actions'))
 const form = (f: Record<string, string>) => {
   const d = new FormData()
   for (const [k, v] of Object.entries(f)) d.set(k, v)
@@ -111,7 +112,7 @@ describe('server-side enforcement on actions', () => {
     await expect(A.saveSettings(null, form({ name: 'x' }))).rejects.toThrow('صلاحية')
     await expect(A.saveUser(null, form({ username: 'zed', password: 'secret1' }))).rejects.toThrow('صلاحية')
     await expect(A.saveCoupon(null, form({ code: 'A1', discount: '5', type: 'percent', description: 'خصم' }))).resolves.toBeUndefined()
-    const orders = await import('@/app/manage/orders-actions')
+    const orders = unwrapAll(await import('@/app/manage/orders-actions'))
     expect(await orders.updateOrderStatus('00000000-0000-4000-8000-000000000000', 'confirmed')).toMatchObject({ ok: false, error: 'ليست لديك صلاحية' })
   })
 })

@@ -229,6 +229,16 @@ function WalletDetail({ detail: d, busy, onAct }: { detail: AdminWalletDetail; b
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
   const [freezeReason, setFreezeReason] = useState("")
+  // معرّف للعملية الحالية: الضغط المزدوج أو إعادة الإرسال بنفس المعرّف لا يطبّق التعديل مرتين.
+  // يتجدد عند تغيير المبلغ أو السبب (عملية جديدة).
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID())
+  const renew = () => setRequestId(crypto.randomUUID())
+  // بعد نجاح عملية يتغيّر الرصيد المعروض: معرّف جديد كي تُحتسب إضافة مقصودة ثانية بنفس المبلغ والسبب.
+  const [seenBalance, setSeenBalance] = useState(d.balance)
+  if (seenBalance !== d.balance) {
+    setSeenBalance(d.balance)
+    renew()
+  }
   return (
     <div className="mt-4 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/50 p-3">
@@ -246,13 +256,13 @@ function WalletDetail({ detail: d, busy, onAct }: { detail: AdminWalletDetail; b
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="space-y-2 rounded-lg border border-border p-3">
           <h4 className="text-sm font-bold">تعديل يدوي (يُسجَّل باسمك مع السبب)</h4>
-          <Input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`المبلغ (حتى ${MAX_ADMIN_ADJUST_BASE.toLocaleString("en-US")})`} dir="ltr" inputMode="decimal" aria-label="مبلغ التعديل" />
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="السبب (إلزامي)" aria-label="سبب التعديل" />
+          <Input value={amount} onChange={(e) => { setAmount(e.target.value); renew() }} placeholder={`المبلغ (حتى ${MAX_ADMIN_ADJUST_BASE.toLocaleString("en-US")})`} dir="ltr" inputMode="decimal" aria-label="مبلغ التعديل" />
+          <Input value={reason} onChange={(e) => { setReason(e.target.value); renew() }} placeholder="السبب (إلزامي)" aria-label="سبب التعديل" />
           <div className="flex gap-2">
-            <Button size="sm" disabled={busy || !(Number(amount) > 0) || reason.trim().length < 5} onClick={() => onAct(() => adjustWallet(d.customerId, "credit", Number(amount), reason))}>
+            <Button size="sm" disabled={busy || !(Number(amount) > 0) || reason.trim().length < 5} onClick={() => onAct(() => adjustWallet(d.customerId, "credit", Number(amount), reason, requestId))}>
               إضافة
             </Button>
-            <Button size="sm" variant="outline" disabled={busy || !(Number(amount) > 0) || reason.trim().length < 5} onClick={() => onAct(() => adjustWallet(d.customerId, "debit", Number(amount), reason))}>
+            <Button size="sm" variant="outline" disabled={busy || !(Number(amount) > 0) || reason.trim().length < 5} onClick={() => onAct(() => adjustWallet(d.customerId, "debit", Number(amount), reason, requestId))}>
               خصم
             </Button>
           </div>

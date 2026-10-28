@@ -1,5 +1,7 @@
 const resizing = process.env.IMAGE_RESIZING === 'cloudflare'
-const r2Url = process.env.R2_PUBLIC_URL ? new URL(process.env.R2_PUBLIC_URL) : null
+// نفس أولوية lib/env.ts: الاسم البديل R2_PUBLIC_URL_2 ثم الأصلي.
+const r2Public = process.env.R2_PUBLIC_URL_2 || process.env.R2_PUBLIC_URL
+const r2Url = r2Public ? new URL(r2Public) : null
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

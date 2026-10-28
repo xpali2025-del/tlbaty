@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq, gte, sql } from "drizzle-orm"
+import { and, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { authEvents, loginChallenges, otpCodes } from "@/lib/db/store"
 
@@ -14,7 +14,7 @@ const VERIFY_WINDOW = 15 * 60_000
 
 const since = (ms: number) => new Date(Date.now() - ms)
 
-/** هل يُسمح بمحاولة إرسال جديدة لهذا الرقم/الـIP؟ (5 لكل رقم و15 لكل IP في الساعة). */
+/** هل يُسمح بمحاولة إرسال جديدة لهذا الرقم/الـIP؟ (5 لكل رقم و15 لكل IP في الساعة؛ حد الـIP يشمل الإرسال وإعادة الإرسال). */
 export async function consumeSendAttempt(phone: string, ip: string): Promise<boolean> {
   const [{ perPhone }] = await db
     .select({ perPhone: sql<number>`count(*)::int` })
@@ -26,7 +26,7 @@ export async function consumeSendAttempt(phone: string, ip: string): Promise<boo
     const [{ perIp }] = await db
       .select({ perIp: sql<number>`count(*)::int` })
       .from(authEvents)
-      .where(and(eq(authEvents.ip, ip), eq(authEvents.event, "otp_sent"), gte(authEvents.at, since(HOUR))))
+      .where(and(eq(authEvents.ip, ip), inArray(authEvents.event, ["otp_sent", "otp_resent"]), gte(authEvents.at, since(HOUR))))
     if (perIp >= MAX_SENDS_PER_IP) return false
   }
   return true

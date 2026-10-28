@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { AdminCoupon } from "@/lib/admin"
-import { saveCoupon, deleteCoupon } from "../actions"
+import { saveCoupon, deleteCoupon } from "../client-actions"
 import { DeleteButton, SectionHeader } from "./shared"
 
 export function CouponsManager({ coupons }: { coupons: AdminCoupon[] }) {

@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select"
 import type { AdminUser } from "@/lib/manage-users"
 import { ROLES, ROLE_LABELS, ROLE_PRESETS, SCREENS, SCREEN_LABELS, type Role, type Screen } from "@/lib/permissions"
-import { saveUser, deleteUser, toggleUserActive } from "../actions"
+import { saveUser, deleteUser, toggleUserActive } from "../client-actions"
 import { DeleteButton, SectionHeader } from "./shared"
 
 export function UsersManager({

@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -12,7 +13,7 @@ vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
 vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: auth, assertManageAuthenticated: auth, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'm' }))
 
-const A = await import('@/app/manage/shipping-actions')
+const A = unwrapAll(await import('@/app/manage/shipping-actions'))
 const { getAdminShipping } = await import('@/lib/admin')
 
 const method = (price = 1000) => ({ name: 'عادي', description: '', price, icon: 'standard' as const })
@@ -41,8 +42,8 @@ describe('currencies', () => {
     expect(await db.select().from(s.currencies)).toHaveLength(0)
   })
   it('requires auth', async () => {
-    auth.mockRejectedValueOnce(new Error('unauthorized'))
-    await expect(A.saveCurrencies([YER], 'YER')).rejects.toThrow('unauthorized')
+    auth.mockRejectedValueOnce(new Error('غير مصرّح'))
+    await expect(A.saveCurrencies([YER], 'YER')).rejects.toThrow('غير مصرّح')
   })
   it('checks the currencies permission, not shipping', async () => {
     await A.saveCurrencies([YER], 'YER')

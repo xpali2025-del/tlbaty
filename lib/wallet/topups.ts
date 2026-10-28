@@ -14,6 +14,7 @@ import {
   WalletError,
   normalizeReference,
 } from "./rules"
+import { normalizedReferenceSql } from "./reference-sql"
 
 const DAY = 24 * 3_600_000
 
@@ -73,7 +74,8 @@ export async function requestTopup(input: TopupRequest): Promise<{ id: string }>
         })
       }
 
-      const [{ onOrder }] = await tx.select({ onOrder: count() }).from(orders).where(sql`upper(regexp_replace(${orders.transferReference}, '[[:space:]/-]+', '', 'g')) = ${reference}`)
+      // رقم الطلب مخزَّن كما كتبه العميل (قد يكون بأرقام عربية): يُطبَّع في SQL بنفس قواعد رقم الشحن.
+      const [{ onOrder }] = await tx.select({ onOrder: count() }).from(orders).where(sql`${normalizedReferenceSql(orders.transferReference)} = ${reference}`)
 
       const [row] = await tx
         .insert(walletTopups)

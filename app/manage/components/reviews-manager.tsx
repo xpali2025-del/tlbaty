@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import type { AdminReview } from "@/lib/admin"
-import { saveReview, deleteReview } from "../actions"
+import { saveReview, deleteReview } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 

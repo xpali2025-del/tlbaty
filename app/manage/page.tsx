@@ -83,6 +83,9 @@ async function loadAll(
   return { products, categories, brands, slides, coupons, reviews, ads, settings, shipping, walletOverview, marketing, sizeCharts, ordersPage, orderStats, couriers, users, paymentAccounts, notifications }
 }
 
+// الإجراءات (حفظ المنتج ورفع الصور...) تعمل ضمن حدود هذا المسار؛ المهلة الافتراضية القصيرة تُفشل الحفظ عند بطء القاعدة.
+export const maxDuration = 60
+
 export default async function ManagePage() {
   const ctx = await getManageContext()
   if (!ctx) {

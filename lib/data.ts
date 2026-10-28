@@ -31,7 +31,7 @@ import {
   categoryTag,
   productTag,
 } from "@/lib/cache-tags"
-import { dbCached } from "@/lib/db-cache"
+import { dbCached, isDbConfigured } from "@/lib/db-cache"
 import { resolveImageUrl, resolveOptionalImageUrl } from "@/lib/images"
 import { isAdLive, todayInAden } from "@/lib/ads"
 import type { Product, Category, Subcategory, Slide, Coupon, Review, Ad, Brand, ShippingZone } from "./types"
@@ -440,18 +440,28 @@ export const getSlides = cache(async (): Promise<Slide[]> =>
   }),
 )
 
-export const getCoupons = cache(async (): Promise<Coupon[]> =>
-  dbCached({
-    keyParts: ["store", "coupons"],
+type CachedCoupon = Coupon & { expiresAt: string | null; maxUses: number | null; usedCount: number }
+
+/**
+ * الأكواد العامة الصالحة الآن. الكاش يحفظ تاريخ الانتهاء والاستعمال، والتصفية بعده بالوقت الحالي:
+ * فالكود المنتهي أو المستنفد لا يظهر صالحاً عند الدفع ثم يُرفض الطلب بعد أن يكمل العميل بياناته.
+ */
+export const getCoupons = cache(async (): Promise<Coupon[]> => {
+  const all = await dbCached<CachedCoupon[]>({
+    keyParts: ["store", "coupons", "v2"],
     tags: [CACHE_TAGS.coupons],
     fallback: [],
     load: async () => {
       // العامة فقط: كود شخصي لعميل (تذكير السلة…) لا يظهر في قائمة يراها الجميع.
       const rows = await db.select().from(coupons).where(isNull(coupons.customerId)).orderBy(asc(coupons.code))
-      return rows.map(toCoupon)
+      return rows.map((c) => ({ ...toCoupon(c), expiresAt: c.expiresAt?.toISOString() ?? null, maxUses: c.maxUses, usedCount: c.usedCount }))
     },
-  }),
-)
+  })
+  const now = Date.now()
+  return all
+    .filter((c) => (c.expiresAt === null || Date.parse(c.expiresAt) > now) && (c.maxUses === null || c.usedCount < c.maxUses))
+    .map(({ code, discount, type, minOrder, description }) => ({ code, discount, type, minOrder, description }))
+})
 
 const toCoupon = (c: typeof coupons.$inferSelect): Coupon => ({
   code: c.code,
@@ -466,7 +476,7 @@ const toCoupon = (c: typeof coupons.$inferSelect): Coupon => ({
  * مصدر الحقيقة لخصم الطلب على الخادم وللأكواد التي تصل لمتصفح العميل نفسه فقط.
  */
 export async function getPersonalCoupons(customerId: string): Promise<Coupon[]> {
-  if (!process.env.DATABASE_URL) return []
+  if (!isDbConfigured()) return []
   const rows = await db
     .select()
     .from(coupons)

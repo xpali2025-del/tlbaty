@@ -22,6 +22,7 @@ import { getOrderForCustomer } from "@/lib/otp/customer-orders"
 import {
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABELS,
+  customerStageOf,
   normalizeOrderStatus,
   type OrderStatus,
 } from "@/lib/order-status"
@@ -86,14 +87,22 @@ export default async function OrderDetailPage({
 
   // رقم الطلب يأتي من الرابط لكنه لا يكفي: الاستعلام يشترط ملكية العميل
   // عبر معرّف الجلسة، فلا يُعاد أي طلب لا يخص صاحب الجلسة.
-  const order = await getOrderForCustomer(customer, decodeURIComponent(orderNumber))
+  // رابط مشوّه (ترميز % ناقص) لا يجوز أن يصير خطأ 500: يُعامل كطلب غير موجود.
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(orderNumber)
+  } catch {
+    notFound()
+  }
+  const order = await getOrderForCustomer(customer, decoded)
   if (!order) {
     notFound()
   }
 
   const status = normalizeOrderStatus(order.status)
   const isException = EXCEPTION_STATUSES.includes(status)
-  const currentStageIndex = CUSTOMER_STAGES.findIndex((s) => s.status === status)
+  // «تم إسناد المندوب» تظهر للعميل كمرحلة «جاهز للتوصيل» (كانت لا تطابق أي مرحلة فتظهر الصفحة بلا مرحلة حالية).
+  const currentStageIndex = CUSTOMER_STAGES.findIndex((s) => s.status === customerStageOf(status))
 
   const money = (value: number | null) => {
     if (typeof value !== "number") return "—"
@@ -103,7 +112,7 @@ export default async function OrderDetailPage({
 
   const stageDate = (stageStatus: OrderStatus): string | null => {
     if (stageStatus === "new") return order.createdAt
-    const entry = order.statusTimeline.find((t) => normalizeOrderStatus(t.status) === stageStatus)
+    const entry = order.statusTimeline.find((t) => customerStageOf(normalizeOrderStatus(t.status)) === stageStatus)
     return entry?.changedAt ?? null
   }
 

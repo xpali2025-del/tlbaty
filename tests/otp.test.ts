@@ -33,6 +33,7 @@ const sendRoute = await import('@/app/api/auth/send-otp/route')
 const verifyRoute = await import('@/app/api/auth/verify-otp/route')
 const meRoute = await import('@/app/api/auth/me/route')
 const logoutRoute = await import('@/app/api/auth/logout/route')
+const resendRoute = await import('@/app/api/auth/resend-otp/route')
 
 const ctx = { ip: '1.2.3.4', userAgent: 'vitest' }
 let phoneSeq = 0
@@ -257,6 +258,38 @@ describe('rate limiting', () => {
     await db.insert(s.authEvents).values(Array.from({ length: 15 }, () => ({ event: 'otp_sent' as const, ip })))
     expect(await consumeSendAttempt(nextPhone(), ip)).toBe(false)
     expect(await consumeSendAttempt(nextPhone(), '6.6.6.6')).toBe(true)
+  })
+
+  it('counts resends toward the per-IP cap too', async () => {
+    const ip = '7.7.7.7'
+    await db.insert(s.authEvents).values([
+      ...Array.from({ length: 10 }, () => ({ event: 'otp_resent' as const, ip })),
+      ...Array.from({ length: 5 }, () => ({ event: 'otp_sent' as const, ip })),
+    ])
+    expect(await consumeSendAttempt(nextPhone(), ip)).toBe(false)
+  })
+
+  it('refuses a change-phone resend without a session, and a JSON null body', async () => {
+    const r = await resendRoute.POST(json({ phone: nextPhone(), purpose: 'change_phone' }))
+    expect(r.status).toBe(401)
+    expect((await r.json()).error).toBe('AUTH_REQUIRED')
+    const n = await resendRoute.POST(new Request('http://localhost/api', { method: 'POST', body: 'null' }))
+    expect(n.status).toBe(400)
+  })
+
+  it('applies the change-phone rules on resend: not the current number, not another customer’s number', async () => {
+    const me = await createCustomer(nextPhone())
+    const other = await createCustomer(nextPhone())
+    await createSession({ customerId: me.id, ...ctx })
+    const same = await resendRoute.POST(json({ phone: me.phone, purpose: 'change_phone' }))
+    expect([same.status, (await same.json()).error]).toEqual([400, 'SAME_PHONE'])
+    const taken = await resendRoute.POST(json({ phone: other.phone, purpose: 'change_phone' }))
+    expect([taken.status, (await taken.json()).error]).toEqual([409, 'PHONE_IN_USE'])
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const fresh = await resendRoute.POST(json({ phone: nextPhone(), purpose: 'change_phone' }))
+    log.mockRestore()
+    expect(fresh.status).toBe(200)
+    jar.clear()
   })
 
   it('locks verification after 10 failures in 15 minutes', async () => {

@@ -32,7 +32,7 @@ import {
   initialPaymentStatus,
   type PaymentStatus,
 } from "@/lib/payment"
-import { updatePaymentStatus } from "../orders-actions"
+import { updatePaymentStatus } from "../client-actions"
 
 // ============================================
 // لوحة الدفع داخل تفاصيل الطلب في /manage

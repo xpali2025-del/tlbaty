@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
+import { inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -168,6 +169,31 @@ describe('marketing content', () => {
     const pct = await data.validateCoupon(percent.code, 10000 + (percent.minOrder ?? 0))
     expect(pct.discountAmount).toBe(Math.round(((10000 + (percent.minOrder ?? 0)) * percent.discount) / 100))
     if (percent.minOrder) expect((await data.validateCoupon(percent.code, percent.minOrder - 1)).message).toMatch(/الحد الأدنى/)
+  })
+
+  it('hides public coupons that expired or were used up, and keeps the valid ones', async () => {
+    await db.insert(s.coupons).values([
+      { code: 'EXPIRED10', discount: 10, type: 'percent', description: 'منتهٍ', expiresAt: new Date(Date.now() - 60_000) },
+      { code: 'USEDUP10', discount: 10, type: 'percent', description: 'مستنفد', maxUses: 2, usedCount: 2 },
+      { code: 'FUTURE10', discount: 10, type: 'percent', description: 'صالح', expiresAt: new Date(Date.now() + 86_400_000), maxUses: 5, usedCount: 1 },
+    ])
+    const codes = (await data.getCoupons()).map((c) => c.code)
+    expect(codes).toContain('FUTURE10')
+    expect(codes).not.toContain('EXPIRED10')
+    expect(codes).not.toContain('USEDUP10')
+    expect((await data.validateCoupon('EXPIRED10', 100000)).valid).toBe(false)
+    expect(Object.keys((await data.getCoupons())[0]).sort()).toEqual(['code', 'description', 'discount', 'minOrder', 'type'])
+    await db.delete(s.coupons).where(inArray(s.coupons.code, ['EXPIRED10', 'USEDUP10', 'FUTURE10']))
+  })
+
+  it('reports when a redemption uses up the last allowed use (so the coupon cache is invalidated)', async () => {
+    const { redeemCoupon } = await import('@/lib/orders/coupons')
+    const [cust] = await db.insert(s.customers).values({ publicId: 'CUS_CPN', phone: '967770001234' }).returning()
+    await db.insert(s.coupons).values({ code: 'TWICE5', discount: 5, type: 'percent', description: 'مرتان', maxUses: 2 })
+    expect(await db.transaction((tx) => redeemCoupon(tx as never, 'twice5', cust.id))).toEqual({ exhausted: false })
+    expect(await db.transaction((tx) => redeemCoupon(tx as never, 'TWICE5', cust.id))).toEqual({ exhausted: true })
+    await expect(db.transaction((tx) => redeemCoupon(tx as never, 'TWICE5', cust.id))).rejects.toThrow('coupon unavailable')
+    await db.delete(s.coupons).where(inArray(s.coupons.code, ['TWICE5']))
   })
 
   it('returns reviews newest first with their dates', async () => {

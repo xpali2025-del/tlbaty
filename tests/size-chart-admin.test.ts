@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { COMMON_SIZE_CHARTS, type SizeChart } from '@/lib/size-chart'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -18,7 +19,7 @@ vi.mock('ai', () => ({ generateText: vi.fn() }))
 vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: auth, assertManageAuthenticated: auth, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'مدير' }))
 
 const C = await import('@/app/manage/size-chart-actions')
-const P = await import('@/app/manage/actions')
+const P = unwrapAll(await import('@/app/manage/actions'))
 const { getProductBySlug } = await import('@/lib/data')
 const { getAdminSizeCharts, getAdminProducts } = await import('@/lib/admin')
 

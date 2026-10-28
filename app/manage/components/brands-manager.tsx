@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import type { AdminBrand } from "@/lib/admin"
-import { saveBrand, deleteBrand } from "../actions"
+import { saveBrand, deleteBrand } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 

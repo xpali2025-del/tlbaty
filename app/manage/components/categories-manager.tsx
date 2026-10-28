@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { AdminCategory, AdminSubcategory } from "@/lib/admin"
-import { saveCategory, deleteCategory } from "../actions"
+import { saveCategory, deleteCategory } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput, sanitizeSlug } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 

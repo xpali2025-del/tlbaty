@@ -36,7 +36,7 @@ import {
   savePaymentAccount,
   togglePaymentAccount,
   updatePaymentAccountOrder,
-} from "../payment-accounts-actions"
+} from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 

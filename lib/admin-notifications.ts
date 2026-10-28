@@ -1,5 +1,6 @@
 import "server-only"
 
+import { isDbConfigured } from "@/lib/db-cache"
 import { desc, isNull } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { notifications } from "@/lib/db/store"
@@ -19,7 +20,7 @@ export type NotificationsConfigReport = {
 }
 
 export function getNotificationsConfigReport(): NotificationsConfigReport {
-  const ready = Boolean(process.env.DATABASE_URL)
+  const ready = isDbConfigured()
   return { ready, readReady: ready, missing: ready ? [] : ["DATABASE_URL"] }
 }
 

@@ -8,7 +8,8 @@ export const PLACEHOLDER_IMAGE = "/placeholder.svg"
 export function resolveImageUrl(value: string | null | undefined): string {
   if (!value) return PLACEHOLDER_IMAGE
   if (value.startsWith("/") || /^https?:\/\//i.test(value)) return value
-  const base = process.env.R2_PUBLIC_URL?.replace(/\/$/, "")
+  // نفس أولوية lib/env.ts: الاسم البديل R2_PUBLIC_URL_2 ثم الأصلي.
+  const base = (process.env.R2_PUBLIC_URL_2 || process.env.R2_PUBLIC_URL)?.replace(/\/$/, "")
   return base ? `${base}/${value}` : PLACEHOLDER_IMAGE
 }
 

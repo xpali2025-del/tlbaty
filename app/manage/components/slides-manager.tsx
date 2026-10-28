@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { AdminSlide } from "@/lib/admin"
-import { saveSlide, deleteSlide } from "../actions"
+import { saveSlide, deleteSlide } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 

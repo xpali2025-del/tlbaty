@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -17,7 +18,7 @@ vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revali
 vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'مدير الاختبار' }))
 vi.mock('@/lib/storage/proofs', async (orig) => ({ ...(await orig<typeof import('@/lib/storage/proofs')>()), deletePaymentProof: mocks.deletePaymentProof }))
 
-const A = await import('@/app/manage/orders-actions')
+const A = unwrapAll(await import('@/app/manage/orders-actions'))
 
 let seq = 0
 async function order(over: Partial<typeof s.orders.$inferInsert> = {}) {
@@ -85,6 +86,26 @@ describe('stock restore', () => {
   })
 })
 
+describe('limited coupons come back on cancel or delete', () => {
+  it('releases the use and invalidates the coupon list cache so the code shows as valid again', async () => {
+    const { revalidateTag } = await import('next/cache')
+    const { CACHE_TAGS } = await import('@/lib/cache-tags')
+    await db.insert(s.coupons).values({ code: 'LIMIT1', discount: 5, type: 'percent', description: 'مرة', maxUses: 1, usedCount: 1 })
+    const o = await order({ couponCode: 'LIMIT1' })
+    vi.mocked(revalidateTag).mockClear()
+    expect((await A.updateOrderStatus(o.id, 'cancelled')).ok).toBe(true)
+    expect((await db.select().from(s.coupons).where(eq(s.coupons.code, 'LIMIT1')))[0].usedCount).toBe(0)
+    expect(vi.mocked(revalidateTag).mock.calls.map((c) => c[0])).toContain(CACHE_TAGS.coupons)
+
+    await db.update(s.coupons).set({ usedCount: 1 }).where(eq(s.coupons.code, 'LIMIT1'))
+    const o2 = await order({ couponCode: 'LIMIT1' })
+    vi.mocked(revalidateTag).mockClear()
+    await A.deleteOrder(o2.id)
+    expect((await db.select().from(s.coupons).where(eq(s.coupons.code, 'LIMIT1')))[0].usedCount).toBe(0)
+    expect(vi.mocked(revalidateTag).mock.calls.map((c) => c[0])).toContain(CACHE_TAGS.coupons)
+  })
+})
+
 describe('deleteOrder stock', () => {
   it('returns the units of an open order to stock when it is deleted, but not those of a delivered one', async () => {
     const [cat] = await db.insert(s.categories).values({ name: 'ق2', slug: 'c-del' }).returning()
@@ -97,6 +118,11 @@ describe('deleteOrder stock', () => {
     await db.insert(s.orderItems).values({ orderId: delivered.id, position: 0, productId: p.id, name: 'منتج', quantity: 2, price: 5 })
     await A.deleteOrder(delivered.id)
     expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(7)
+    // «تعذر التسليم» ليست نهائية: وحداتها ما زالت محجوزة فتعود للمخزون عند الحذف
+    const failed = await order({ status: 'failed' })
+    await db.insert(s.orderItems).values({ orderId: failed.id, position: 0, productId: p.id, name: 'منتج', quantity: 2, price: 5 })
+    await A.deleteOrder(failed.id)
+    expect((await db.select().from(s.products).where(eq(s.products.id, p.id)))[0].stock).toBe(9)
   })
 })
 
@@ -164,8 +190,8 @@ describe('updatePaymentStatus', () => {
 
   it('requires auth', async () => {
     const o = await transfer()
-    mocks.auth.mockRejectedValueOnce(new Error('unauthorized'))
-    await expect(A.updatePaymentStatus(o.id, 'verified')).rejects.toThrow('unauthorized')
+    mocks.auth.mockRejectedValueOnce(new Error('غير مصرّح'))
+    await expect(A.updatePaymentStatus(o.id, 'verified')).rejects.toThrow('غير مصرّح')
     expect((await get(o.id)).paymentStatus).toBe('pending_verification')
   })
 })

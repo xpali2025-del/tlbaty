@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { revalidateTag } from "next/cache"
 import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
-import { orderItems, orderPaymentProofs, orderPaymentStatusHistory, orders, products } from "@/lib/db/store"
+import { orderItems, orderPaymentProofs, orderPaymentStatusHistory, orders, products, walletTopups } from "@/lib/db/store"
 import { resolveImageUrl } from "@/lib/images"
 import { buildProductNumber } from "@/lib/product-number"
 import { initialPaymentStatus, type PaymentAccountSnapshot, type PaymentMethod, type PaymentStatus } from "@/lib/payment"
@@ -12,6 +12,8 @@ import { deletePaymentProof, newProofKey, putPaymentProof } from "@/lib/storage/
 import { CACHE_TAGS, productTag } from "@/lib/cache-tags"
 import { uniqueViolation } from "@/lib/manage-helpers"
 import { auditBlocked, chargeOrder } from "@/lib/wallet/ledger"
+import { normalizedReferenceSql } from "@/lib/wallet/reference-sql"
+import { normalizeReference } from "@/lib/wallet/rules"
 import { redeemCoupon } from "./coupons"
 import { deductVariantStock, OutOfStockError, syncProductStock } from "./variants"
 import type { PricingProduct, PricingResult } from "./pricing"
@@ -117,12 +119,20 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
   }
 
   const soldSlugs: string[] = []
+  let couponExhausted = false
   try {
     const created = await db.transaction(async (tx) => {
       let duplicateTransferReference = false
       if (isTransfer && payment.reference) {
-        const [{ n }] = await tx.select({ n: count() }).from(orders).where(eq(orders.transferReference, payment.reference))
-        duplicateTransferReference = n > 0
+        // نفس الحوالة قد تُكتب بأرقام عربية مرة ولاتينية مرة، أو تُستعمل لشحن رصيد: نقارن بعد التطبيع وفي الجدولين.
+        const reference = normalizeReference(payment.reference)
+        const [{ n }] = await tx.select({ n: count() }).from(orders).where(sql`${normalizedReferenceSql(orders.transferReference)} = ${reference}`)
+        // الشحن المرفوض أو الملغى لم يستعمل الحوالة، فلا يُحتسب تكراراً.
+        const [{ t }] = await tx
+          .select({ t: count() })
+          .from(walletTopups)
+          .where(and(eq(walletTopups.reference, reference), inArray(walletTopups.status, ["pending", "approved"])))
+        duplicateTransferReference = n > 0 || t > 0
       }
 
       // رقم الطلب عشوائي؛ نعيد المحاولة في الحالة النادرة لتصادمه (داخل SAVEPOINT).
@@ -176,7 +186,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
       if (!orderNumber) throw new Error("تعذّر توليد رقم طلب فريد")
 
       // الكود المستعمل يُستهلك ذرياً هنا (أحادي الاستعمال/مقيّد بعميل)؛ إن لم يعد صالحاً يتراجع الطلب كله.
-      if (pricing.couponCode) await redeemCoupon(tx, pricing.couponCode, input.customer.id)
+      couponExhausted = pricing.couponCode ? (await redeemCoupon(tx, pricing.couponCode, input.customer.id)).exhausted : false
 
       // البنود لقطة ثابتة (الاسم والسعر)، وتُربط بالمنتج الحي إن وُجد حتى لو حُذف لاحقاً.
       const numbers = pricing.lines.map((l) => l.productId)
@@ -200,7 +210,9 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
       })
       const tracked = await deductVariantStock(tx, variantLines)
       soldSlugs.push(...(await syncProductStock(tx, [...tracked])))
-      for (const [number, { qty, name }] of [...wanted].sort(([a], [b]) => a.localeCompare(b))) {
+      // بترتيب معرّف المنتج (كما في إعادة المخزون عند الإلغاء) كي لا تتعاكس الأقفال بين العمليتين.
+      const byUuid = (n: string) => uuidByNumber.get(n) ?? n
+      for (const [number, { qty, name }] of [...wanted].sort(([a], [b]) => byUuid(a).localeCompare(byUuid(b)))) {
         if (tracked.has(uuidByNumber.get(number) ?? "")) continue
         const updated = await tx
           .update(products)
@@ -257,6 +269,7 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
       return { id: orderId, orderNumber, paymentStatus }
     })
     invalidateStock(soldSlugs)
+    if (couponExhausted) invalidateCoupons()
     return created
   } catch (error) {
     if (proofKey) await deletePaymentProof(proofKey).catch(() => {})
@@ -268,6 +281,15 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
       if (existing) return { id: existing.id, orderNumber: existing.orderNumber, paymentStatus: existing.paymentStatus as PaymentStatus, duplicate: true }
     }
     throw error
+  }
+}
+
+/** قائمة الأكواد العامة مخزّنة في الكاش؛ تُبطل عند استهلاك آخر استعمال لكود أو إعادة استعمال له. */
+export function invalidateCoupons() {
+  try {
+    revalidateTag(CACHE_TAGS.coupons, { expire: 0 })
+  } catch {
+    // خارج سياق طلب Next (اختبارات/سكربتات): لا كاش لإبطاله.
   }
 }
 

@@ -8,6 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { CACHE_TAGS } from '@/lib/cache-tags'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
+import { unwrapAll } from '@/lib/action-result'
 
 const db = drizzle(new PGlite())
 const mocks = vi.hoisted(() => ({
@@ -23,10 +24,10 @@ vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assert
 vi.mock('@/lib/storage/r2', () => ({ deleteImageObject: mocks.deleteImageObject, createImageUpload: vi.fn(async (type: string, size: number, folder: string) => ({ uploadUrl: `https://r2/${folder}/${type}/${size}`, objectKey: `${folder}/new.png` })), createVideoUpload: vi.fn(async (type: string, size: number) => ({ uploadUrl: `https://r2/video/${type}/${size}`, objectKey: 'ads/new.mp4' })) }))
 vi.mock('ai', () => ({ generateText: vi.fn(async () => ({ text: 'Women Dress Nike!' })) }))
 
-const A = await import('@/app/manage/actions')
+const A = unwrapAll(await import('@/app/manage/actions'))
 const { hashPassword, verifyPasswordHash } = await import('@/lib/manage-users')
 const helpers = await import('@/lib/manage-helpers')
-const uploads = await import('@/app/manage/upload-actions')
+const uploads = unwrapAll(await import('@/app/manage/upload-actions'))
 
 const seed = loadSeedData(path.resolve(__dirname, '../scripts/migration/data'))
 const KEY = (folder: string, name: string) => `${folder}/${name}.png`
@@ -54,6 +55,13 @@ const productForm = (over: Record<string, string | string[]> = {}) =>
   form({ name: 'منتج اختبار', categoryId, price: '100', slug: 'test-product', ...over })
 
 describe('saveProduct with stock per colour and size', () => {
+  it('stores sizes trimmed and de-duplicated so variant stock matches the ordered size', async () => {
+    await A.saveProduct(null, productForm({ slug: 'trim-sizes', sizes: [' M', 'L ', 'M', ''], trackVariants: 'true', variants: JSON.stringify([{ size: 'M', stock: 2 }, { size: 'L', stock: 1 }]) }))
+    const [p] = (await rows(s.products)).filter((x) => x.slug === 'trim-sizes')
+    expect(p.sizes).toEqual(['M', 'L'])
+    expect((await rows(s.productVariants)).filter((v) => v.productId === p.id).map((v) => v.size).sort()).toEqual(['L', 'M'])
+  })
+
   const colors = JSON.stringify([{ name: 'أحمر', hex: '#FF0000' }, { name: 'أزرق', hex: '#0000FF' }])
   const variantsOf = async (id: string) => (await rows(s.productVariants)).filter((v) => v.productId === id).map((v) => `${v.color}|${v.size}|${v.stock}`).sort()
   const rowsInput = (v: { color: string; size: string; stock: number; base?: number }[]) => JSON.stringify(v)
@@ -412,7 +420,7 @@ describe('panel users', () => {
 
 describe('authorization', () => {
   it('every action requires a manage session and writes nothing when it is missing', async () => {
-    mocks.auth.mockRejectedValue(new Error('UNAUTHORIZED'))
+    mocks.auth.mockRejectedValue(new Error('غير مصرّح'))
     const before = [(await rows(s.products)).length, (await rows(s.categories)).length, (await rows(s.coupons)).length, (await rows(s.manageUsers)).length]
     const id = '00000000-0000-4000-8000-000000000000'
     const attempts = [
@@ -423,7 +431,7 @@ describe('authorization', () => {
       A.toggleAdActive(id, true), A.deleteAd(id), A.saveSettings(null, form({ name: 'x' })), A.saveUser(null, form({ username: 'abc', password: '123456' })),
       A.deleteUser(id), A.toggleUserActive(id, true), A.generateProductSlug({ product: 'x' }), uploads.requestImageUpload('products', 'image/png', 10),
     ]
-    for (const a of attempts) await expect(a).rejects.toThrow('UNAUTHORIZED')
+    for (const a of attempts) await expect(a).rejects.toThrow('غير مصرّح')
     expect([(await rows(s.products)).length, (await rows(s.categories)).length, (await rows(s.coupons)).length, (await rows(s.manageUsers)).length]).toEqual(before)
     expect(mocks.revalidateTag).not.toHaveBeenCalled()
     mocks.auth.mockReset()
@@ -454,6 +462,38 @@ describe('requestImageUpload', () => {
     delete process.env.R2_BUCKET
     await expect(uploads.requestImageUpload('products', 'image/png', 1000)).rejects.toThrow('غير مضبوط')
     Object.assign(process.env, saved)
+  })
+})
+
+describe('requestImageUploads (batch)', () => {
+  it('signs every item in one call and rejects any invalid item before signing', async () => {
+    const saved = { ...process.env }
+    Object.assign(process.env, { R2_ACCOUNT_ID: 'a', R2_ACCESS_KEY_ID: 'b', R2_SECRET_ACCESS_KEY: 'c', R2_BUCKET: 'd', R2_PUBLIC_URL: 'https://cdn.example.com' })
+    const ok = { folder: 'products', contentType: 'image/png', size: 1000 }
+    const out = await uploads.requestImageUploads([ok, { ...ok, folder: 'brands' }])
+    expect(out).toEqual([{ uploadUrl: 'https://r2/products/image/png/1000', objectKey: 'products/new.png' }, { uploadUrl: 'https://r2/brands/image/png/1000', objectKey: 'brands/new.png' }])
+    await expect(uploads.requestImageUploads([])).rejects.toThrow('من 1 إلى 30')
+    await expect(uploads.requestImageUploads(Array.from({ length: 31 }, () => ok))).rejects.toThrow('من 1 إلى 30')
+    await expect(uploads.requestImageUploads([ok, { ...ok, folder: 'payment-proofs' }])).rejects.toThrow('مجلد الصور غير مسموح')
+    await expect(uploads.requestImageUploads([{ ...ok, contentType: 'application/pdf' }])).rejects.toThrow('نوع الصورة غير مدعوم')
+    await expect(uploads.requestImageUploads([{ ...ok, size: 6 * 1024 * 1024 }])).rejects.toThrow('حجم الصورة')
+    Object.assign(process.env, saved)
+  })
+
+  it('requires an authenticated panel session', async () => {
+    mocks.auth.mockRejectedValueOnce(new Error('غير مصرّح'))
+    await expect(uploads.requestImageUploads([{ folder: 'products', contentType: 'image/png', size: 1 }])).rejects.toThrow('غير مصرّح')
+  })
+})
+
+describe('runAfterResponse', () => {
+  it('runs the task (inline outside a request) and swallows its failure', async () => {
+    const ran = vi.fn()
+    await helpers.runAfterResponse(async () => ran())
+    expect(ran).toHaveBeenCalledTimes(1)
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(helpers.runAfterResponse(async () => { throw new Error('boom') })).resolves.toBeUndefined()
+    err.mockRestore()
   })
 })
 

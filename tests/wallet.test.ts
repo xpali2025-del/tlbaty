@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -20,7 +21,7 @@ const { requestTopup, approveTopup, rejectTopup, cancelTopup } = await import('@
 const { insertOrder, loadPricingProducts } = await import('@/lib/orders/create')
 const { computeOrderPricing } = await import('@/lib/orders/pricing')
 const { computeAlerts, findWalletDetail, getAdminWalletOverview } = await import('@/lib/admin-wallet')
-const O = await import('@/app/manage/orders-actions')
+const O = unwrapAll(await import('@/app/manage/orders-actions'))
 const W = await import('@/app/manage/wallet-actions')
 const { WalletError, normalizeReference, MAX_BALANCE_BASE } = await import('@/lib/wallet/rules')
 
@@ -141,6 +142,28 @@ describe('top-up requests', () => {
     await db.insert(s.orders).values({ orderNumber: 'ORD-REFFLAG', customerName: 'x', phone: '1', subtotal: 1, total: 1, transferReference: 'zz 99-11' })
     const { id } = await topupReq(c, { reference: 'ZZ9911' })
     expect((await db.select().from(s.walletTopups).where(eq(s.walletTopups.id, id)))[0].referenceUsedOnOrder).toBe(true)
+  })
+
+  it('matches the same transfer across Arabic/Latin digits, in both directions (order ↔ topup)', async () => {
+    const c = await newCustomer()
+    const transfer = (reference: string) => ({ method: 'manual_transfer' as const, account, senderName: 'علي', senderPhone: '967771111111', reference, proof: null })
+    // طلب بأرقام عربية ثم شحن بأرقام لاتينية → الشحن موسوم
+    await insertOrder({ customer: { id: c }, contact, pricing: await price(), payment: transfer('٥٥٥٦٦٦٧٧') })
+    const { id } = await topupReq(c, { reference: '55566677' })
+    expect((await db.select().from(s.walletTopups).where(eq(s.walletTopups.id, id)))[0].referenceUsedOnOrder).toBe(true)
+    // شحن أولاً ثم طلب بنفس الرقم (بأرقام عربية) → الطلب موسوم كحوالة مكررة
+    await topupReq(c, { reference: '88899900' })
+    const o = await insertOrder({ customer: { id: c }, contact, pricing: await price(), payment: transfer('٨٨٨ ٩٩٩ ٠٠') })
+    expect((await db.select().from(s.orders).where(eq(s.orders.id, o.id)))[0].duplicateTransferReference).toBe(true)
+  })
+
+  it('does not count a cancelled top-up as a duplicate of a later order', async () => {
+    const c = await newCustomer()
+    const transfer = (reference: string) => ({ method: 'manual_transfer' as const, account, senderName: 'علي', senderPhone: '967771111111', reference, proof: null })
+    const t = await topupReq(c, { reference: '44455566' })
+    await cancelTopup(c, t.id)
+    const o = await insertOrder({ customer: { id: c }, contact, pricing: await price(), payment: transfer('44455566') })
+    expect((await db.select().from(s.orders).where(eq(s.orders.id, o.id)))[0].duplicateTransferReference).toBe(false)
   })
 
   it('limits pending requests, daily requests and repeated rejections', async () => {
@@ -274,6 +297,17 @@ describe('paying an order from the wallet', () => {
     expect(await balance(c)).toBe(5000)
   })
 
+  it('deleting a wallet-paid order whose delivery failed still refunds it (failed is not final)', async () => {
+    const c = await newCustomer()
+    await credit(c, 5000)
+    const pricing = await price()
+    const o = await insertOrder({ customer: { id: c }, contact, pricing, payment: walletPay })
+    await db.update(s.orders).set({ status: 'failed' }).where(eq(s.orders.id, o.id))
+    expect(await balance(c)).toBe(5000 - pricing.base.total)
+    await O.deleteOrder(o.id)
+    expect(await balance(c)).toBe(5000)
+  })
+
   it('wallet payment status cannot be changed by hand', async () => {
     const { canTransitionPayment } = await import('@/lib/payment')
     for (const next of ['verified', 'rejected', 'refunded', 'cancelled', 'pending_verification'] as const) expect(canTransitionPayment('wallet', 'paid', next)).toBe(false)
@@ -281,6 +315,21 @@ describe('paying an order from the wallet', () => {
 })
 
 describe('admin actions and monitoring', () => {
+  it('applies an admin adjustment once per request id (double click / retry), but twice for two requests', async () => {
+    const c = await newCustomer()
+    const id1 = '11111111-1111-4111-8111-111111111111'
+    const [a, b] = await Promise.all([W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', id1), W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', id1)])
+    expect([a.ok, b.ok]).toEqual([true, true])
+    expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', id1)).ok).toBe(true)
+    expect(await balance(c)).toBe(1000)
+    expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', '22222222-2222-4222-8222-222222222222')).ok).toBe(true)
+    expect(await balance(c)).toBe(2000)
+    expect((await W.adjustWallet(c, 'credit', 1000, 'تعويض عن تأخير', 'not-a-uuid')).ok).toBe(false)
+    // نفس المعرّف لعملية مختلفة (خصم) تُطبَّق ولا تُعامل كمكررة
+    expect((await W.adjustWallet(c, 'debit', 1000, 'تعويض عن تأخير', id1)).ok).toBe(true)
+    expect(await balance(c)).toBe(1000)
+  })
+
   it('check the wallets permission, require a reason, cap adjustments and write the ledger under the admin name', async () => {
     const c = await newCustomer()
     expect((await W.adjustWallet(c, 'credit', 1000, 'abc')).ok).toBe(false)

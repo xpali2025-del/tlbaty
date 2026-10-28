@@ -19,7 +19,8 @@ export function isVariantTracked(p: Pick<WithStock, "variantStock">): boolean {
 export function normalizeVariantKey(variants: readonly VariantStock[], color: string, size: string): { color: string; size: string } {
   const colorless = variants.every((v) => v.color === "")
   const sizeless = variants.every((v) => v.size === "")
-  return { color: colorless ? "" : color, size: sizeless ? "" : size }
+  // صفوف المخزون تُحفظ بلا مسافات طرفية؛ منتجات قديمة قد تحفظ مقاساتها بمسافة (« M») فتُطابَق بعد الحذف.
+  return { color: colorless ? "" : color.trim(), size: sizeless ? "" : size.trim() }
 }
 
 /** الكمية المتاحة لتركيبة (لون، مقاس): مخزون الصف المطابق، 0 إن لم يوجد، أو المخزون الواحد لمنتج غير متتبَّع. */

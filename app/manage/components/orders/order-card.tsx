@@ -38,7 +38,8 @@ import { DeleteButton } from "../shared"
 import { OrderPaymentPanel } from "../order-payment-panel"
 import { OrderItemsTable, money } from "./order-items-table"
 import { OrderCourierPanel, OrderStatusHistory } from "./order-courier-panel"
-import { updateOrderStatus, deleteOrder } from "../../orders-actions"
+import { updateOrderStatus } from "../../orders-actions"
+import { deleteOrder } from "../../client-actions"
 
 // ============================================
 // بطاقة الطلب في لوحة الإدارة.

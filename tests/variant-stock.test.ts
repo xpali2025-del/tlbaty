@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { availableFor, colorInStock, firstAvailable, isVariantTracked, lowStockMessage, normalizeVariantKey, sizeInStock } from '@/lib/variant-stock'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -15,7 +16,7 @@ vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: async () => {}, as
 vi.mock('@/lib/storage/proofs', () => ({ newProofKey: () => 'k', putPaymentProof: async () => {}, deletePaymentProof: async () => {} }))
 
 const { insertOrder, OutOfStockError } = await import('@/lib/orders/create')
-const O = await import('@/app/manage/orders-actions')
+const O = unwrapAll(await import('@/app/manage/orders-actions'))
 
 const contact = { customerName: 'علي', phone: '0781234567', phoneNormalized: '967781234567', city: 'صنعاء', address: 'شارع', addressSource: 'new' as const, latitude: 15.3, longitude: 44.2, accuracy: 20, capturedAt: new Date(), note: '' }
 const cod = { method: 'cash_on_delivery' as const, account: null, senderName: '', senderPhone: '', reference: '', proof: null }
@@ -63,6 +64,8 @@ describe('variant stock helpers', () => {
     const colorless = [{ color: '', size: 'M', stock: 2 }]
     expect(normalizeVariantKey(colorless, 'default', 'M')).toEqual({ color: '', size: 'M' })
     expect(availableFor({ stock: 2, variantStock: colorless }, 'default', 'M')).toBe(2)
+    // منتج قديم مقاسه محفوظ بمسافة طرفية يطابق صف المخزون المنقّح
+    expect(availableFor({ stock: 2, variantStock: colorless }, 'default', ' M ')).toBe(2)
   })
   it('low-stock wording', () => {
     expect(lowStockMessage(0)).toBe('نفد المخزون')
@@ -72,6 +75,11 @@ describe('variant stock helpers', () => {
 })
 
 describe('orders against variant stock', () => {
+  it('matches a legacy size stored with surrounding spaces', async () => {
+    await insertOrder({ customer: { id: customerId }, contact, pricing: pricingFor([{ color: 'أسود ', size: ' M', quantity: 1 }]), payment: cod })
+    expect(await variants()).toEqual(['أبيض|M|5', 'أسود|L|0', 'أسود|M|2'])
+  })
+
   it('deducts only the ordered colour/size and mirrors the total on the product', async () => {
     await insertOrder({ customer: { id: customerId }, contact, pricing: pricingFor([{ color: 'أسود', size: 'M', quantity: 2 }]), payment: cod })
     expect(await variants()).toEqual(['أبيض|M|5', 'أسود|L|0', 'أسود|M|1'])

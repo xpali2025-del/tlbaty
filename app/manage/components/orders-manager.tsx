@@ -28,7 +28,7 @@ import {
   type PaymentMethod,
   type PaymentStatus,
 } from "@/lib/payment"
-import { fetchOrdersPage } from "../orders-actions"
+import { fetchOrdersPage } from "../client-actions"
 import { OrderCard } from "./orders/order-card"
 import { OrdersByCity } from "./orders/orders-by-city"
 import { AssignCourierDialog } from "./orders/assign-courier-dialog"
