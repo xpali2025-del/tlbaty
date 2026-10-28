@@ -112,7 +112,7 @@ describe('createAppClaim (worker → app request)', () => {
       calls.push({ url, init })
       return { json: async () => ({ ok: true, text: 'رمزك 123456' }) }
     }
-    const claim = createAppClaim({ url: 'https://shop.example/api/auth/chat-login/claim', workerToken: 'worker-secret-token', fetchImpl })
+    const claim = createAppClaim({ url: 'https://shop.example/api/auth/chat-login/claim', workerToken: 'worker-secret-token', fetchImpl: fetchImpl as unknown as typeof fetch })
     expect(await claim({ phone: '967771234567', token: 'K7M2QX' })).toEqual({ ok: true, text: 'رمزك 123456' })
     const headers = calls[0].init.headers as Record<string, string>
     expect(headers.Authorization).toBe('Bearer worker-secret-token')
@@ -121,7 +121,7 @@ describe('createAppClaim (worker → app request)', () => {
 
   it('returns ok:false when the app answers with a non-JSON body', async () => {
     const { createAppClaim } = await import('../worker/whatsapp/inbound.mjs')
-    const claim = createAppClaim({ url: 'https://x', workerToken: 't', fetchImpl: async () => ({ json: async () => { throw new Error('bad json') } }) })
+    const claim = createAppClaim({ url: 'https://x', workerToken: 't', fetchImpl: (async () => ({ json: async () => { throw new Error('bad json') } })) as unknown as typeof fetch })
     expect(await claim({ phone: '967771234567', token: 'K7M2QX' })).toEqual({ ok: false })
   })
 })
