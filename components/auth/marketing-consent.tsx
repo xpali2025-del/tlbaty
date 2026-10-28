@@ -31,7 +31,7 @@ export function MarketingConsent({ initial }: { initial: boolean }) {
   }
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-card p-4">
+    <div className="flex items-start justify-between gap-4 p-4">
       <div className="min-w-0">
         <label htmlFor="marketing-opt-in" className="block text-sm font-bold">
           أوافق على استلام العروض

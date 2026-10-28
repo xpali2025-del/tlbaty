@@ -5,7 +5,7 @@ import type { LucideIcon } from "lucide-react"
 /** مجموعة إعدادات: عنوان قصير وبطاقة صفوف متتالية. */
 export function SettingsGroup({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="mb-6" aria-label={title}>
+    <section className="mb-8" aria-label={title}>
       <h2 className="mb-2 px-1 text-sm font-bold text-muted-foreground">{title}</h2>
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
         <ul className="divide-y divide-border">{children}</ul>
@@ -15,12 +15,64 @@ export function SettingsGroup({ title, hint, children }: { title: string; hint?:
   )
 }
 
+/** مجموعة تحكّمات (عملة، موافقات): بطاقة واحدة بفواصل بين التحكمات بدل بطاقة لكل تحكم. */
+export function PreferencesGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-8" aria-label={title}>
+      <h2 className="mb-2 px-1 text-sm font-bold text-muted-foreground">{title}</h2>
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">{children}</div>
+    </section>
+  )
+}
+
 const rowCls = "flex min-h-14 w-full items-center gap-3 px-4 py-3 text-right transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+
+/**
+ * بلاطة وصول سريع في مركز العميل: الأيقونة والقيمة (عدّاد/رصيد) في الأعلى والاسم أسفلها.
+ * `locked` للزائر: بلاطة خافتة بقفل تقوده إلى تسجيل الدخول ثم تعيده إلى وجهته.
+ */
+export function StatTile({
+  href,
+  icon: Icon,
+  label,
+  value,
+  locked,
+  className = "",
+}: {
+  href: string
+  icon: LucideIcon
+  label: string
+  value?: React.ReactNode
+  locked?: boolean
+  className?: string
+}) {
+  const base = `flex min-h-28 flex-col justify-between gap-4 rounded-2xl border border-border bg-card p-4 text-right transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`
+  if (locked) {
+    return (
+      <Link href={`/login?next=${encodeURIComponent(href)}`} className={base} aria-label={`${label} — يتطلب تسجيل الدخول`}>
+        <span className="flex items-start justify-between">
+          <Icon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+          <Lock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        </span>
+        <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      </Link>
+    )
+  }
+  return (
+    <Link href={href} className={base}>
+      <span className="flex items-start justify-between gap-2">
+        <Icon className="h-6 w-6 text-primary" aria-hidden="true" />
+        <span className="min-h-7 text-lg font-bold tabular-nums leading-7">{value}</span>
+      </span>
+      <span className="text-sm font-medium">{label}</span>
+    </Link>
+  )
+}
 
 function RowBody({ icon: Icon, label, description, trailing, muted }: { icon: LucideIcon; label: string; description?: string; trailing?: React.ReactNode; muted?: boolean }) {
   return (
     <>
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${muted ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground">
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
