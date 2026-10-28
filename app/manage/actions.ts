@@ -1,5 +1,6 @@
 "use server"
 
+import { serverAction } from "@/lib/server-action"
 import { parseSizeChart, validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { generateText } from "ai"
 import { and, count, eq, inArray, isNotNull, sql } from "drizzle-orm"
@@ -65,7 +66,7 @@ import { findUserByUsername, hashPassword } from "@/lib/manage-users"
  * تُترجَم/تُحوّل الأسماء العربية إلى إنجليزية عبر الذكاء الاصطناعي، مع احترام
  * الأسماء الإنجليزية المعروفة للبراندات (مثل نايكي → nike).
  */
-export async function generateProductSlug(input: {
+async function generateProductSlugImpl(input: {
   category?: string
   product?: string
   brand?: string
@@ -107,7 +108,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/
 
 // ---------- المنتجات ----------
 
-export async function saveProduct(id: string | null, form: FormData) {
+async function saveProductImpl(id: string | null, form: FormData) {
   await assertManagePermission("products")
 
   const name = str(form, "name")
@@ -305,7 +306,7 @@ async function saveVariantStock(
 }
 
 /** تعبئة بصمات الألوان للمنتجات القائمة (صورها موجودة وبلا بصمة) — دفعة من 40 في كل نداء. */
-export async function backfillImagePalettes(): Promise<{ done: number; remaining: number }> {
+async function backfillImagePalettesImpl(): Promise<{ done: number; remaining: number }> {
   await assertManagePermission("products")
   const batch = await productsMissingPalette(40)
   let done = 0
@@ -314,7 +315,7 @@ export async function backfillImagePalettes(): Promise<{ done: number; remaining
   return { done, remaining: Number(n) }
 }
 
-export async function deleteProduct(id: string) {
+async function deleteProductImpl(id: string) {
   await assertManagePermission("products")
   const productId = uuidParam(id)
   const [existing] = await db.select().from(products).where(eq(products.id, productId)).limit(1)
@@ -325,7 +326,7 @@ export async function deleteProduct(id: string) {
   await runAfterResponse(() => removeObjects([existing.mainImageKey, ...gallery.map((g) => g.imageKey)]))
 }
 
-export async function toggleProductFlag(id: string, field: "isNew" | "isBestseller", value: boolean) {
+async function toggleProductFlagImpl(id: string, field: "isNew" | "isBestseller", value: boolean) {
   await assertManagePermission("products")
   if (field !== "isNew" && field !== "isBestseller") throw new Error("حقل غير مدعوم")
   const productId = uuidParam(id)
@@ -340,7 +341,7 @@ export async function toggleProductFlag(id: string, field: "isNew" | "isBestsell
 
 // ---------- الأقسام ----------
 
-export async function saveCategory(id: string | null, form: FormData) {
+async function saveCategoryImpl(id: string | null, form: FormData) {
   await assertManagePermission("categories")
 
   const name = str(form, "name")
@@ -410,7 +411,7 @@ export async function saveCategory(id: string | null, form: FormData) {
   await removeObjects([oldImage])
 }
 
-export async function deleteCategory(id: string) {
+async function deleteCategoryImpl(id: string) {
   await assertManagePermission("categories")
   const categoryId = uuidParam(id)
   const [{ n }] = await db.select({ n: count() }).from(products).where(eq(products.categoryId, categoryId))
@@ -426,7 +427,7 @@ export async function deleteCategory(id: string) {
 
 // ---------- الماركات ----------
 
-export async function saveBrand(id: string | null, form: FormData) {
+async function saveBrandImpl(id: string | null, form: FormData) {
   await assertManagePermission("brands")
 
   const name = str(form, "name")
@@ -466,7 +467,7 @@ export async function saveBrand(id: string | null, form: FormData) {
   await removeObjects([oldImage])
 }
 
-export async function deleteBrand(id: string) {
+async function deleteBrandImpl(id: string) {
   await assertManagePermission("brands")
   const brandId = uuidParam(id)
   const [existing] = await db.select().from(brands).where(eq(brands.id, brandId)).limit(1)
@@ -478,7 +479,7 @@ export async function deleteBrand(id: string) {
 
 // ---------- السلايدر ----------
 
-export async function saveSlide(id: string | null, form: FormData) {
+async function saveSlideImpl(id: string | null, form: FormData) {
   await assertManagePermission("slides")
 
   const title = str(form, "title")
@@ -510,7 +511,7 @@ export async function saveSlide(id: string | null, form: FormData) {
   await removeObjects([oldImage])
 }
 
-export async function deleteSlide(id: string) {
+async function deleteSlideImpl(id: string) {
   await assertManagePermission("slides")
   const slideId = uuidParam(id)
   const [existing] = await db.select().from(slides).where(eq(slides.id, slideId)).limit(1)
@@ -522,7 +523,7 @@ export async function deleteSlide(id: string) {
 
 // ---------- الكوبونات ----------
 
-export async function saveCoupon(id: string | null, form: FormData) {
+async function saveCouponImpl(id: string | null, form: FormData) {
   await assertManagePermission("coupons")
 
   const code = str(form, "code")
@@ -559,7 +560,7 @@ export async function saveCoupon(id: string | null, form: FormData) {
   revalidateStore()
 }
 
-export async function deleteCoupon(id: string) {
+async function deleteCouponImpl(id: string) {
   await assertManagePermission("coupons")
   await db.delete(coupons).where(eq(coupons.id, uuidParam(id)))
   revalidateStore()
@@ -567,7 +568,7 @@ export async function deleteCoupon(id: string) {
 
 // ---------- التقييمات ----------
 
-export async function saveReview(id: string | null, form: FormData) {
+async function saveReviewImpl(id: string | null, form: FormData) {
   await assertManagePermission("reviews")
 
   const name = str(form, "name")
@@ -602,7 +603,7 @@ export async function saveReview(id: string | null, form: FormData) {
   await removeObjects([oldImage])
 }
 
-export async function deleteReview(id: string) {
+async function deleteReviewImpl(id: string) {
   await assertManagePermission("reviews")
   const reviewId = uuidParam(id)
   const [existing] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1)
@@ -614,7 +615,7 @@ export async function deleteReview(id: string) {
 
 // ---------- الإعلانات ----------
 
-export async function saveAd(id: string | null, form: FormData) {
+async function saveAdImpl(id: string | null, form: FormData) {
   await assertManagePermission("ads")
 
   const title = str(form, "title")
@@ -679,13 +680,13 @@ export async function saveAd(id: string | null, form: FormData) {
   await removeObjects([oldImage, oldVideo])
 }
 
-export async function toggleAdActive(id: string, value: boolean) {
+async function toggleAdActiveImpl(id: string, value: boolean) {
   await assertManagePermission("ads")
   await db.update(ads).set({ active: Boolean(value), updatedAt: new Date() }).where(eq(ads.id, uuidParam(id)))
   revalidateStore()
 }
 
-export async function deleteAd(id: string) {
+async function deleteAdImpl(id: string) {
   await assertManagePermission("ads")
   const adId = uuidParam(id)
   const [existing] = await db.select().from(ads).where(eq(ads.id, adId)).limit(1)
@@ -714,7 +715,7 @@ function socialField(form: FormData, key: string, label: string): string | null 
   throw new Error(`${label}: أدخل رابطاً كاملاً (https://…) أو اسم الحساب فقط`)
 }
 
-export async function saveSettings(_id: string | null, form: FormData) {
+async function saveSettingsImpl(_id: string | null, form: FormData) {
   await assertManagePermission("settings")
 
   const logoKey = newImageKey(form, "logoKey")
@@ -822,7 +823,7 @@ async function actorRowId(actor: { username: string; isOwner: boolean }): Promis
   return (await findUserByUsername(actor.username))?._id ?? null
 }
 
-export async function saveUser(id: string | null, form: FormData) {
+async function saveUserImpl(id: string | null, form: FormData) {
   const actor = await assertManagePermission("users")
 
   const username = str(form, "username")
@@ -889,7 +890,7 @@ export async function saveUser(id: string | null, form: FormData) {
   revalidateManage()
 }
 
-export async function deleteUser(id: string) {
+async function deleteUserImpl(id: string) {
   const actor = await assertManagePermission("users")
   const userId = uuidParam(id)
   const [target] = await db.select().from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
@@ -900,7 +901,7 @@ export async function deleteUser(id: string) {
   revalidateManage()
 }
 
-export async function toggleUserActive(id: string, value: boolean) {
+async function toggleUserActiveImpl(id: string, value: boolean) {
   const actor = await assertManagePermission("users")
   const userId = uuidParam(id)
   const [target] = await db.select().from(manageUsers).where(eq(manageUsers.id, userId)).limit(1)
@@ -912,13 +913,39 @@ export async function toggleUserActive(id: string, value: boolean) {
 }
 
 /** اسم المستخدم الحالي — يُستخدم لمنع المستخدم من حذف حسابه أثناء الجلسة. */
-export async function getCurrentManageUser(): Promise<string | null> {
+async function getCurrentManageUserImpl(): Promise<string | null> {
   return getManageSessionUser()
 }
 
 /** حالة بوت واتساب للدخول (للوحة الإعدادات). */
-export async function fetchWhatsappStatus() {
+async function fetchWhatsappStatusImpl() {
   await assertManagePermission("settings")
   const { getWhatsappStatus } = await import("@/lib/whatsapp-status")
   return getWhatsappStatus()
 }
+
+// الإجراءات المصدَّرة: تعيد الأخطاء المتوقعة كقيمة فتصل رسالتها للمدير في الإنتاج (انظر lib/server-action.ts).
+export const generateProductSlug = serverAction(generateProductSlugImpl)
+export const saveProduct = serverAction(saveProductImpl)
+export const backfillImagePalettes = serverAction(backfillImagePalettesImpl)
+export const deleteProduct = serverAction(deleteProductImpl)
+export const toggleProductFlag = serverAction(toggleProductFlagImpl)
+export const saveCategory = serverAction(saveCategoryImpl)
+export const deleteCategory = serverAction(deleteCategoryImpl)
+export const saveBrand = serverAction(saveBrandImpl)
+export const deleteBrand = serverAction(deleteBrandImpl)
+export const saveSlide = serverAction(saveSlideImpl)
+export const deleteSlide = serverAction(deleteSlideImpl)
+export const saveCoupon = serverAction(saveCouponImpl)
+export const deleteCoupon = serverAction(deleteCouponImpl)
+export const saveReview = serverAction(saveReviewImpl)
+export const deleteReview = serverAction(deleteReviewImpl)
+export const saveAd = serverAction(saveAdImpl)
+export const toggleAdActive = serverAction(toggleAdActiveImpl)
+export const deleteAd = serverAction(deleteAdImpl)
+export const saveSettings = serverAction(saveSettingsImpl)
+export const saveUser = serverAction(saveUserImpl)
+export const deleteUser = serverAction(deleteUserImpl)
+export const toggleUserActive = serverAction(toggleUserActiveImpl)
+export const getCurrentManageUser = serverAction(getCurrentManageUserImpl)
+export const fetchWhatsappStatus = serverAction(fetchWhatsappStatusImpl)

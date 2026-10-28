@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { DEFAULT_REMINDER_RULES, renderReminderText, validateRule, describeDiscount } from '@/lib/marketing/rules'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -19,7 +20,7 @@ const { runReminders, getReminderRules } = await import('@/lib/marketing/reminde
 const { getCouponsForCustomer, getCoupons } = await import('@/lib/data')
 const { getPublicNotifications, getNotificationsSummary } = await import('@/lib/notifications')
 const { insertOrder, CouponUnavailableError } = await import('@/lib/orders/create')
-const O = await import('@/app/manage/orders-actions')
+const O = unwrapAll(await import('@/app/manage/orders-actions'))
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR

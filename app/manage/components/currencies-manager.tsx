@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { AdminCurrency } from "@/lib/admin"
 import { BASE_CURRENCY_CODE, DEFAULT_CURRENCIES, convertPrice } from "@/lib/currency"
-import { saveCurrencies } from "../shipping-actions"
+import { saveCurrencies } from "../client-actions"
 import { SectionHeader } from "./shared"
 
 // إدارة العملات وأسعار الصرف والعملة الافتراضية للمتجر.

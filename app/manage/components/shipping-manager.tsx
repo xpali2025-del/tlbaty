@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { AdminShipping, AdminShippingMethod, AdminShippingZone } from "@/lib/admin"
 import { YEMEN_GOVERNORATES } from "@/lib/yemen-governorates"
-import { deleteShippingZone, saveShippingZone } from "../shipping-actions"
+import { deleteShippingZone, saveShippingZone } from "../client-actions"
 import { DeleteButton, SectionHeader } from "./shared"
 
 const ICONS: AdminShippingMethod["icon"][] = ["standard", "express", "pickup"]

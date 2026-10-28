@@ -113,12 +113,12 @@ export async function compressImage(file: File, folder: ImageFolder): Promise<Fi
 }
 
 async function defaultRequest(folder: string, contentType: string, size: number) {
-  const { requestImageUpload } = await import("@/app/manage/upload-actions")
+  const { requestImageUpload } = await import("@/app/manage/client-actions")
   return requestImageUpload(folder, contentType, size)
 }
 
 async function defaultRequestBatch(items: { folder: string; contentType: string; size: number }[]) {
-  const { requestImageUploads } = await import("@/app/manage/upload-actions")
+  const { requestImageUploads } = await import("@/app/manage/client-actions")
   return requestImageUploads(items)
 }
 

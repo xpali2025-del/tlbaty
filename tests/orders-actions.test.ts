@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -17,7 +18,7 @@ vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revali
 vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assertManageAuthenticated: mocks.auth, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'مدير الاختبار' }))
 vi.mock('@/lib/storage/proofs', async (orig) => ({ ...(await orig<typeof import('@/lib/storage/proofs')>()), deletePaymentProof: mocks.deletePaymentProof }))
 
-const A = await import('@/app/manage/orders-actions')
+const A = unwrapAll(await import('@/app/manage/orders-actions'))
 
 let seq = 0
 async function order(over: Partial<typeof s.orders.$inferInsert> = {}) {
@@ -164,8 +165,8 @@ describe('updatePaymentStatus', () => {
 
   it('requires auth', async () => {
     const o = await transfer()
-    mocks.auth.mockRejectedValueOnce(new Error('unauthorized'))
-    await expect(A.updatePaymentStatus(o.id, 'verified')).rejects.toThrow('unauthorized')
+    mocks.auth.mockRejectedValueOnce(new Error('غير مصرّح'))
+    await expect(A.updatePaymentStatus(o.id, 'verified')).rejects.toThrow('غير مصرّح')
     expect((await get(o.id)).paymentStatus).toBe('pending_verification')
   })
 })

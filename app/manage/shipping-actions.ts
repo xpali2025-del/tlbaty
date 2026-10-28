@@ -1,5 +1,6 @@
 "use server"
 
+import { serverAction } from "@/lib/server-action"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db/client"
@@ -19,7 +20,7 @@ const currencySchema = z.object({
   rate: z.number().finite().positive("سعر الصرف يجب أن يكون أكبر من صفر").max(1_000_000),
 })
 
-export async function saveCurrencies(list: unknown, defaultCode: unknown): Promise<void> {
+async function saveCurrenciesImpl(list: unknown, defaultCode: unknown): Promise<void> {
   await assertManagePermission("currencies")
   const parsed = z.array(currencySchema).min(1, "أضف عملة واحدة على الأقل").max(20).parse(list)
   const codes = parsed.map((c) => c.code)
@@ -67,7 +68,7 @@ const zoneSchema = z.object({
     .max(10),
 })
 
-export async function saveShippingZone(id: string | null, input: unknown): Promise<void> {
+async function saveShippingZoneImpl(id: string | null, input: unknown): Promise<void> {
   await assertManagePermission("shipping")
   const zone = zoneSchema.parse(input)
   const governorate = zone.isDefault ? null : zone.governorate
@@ -104,8 +105,13 @@ export async function saveShippingZone(id: string | null, input: unknown): Promi
   revalidateStore()
 }
 
-export async function deleteShippingZone(id: string): Promise<void> {
+async function deleteShippingZoneImpl(id: string): Promise<void> {
   await assertManagePermission("shipping")
   await db.delete(shippingZones).where(eq(shippingZones.id, uuidParam(id)))
   revalidateStore()
 }
+
+// الإجراءات المصدَّرة: تعيد الأخطاء المتوقعة كقيمة فتصل رسالتها للمدير في الإنتاج (انظر lib/server-action.ts).
+export const saveCurrencies = serverAction(saveCurrenciesImpl)
+export const saveShippingZone = serverAction(saveShippingZoneImpl)
+export const deleteShippingZone = serverAction(deleteShippingZoneImpl)

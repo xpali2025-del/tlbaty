@@ -1,5 +1,6 @@
 "use server"
 
+import { serverAction } from "@/lib/server-action"
 import { revalidatePath } from "next/cache"
 import { and, asc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { z } from "zod"
@@ -295,7 +296,7 @@ export async function unassignCourier(id: string): Promise<OrderActionResult> {
  * تغيير حالة الدفع. تتحقق من الانتقال المسموح لطريقة الدفع، وتشترط سبباً عند الرفض،
  * وتسجّل التغيير. تُرمى الأخطاء (يعرضها المكوّن).
  */
-export async function updatePaymentStatus(
+async function updatePaymentStatusImpl(
   id: string,
   next: PaymentStatus,
   options?: { reason?: string; note?: string },
@@ -346,7 +347,7 @@ export async function updatePaymentStatus(
 }
 
 /** يحذف الطلب مع بنوده وسجلاته، ويحذف ملف إثبات الدفع المشفَّر من التخزين الخاص أيضاً. */
-export async function deleteOrder(id: string) {
+async function deleteOrderImpl(id: string) {
   await assertManagePermission("orders")
   const orderId = idSchema.parse(id)
   const [proof] = await db.select().from(orderPaymentProofs).where(eq(orderPaymentProofs.orderId, orderId)).limit(1)
@@ -375,8 +376,13 @@ export async function deleteOrder(id: string) {
   revalidateOrders()
 }
 
-export async function fetchOrdersPage(filters: OrderFilters, page: number): Promise<OrdersPage> {
+async function fetchOrdersPageImpl(filters: OrderFilters, page: number): Promise<OrdersPage> {
   await assertManagePermission("orders")
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 0
   return getAdminOrdersPage(filters ?? {}, safePage, ORDERS_PAGE_SIZE)
 }
+
+// الإجراءات المصدَّرة: تعيد الأخطاء المتوقعة كقيمة فتصل رسالتها للمدير في الإنتاج (انظر lib/server-action.ts).
+export const updatePaymentStatus = serverAction(updatePaymentStatusImpl)
+export const deleteOrder = serverAction(deleteOrderImpl)
+export const fetchOrdersPage = serverAction(fetchOrdersPageImpl)

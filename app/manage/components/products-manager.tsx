@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { AdminBrand, AdminCategory, AdminColor, AdminProduct, AdminSizeChart } from "@/lib/admin"
-import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes } from "../actions"
+import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes } from "../client-actions"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 

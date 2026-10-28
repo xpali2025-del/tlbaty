@@ -1,5 +1,6 @@
 "use server"
 
+import { serverAction } from "@/lib/server-action"
 import { revalidatePath, revalidateTag } from "next/cache"
 import { eq } from "drizzle-orm"
 import { CACHE_TAGS } from "@/lib/cache-tags"
@@ -30,7 +31,7 @@ function revalidatePaymentAccounts() {
   revalidatePath("/manage/payment-accounts")
 }
 
-export async function savePaymentAccount(id: string | null, form: FormData) {
+async function savePaymentAccountImpl(id: string | null, form: FormData) {
   await assertManagePermission("payment-accounts")
 
   const providerName = str(form, "providerName", 80)
@@ -68,14 +69,14 @@ export async function savePaymentAccount(id: string | null, form: FormData) {
   await removeObjects([oldImage])
 }
 
-export async function togglePaymentAccount(id: string, isActive: boolean) {
+async function togglePaymentAccountImpl(id: string, isActive: boolean) {
   await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   await db.update(paymentAccounts).set({ isActive: Boolean(isActive), updatedAt: new Date() }).where(eq(paymentAccounts.id, accountId))
   revalidatePaymentAccounts()
 }
 
-export async function updatePaymentAccountOrder(id: string, sortOrder: number) {
+async function updatePaymentAccountOrderImpl(id: string, sortOrder: number) {
   await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   const value = Number.isFinite(sortOrder) ? Math.min(9999, Math.max(0, Math.round(sortOrder))) : 0
@@ -83,7 +84,7 @@ export async function updatePaymentAccountOrder(id: string, sortOrder: number) {
   revalidatePaymentAccounts()
 }
 
-export async function deletePaymentAccount(id: string) {
+async function deletePaymentAccountImpl(id: string) {
   await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   const [existing] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, accountId)).limit(1)
@@ -93,7 +94,7 @@ export async function deletePaymentAccount(id: string) {
   await removeObjects([existing.imageKey])
 }
 
-export async function removePaymentAccountImage(id: string) {
+async function removePaymentAccountImageImpl(id: string) {
   await assertManagePermission("payment-accounts")
   const accountId = uuidParam(id, "معرّف الحساب مطلوب.")
   const [existing] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, accountId)).limit(1)
@@ -102,3 +103,10 @@ export async function removePaymentAccountImage(id: string) {
   revalidatePaymentAccounts()
   await removeObjects([existing.imageKey])
 }
+
+// الإجراءات المصدَّرة: تعيد الأخطاء المتوقعة كقيمة فتصل رسالتها للمدير في الإنتاج (انظر lib/server-action.ts).
+export const savePaymentAccount = serverAction(savePaymentAccountImpl)
+export const togglePaymentAccount = serverAction(togglePaymentAccountImpl)
+export const updatePaymentAccountOrder = serverAction(updatePaymentAccountOrderImpl)
+export const deletePaymentAccount = serverAction(deletePaymentAccountImpl)
+export const removePaymentAccountImage = serverAction(removePaymentAccountImageImpl)

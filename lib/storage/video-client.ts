@@ -69,7 +69,7 @@ export function extractVideoPoster(file: File): Promise<File> {
 }
 
 async function defaultRequest(contentType: string, size: number) {
-  const { requestVideoUpload } = await import("@/app/manage/upload-actions")
+  const { requestVideoUpload } = await import("@/app/manage/client-actions")
   return requestVideoUpload(contentType, size)
 }
 

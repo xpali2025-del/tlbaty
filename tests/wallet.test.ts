@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -20,7 +21,7 @@ const { requestTopup, approveTopup, rejectTopup, cancelTopup } = await import('@
 const { insertOrder, loadPricingProducts } = await import('@/lib/orders/create')
 const { computeOrderPricing } = await import('@/lib/orders/pricing')
 const { computeAlerts, findWalletDetail, getAdminWalletOverview } = await import('@/lib/admin-wallet')
-const O = await import('@/app/manage/orders-actions')
+const O = unwrapAll(await import('@/app/manage/orders-actions'))
 const W = await import('@/app/manage/wallet-actions')
 const { WalletError, normalizeReference, MAX_BALANCE_BASE } = await import('@/lib/wallet/rules')
 

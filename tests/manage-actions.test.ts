@@ -8,6 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { CACHE_TAGS } from '@/lib/cache-tags'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
+import { unwrapAll } from '@/lib/action-result'
 
 const db = drizzle(new PGlite())
 const mocks = vi.hoisted(() => ({
@@ -23,10 +24,10 @@ vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: mocks.auth, assert
 vi.mock('@/lib/storage/r2', () => ({ deleteImageObject: mocks.deleteImageObject, createImageUpload: vi.fn(async (type: string, size: number, folder: string) => ({ uploadUrl: `https://r2/${folder}/${type}/${size}`, objectKey: `${folder}/new.png` })), createVideoUpload: vi.fn(async (type: string, size: number) => ({ uploadUrl: `https://r2/video/${type}/${size}`, objectKey: 'ads/new.mp4' })) }))
 vi.mock('ai', () => ({ generateText: vi.fn(async () => ({ text: 'Women Dress Nike!' })) }))
 
-const A = await import('@/app/manage/actions')
+const A = unwrapAll(await import('@/app/manage/actions'))
 const { hashPassword, verifyPasswordHash } = await import('@/lib/manage-users')
 const helpers = await import('@/lib/manage-helpers')
-const uploads = await import('@/app/manage/upload-actions')
+const uploads = unwrapAll(await import('@/app/manage/upload-actions'))
 
 const seed = loadSeedData(path.resolve(__dirname, '../scripts/migration/data'))
 const KEY = (folder: string, name: string) => `${folder}/${name}.png`
@@ -412,7 +413,7 @@ describe('panel users', () => {
 
 describe('authorization', () => {
   it('every action requires a manage session and writes nothing when it is missing', async () => {
-    mocks.auth.mockRejectedValue(new Error('UNAUTHORIZED'))
+    mocks.auth.mockRejectedValue(new Error('غير مصرّح'))
     const before = [(await rows(s.products)).length, (await rows(s.categories)).length, (await rows(s.coupons)).length, (await rows(s.manageUsers)).length]
     const id = '00000000-0000-4000-8000-000000000000'
     const attempts = [
@@ -423,7 +424,7 @@ describe('authorization', () => {
       A.toggleAdActive(id, true), A.deleteAd(id), A.saveSettings(null, form({ name: 'x' })), A.saveUser(null, form({ username: 'abc', password: '123456' })),
       A.deleteUser(id), A.toggleUserActive(id, true), A.generateProductSlug({ product: 'x' }), uploads.requestImageUpload('products', 'image/png', 10),
     ]
-    for (const a of attempts) await expect(a).rejects.toThrow('UNAUTHORIZED')
+    for (const a of attempts) await expect(a).rejects.toThrow('غير مصرّح')
     expect([(await rows(s.products)).length, (await rows(s.categories)).length, (await rows(s.coupons)).length, (await rows(s.manageUsers)).length]).toEqual(before)
     expect(mocks.revalidateTag).not.toHaveBeenCalled()
     mocks.auth.mockReset()
@@ -473,8 +474,8 @@ describe('requestImageUploads (batch)', () => {
   })
 
   it('requires an authenticated panel session', async () => {
-    mocks.auth.mockRejectedValueOnce(new Error('UNAUTHORIZED'))
-    await expect(uploads.requestImageUploads([{ folder: 'products', contentType: 'image/png', size: 1 }])).rejects.toThrow('UNAUTHORIZED')
+    mocks.auth.mockRejectedValueOnce(new Error('غير مصرّح'))
+    await expect(uploads.requestImageUploads([{ folder: 'products', contentType: 'image/png', size: 1 }])).rejects.toThrow('غير مصرّح')
   })
 })
 

@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { SITE_CONFIG } from '@/lib/site'
+import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 const db = drizzle(new PGlite())
@@ -20,7 +21,7 @@ vi.mock('@/lib/manage-auth', () => ({
 }))
 
 const { mergeSiteConfig, getSiteConfig, whatsappDigits } = await import('@/lib/site-config')
-const A = await import('@/app/manage/actions')
+const A = unwrapAll(await import('@/app/manage/actions'))
 const form = (f: Record<string, string>) => {
   const d = new FormData()
   for (const [k, v] of Object.entries(f)) d.set(k, v)

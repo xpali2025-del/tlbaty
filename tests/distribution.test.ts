@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { planDistribution } from '@/lib/distribution'
+import { unwrapAll } from '@/lib/action-result'
 
 const d = (n: number) => new Date(Date.UTC(2026, 9, n))
 const order = (id: string, city: string, day = 1) => ({ id, city, createdAt: d(day) })
@@ -50,7 +51,7 @@ vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
 vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: auth, getManageSessionUser: async () => 'm' }))
 vi.mock('@/lib/storage/proofs', () => ({ deletePaymentProof: vi.fn() }))
-const A = await import('@/app/manage/orders-actions')
+const A = unwrapAll(await import('@/app/manage/orders-actions'))
 
 let seq = 0
 const mk = (over: Partial<typeof s.orders.$inferInsert> = {}) =>
