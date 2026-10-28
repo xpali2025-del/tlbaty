@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { revalidateTag } from "next/cache"
 import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
-import { orderItems, orderPaymentProofs, orderPaymentStatusHistory, orders, products } from "@/lib/db/store"
+import { orderItems, orderPaymentProofs, orderPaymentStatusHistory, orders, products, walletTopups } from "@/lib/db/store"
 import { resolveImageUrl } from "@/lib/images"
 import { buildProductNumber } from "@/lib/product-number"
 import { initialPaymentStatus, type PaymentAccountSnapshot, type PaymentMethod, type PaymentStatus } from "@/lib/payment"
@@ -12,6 +12,8 @@ import { deletePaymentProof, newProofKey, putPaymentProof } from "@/lib/storage/
 import { CACHE_TAGS, productTag } from "@/lib/cache-tags"
 import { uniqueViolation } from "@/lib/manage-helpers"
 import { auditBlocked, chargeOrder } from "@/lib/wallet/ledger"
+import { normalizedReferenceSql } from "@/lib/wallet/reference-sql"
+import { normalizeReference } from "@/lib/wallet/rules"
 import { redeemCoupon } from "./coupons"
 import { deductVariantStock, OutOfStockError, syncProductStock } from "./variants"
 import type { PricingProduct, PricingResult } from "./pricing"
@@ -122,8 +124,11 @@ export async function insertOrder(input: NewOrder): Promise<CreatedOrder> {
     const created = await db.transaction(async (tx) => {
       let duplicateTransferReference = false
       if (isTransfer && payment.reference) {
-        const [{ n }] = await tx.select({ n: count() }).from(orders).where(eq(orders.transferReference, payment.reference))
-        duplicateTransferReference = n > 0
+        // نفس الحوالة قد تُكتب بأرقام عربية مرة ولاتينية مرة، أو تُستعمل لشحن رصيد: نقارن بعد التطبيع وفي الجدولين.
+        const reference = normalizeReference(payment.reference)
+        const [{ n }] = await tx.select({ n: count() }).from(orders).where(sql`${normalizedReferenceSql(orders.transferReference)} = ${reference}`)
+        const [{ t }] = await tx.select({ t: count() }).from(walletTopups).where(eq(walletTopups.reference, reference))
+        duplicateTransferReference = n > 0 || t > 0
       }
 
       // رقم الطلب عشوائي؛ نعيد المحاولة في الحالة النادرة لتصادمه (داخل SAVEPOINT).

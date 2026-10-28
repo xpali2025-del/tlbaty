@@ -15,7 +15,7 @@ import {
   type OrderStatus,
 } from "@/lib/order-status"
 import { invalidateStock } from "@/lib/orders/create"
-import { holdsStockAndPayment, isOpenOrderStatus } from "@/lib/order-status"
+import { holdsStockAndPayment } from "@/lib/order-status"
 import { planDistribution, type DistributionPlan } from "@/lib/distribution"
 import { getAdminOrdersPage, type OrderFilters, type OrdersPage, ORDERS_PAGE_SIZE } from "@/lib/admin-orders"
 import { canTransitionPayment, initialPaymentStatus, isPaymentStatus, type PaymentStatus } from "@/lib/payment"

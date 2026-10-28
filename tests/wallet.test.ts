@@ -144,6 +144,19 @@ describe('top-up requests', () => {
     expect((await db.select().from(s.walletTopups).where(eq(s.walletTopups.id, id)))[0].referenceUsedOnOrder).toBe(true)
   })
 
+  it('matches the same transfer across Arabic/Latin digits, in both directions (order ↔ topup)', async () => {
+    const c = await newCustomer()
+    const transfer = (reference: string) => ({ method: 'manual_transfer' as const, account, senderName: 'علي', senderPhone: '967771111111', reference, proof: null })
+    // طلب بأرقام عربية ثم شحن بأرقام لاتينية → الشحن موسوم
+    await insertOrder({ customer: { id: c }, contact, pricing: await price(), payment: transfer('٥٥٥٦٦٦٧٧') })
+    const { id } = await topupReq(c, { reference: '55566677' })
+    expect((await db.select().from(s.walletTopups).where(eq(s.walletTopups.id, id)))[0].referenceUsedOnOrder).toBe(true)
+    // شحن أولاً ثم طلب بنفس الرقم (بأرقام عربية) → الطلب موسوم كحوالة مكررة
+    await topupReq(c, { reference: '88899900' })
+    const o = await insertOrder({ customer: { id: c }, contact, pricing: await price(), payment: transfer('٨٨٨ ٩٩٩ ٠٠') })
+    expect((await db.select().from(s.orders).where(eq(s.orders.id, o.id)))[0].duplicateTransferReference).toBe(true)
+  })
+
   it('limits pending requests, daily requests and repeated rejections', async () => {
     const c = await newCustomer()
     await topupReq(c)
