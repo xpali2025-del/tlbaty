@@ -1,5 +1,6 @@
 import "server-only"
 import { revalidatePath, revalidateTag } from "next/cache"
+import { after } from "next/server"
 import { CACHE_TAGS } from "@/lib/cache-tags"
 import { isValidImageKey } from "@/lib/storage/keys"
 import { deleteImageObject } from "@/lib/storage/r2"
@@ -111,6 +112,19 @@ export function syncTags(tags: string[], flags: { isNew?: boolean; isBestseller?
 export async function removeObjects(keys: (string | null | undefined)[]): Promise<void> {
   const unique = [...new Set(keys.filter((k): k is string => Boolean(k)))]
   await Promise.allSettled(unique.map((k) => deleteImageObject(k)))
+}
+
+/**
+ * يؤجّل عملاً غير حرج (حذف ملفات R2، تحليل ألوان صورة) إلى ما بعد إرسال الرد فلا ينتظره المدير بعد «حفظ».
+ * أفضل جهد: فشله لا يؤثر على الرد. خارج سياق الطلب (الاختبارات والسكربتات) يُنفَّذ فوراً وبالانتظار.
+ */
+export async function runAfterResponse(task: () => Promise<unknown>): Promise<void> {
+  const safe = () => task().catch((error) => console.error("deferred task failed:", error instanceof Error ? error.message : error))
+  try {
+    after(safe)
+  } catch {
+    await safe()
+  }
 }
 
 /**

@@ -457,6 +457,38 @@ describe('requestImageUpload', () => {
   })
 })
 
+describe('requestImageUploads (batch)', () => {
+  it('signs every item in one call and rejects any invalid item before signing', async () => {
+    const saved = { ...process.env }
+    Object.assign(process.env, { R2_ACCOUNT_ID: 'a', R2_ACCESS_KEY_ID: 'b', R2_SECRET_ACCESS_KEY: 'c', R2_BUCKET: 'd', R2_PUBLIC_URL: 'https://cdn.example.com' })
+    const ok = { folder: 'products', contentType: 'image/png', size: 1000 }
+    const out = await uploads.requestImageUploads([ok, { ...ok, folder: 'brands' }])
+    expect(out).toEqual([{ uploadUrl: 'https://r2/products/image/png/1000', objectKey: 'products/new.png' }, { uploadUrl: 'https://r2/brands/image/png/1000', objectKey: 'brands/new.png' }])
+    await expect(uploads.requestImageUploads([])).rejects.toThrow('من 1 إلى 30')
+    await expect(uploads.requestImageUploads(Array.from({ length: 31 }, () => ok))).rejects.toThrow('من 1 إلى 30')
+    await expect(uploads.requestImageUploads([ok, { ...ok, folder: 'payment-proofs' }])).rejects.toThrow('مجلد الصور غير مسموح')
+    await expect(uploads.requestImageUploads([{ ...ok, contentType: 'application/pdf' }])).rejects.toThrow('نوع الصورة غير مدعوم')
+    await expect(uploads.requestImageUploads([{ ...ok, size: 6 * 1024 * 1024 }])).rejects.toThrow('حجم الصورة')
+    Object.assign(process.env, saved)
+  })
+
+  it('requires an authenticated panel session', async () => {
+    mocks.auth.mockRejectedValueOnce(new Error('UNAUTHORIZED'))
+    await expect(uploads.requestImageUploads([{ folder: 'products', contentType: 'image/png', size: 1 }])).rejects.toThrow('UNAUTHORIZED')
+  })
+})
+
+describe('runAfterResponse', () => {
+  it('runs the task (inline outside a request) and swallows its failure', async () => {
+    const ran = vi.fn()
+    await helpers.runAfterResponse(async () => ran())
+    expect(ran).toHaveBeenCalledTimes(1)
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(helpers.runAfterResponse(async () => { throw new Error('boom') })).resolves.toBeUndefined()
+    err.mockRestore()
+  })
+})
+
 describe('requestVideoUpload', () => {
   it('accepts only MP4 within the size limit and a configured bucket', async () => {
     const saved = { ...process.env }

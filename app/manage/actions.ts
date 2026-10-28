@@ -42,6 +42,7 @@ import {
   removeObjects,
   revalidateManage,
   revalidateStore,
+  runAfterResponse,
   slugify,
   str,
   syncTags,
@@ -259,9 +260,12 @@ export async function saveProduct(id: string | null, form: FormData) {
   }
 
   revalidateStore()
-  await removeObjects(removed)
-  // بصمة الألوان للبحث بالصورة: عند رفع صورة رئيسية جديدة فقط، وأفضل جهد (لا تُفشل الحفظ).
-  if (mainKey && savedId) await refreshProductPalette(savedId, mainKey).catch(() => false)
+  // أعمال غير حرجة بعد الرد: حذف الصور القديمة، وبصمة الألوان للبحث بالصورة (قراءة من R2 + معالجة) عند صورة رئيسية جديدة.
+  const paletteFor = mainKey && savedId ? { id: savedId, key: mainKey } : null
+  await runAfterResponse(async () => {
+    await removeObjects(removed)
+    if (paletteFor) await refreshProductPalette(paletteFor.id, paletteFor.key).catch(() => false)
+  })
 }
 
 /**
@@ -318,7 +322,7 @@ export async function deleteProduct(id: string) {
   const gallery = await db.select().from(productImages).where(eq(productImages.productId, productId))
   await db.delete(products).where(eq(products.id, productId))
   revalidateStore()
-  await removeObjects([existing.mainImageKey, ...gallery.map((g) => g.imageKey)])
+  await runAfterResponse(() => removeObjects([existing.mainImageKey, ...gallery.map((g) => g.imageKey)]))
 }
 
 export async function toggleProductFlag(id: string, field: "isNew" | "isBestseller", value: boolean) {

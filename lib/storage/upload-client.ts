@@ -17,13 +17,56 @@ export type UploadDeps = {
   /** تصغير/ضغط الصورة قبل الرفع (افتراضياً في المتصفح فقط). يعيد الملف نفسه إن لم يُفد الضغط. */
   prepare?: (file: File, folder: ImageFolder) => Promise<File>
   request: (folder: string, contentType: string, size: number) => Promise<{ uploadUrl: string; objectKey: string }>
+  /**
+   * طلب روابط عدة ملفات دفعة واحدة (نداء خادم واحد بدل نداء لكل صورة: نداءات الإجراءات تُنفَّذ بالتتابع).
+   * إن غاب نستعمل request لكل ملف.
+   */
+  requestBatch?: (items: { folder: string; contentType: string; size: number }[]) => Promise<{ uploadUrl: string; objectKey: string }[]>
   put: (uploadUrl: string, file: File) => Promise<void>
 }
 
+const PUT_ATTEMPTS = 3
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/** رفع PUT مع إعادة محاولة لأخطاء الشبكة و5xx (شبكة الجوال تقطع أحياناً)؛ أخطاء 4xx (CORS/توقيع) لا تُعاد. */
 const defaultPut: UploadDeps["put"] = async (uploadUrl, file) => {
-  const res = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
-  if (!res.ok) throw new Error("فشل رفع الصورة إلى التخزين، تحقق من إعدادات CORS للـ bucket")
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
+      if (res.ok) return
+      if (res.status < 500 || attempt >= PUT_ATTEMPTS) throw new Error("فشل رفع الصورة إلى التخزين، تحقق من إعدادات CORS للـ bucket")
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("فشل رفع الصورة")) throw error
+      if (attempt >= PUT_ATTEMPTS) throw new Error("انقطع الاتصال أثناء رفع الصورة، تحقق من الشبكة وأعد المحاولة")
+    }
+    await sleep(400 * attempt)
+  }
 }
+
+/** ينفّذ المهام بتوازٍ محدود ويحفظ ترتيب النتائج؛ عند أول فشل يتوقف عن بدء مهام جديدة ويرمي الخطأ. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length)
+  let next = 0
+  let failed = false
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const i = next++
+      try {
+        out[i] = await fn(items[i], i)
+      } catch (error) {
+        failed = true
+        throw error
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return out
+}
+
+/** عدد الصور التي تُضغط معاً (ترميز الصور الكبيرة ثقيل على الذاكرة في الجوال) وعدد الرفوعات المتزامنة. */
+const PREPARE_CONCURRENCY = 2
+const UPLOAD_CONCURRENCY = 4
 
 /** أقصى بعد (بكسل) لكل مجلد: كافٍ للعرض على الشاشات الكبيرة (2x) ولا يرفع صور هاتف 12 ميغابكسل كما هي. */
 const MAX_DIMENSION: Record<ImageFolder, number> = {
@@ -74,6 +117,11 @@ async function defaultRequest(folder: string, contentType: string, size: number)
   return requestImageUpload(folder, contentType, size)
 }
 
+async function defaultRequestBatch(items: { folder: string; contentType: string; size: number }[]) {
+  const { requestImageUploads } = await import("@/app/manage/upload-actions")
+  return requestImageUploads(items)
+}
+
 const MAX_INPUT_BYTES = 20 * 1024 * 1024
 
 function validate(file: File) {
@@ -90,7 +138,7 @@ function validate(file: File) {
 export async function uploadFormImages(
   form: FormData,
   fields: UploadField[],
-  deps: UploadDeps = { prepare: compressImage, request: defaultRequest, put: defaultPut },
+  deps: UploadDeps = { prepare: compressImage, request: defaultRequest, requestBatch: defaultRequestBatch, put: defaultPut },
 ): Promise<string[]> {
   const pending = fields.map((f) => ({
     field: f,
@@ -102,16 +150,27 @@ export async function uploadFormImages(
     if (!field.multiple && files.length > 1) throw new Error("اختر صورة واحدة فقط")
   }
 
+  // كل الملفات عبر كل الحقول بترتيبها: نضغطها (بتوازٍ محدود)، ثم نطلب كل الروابط بنداء واحد، ثم نرفعها بالتوازي.
+  const jobs = pending.flatMap(({ field, files }) => files.map((original) => ({ field, original })))
+  if (jobs.length === 0) return []
+
+  const prepared = await mapLimit(jobs, PREPARE_CONCURRENCY, async ({ field, original }) => {
+    const file = deps.prepare ? await deps.prepare(original, field.folder) : original
+    if (file.size > MAX_IMAGE_BYTES) throw new Error(`حجم الصورة بعد الضغط ما زال يتجاوز ${MAX_IMAGE_BYTES / 1024 / 1024} ميغابايت (${original.name})`)
+    return file
+  })
+
+  const items = prepared.map((file, i) => ({ folder: jobs[i].field.folder, contentType: file.type, size: file.size }))
+  const slots = deps.requestBatch
+    ? await deps.requestBatch(items)
+    : await Promise.all(items.map((it) => deps.request(it.folder, it.contentType, it.size)))
+  if (slots.length !== prepared.length) throw new Error("تعذّر تجهيز روابط الرفع، أعد المحاولة")
+
+  await mapLimit(prepared, UPLOAD_CONCURRENCY, (file, i) => deps.put(slots[i].uploadUrl, file))
+
   const uploaded: string[] = []
-  for (const { field, files } of pending) {
-    const keys: string[] = []
-    for (const original of files) {
-      const file = deps.prepare ? await deps.prepare(original, field.folder) : original
-      if (file.size > MAX_IMAGE_BYTES) throw new Error(`حجم الصورة بعد الضغط ما زال يتجاوز ${MAX_IMAGE_BYTES / 1024 / 1024} ميغابايت (${original.name})`)
-      const { uploadUrl, objectKey } = await deps.request(field.folder, file.type, file.size)
-      await deps.put(uploadUrl, file)
-      keys.push(objectKey)
-    }
+  for (const { field } of pending) {
+    const keys = jobs.flatMap((j, i) => (j.field === field ? [slots[i].objectKey] : []))
     if (!keys.length) continue
     form.set(field.keyName, field.multiple ? JSON.stringify(keys) : keys[0])
     uploaded.push(...keys)
