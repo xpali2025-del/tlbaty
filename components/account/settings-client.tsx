@@ -8,25 +8,32 @@ import { useRecentlyViewed } from "@/hooks/use-recently-viewed"
 import { useSavedAddresses } from "@/hooks/use-saved-addresses"
 import { useToast } from "@/hooks/use-toast"
 
+/** عدّاد: شارة في الصفوف (plain=false)، أو رقم مجرد داخل البلاطات (plain). صفر لا يُعرض شارة. */
+function Count({ n, plain }: { n: number; plain?: boolean }) {
+  if (plain) return <>{n}</>
+  return n > 0 ? <CountPill>{n}</CountPill> : null
+}
+
 /** عدّاد الرغبات من المتصفح (مصدره التخزين المحلي المتزامن مع الحساب). */
-export function WishlistCount() {
+export function WishlistCount({ plain }: { plain?: boolean }) {
   const { totalItems } = useWishlist()
-  return totalItems > 0 ? <CountPill>{totalItems}</CountPill> : null
+  return <Count n={totalItems} plain={plain} />
 }
 
 export function RecentCount() {
   const { items } = useRecentlyViewed()
-  return items.length > 0 ? <CountPill>{items.length}</CountPill> : null
+  return <Count n={items.length} />
 }
 
-export function AddressCount() {
+export function AddressCount({ plain }: { plain?: boolean }) {
   const { addresses } = useSavedAddresses()
-  return addresses.length > 0 ? <CountPill>{addresses.length}</CountPill> : null
+  return <Count n={addresses.length} plain={plain} />
 }
 
 /** رصيد المحفظة بالعملة المختارة (المخزَّن بالأساس). */
-export function Balance({ base }: { base: number }) {
+export function Balance({ base, plain }: { base: number; plain?: boolean }) {
   const { format } = useCurrency()
+  if (plain) return <span className="text-sm">{format(base)}</span>
   return <span className="shrink-0 text-sm font-bold tabular-nums text-primary">{format(base)}</span>
 }
 
@@ -38,13 +45,11 @@ export function CurrencyCard() {
   const { currencies, currency, setCurrencyCode } = useCurrency()
   if (currencies.length < 2) return null
   return (
-    <section aria-label="العملة" className="mb-6 rounded-2xl border border-border bg-card p-4">
+    <div role="group" aria-label="العملة" className="p-4">
       <div className="mb-3 flex items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Coins className="h-5 w-5" aria-hidden="true" />
-        </span>
+        <Coins className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0">
-          <h2 className="text-sm font-bold">عملة عرض الأسعار</h2>
+          <h3 className="text-sm font-bold">عملة عرض الأسعار</h3>
           <p className="text-xs text-muted-foreground">تتحوّل كل أسعار المتجر فوراً</p>
         </div>
       </div>
@@ -69,7 +74,7 @@ export function CurrencyCard() {
           )
         })}
       </div>
-    </section>
+    </div>
   )
 }
 

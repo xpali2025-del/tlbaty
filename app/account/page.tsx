@@ -20,7 +20,7 @@ import { MobileNav } from "@/components/mobile-nav"
 import { AccountActions } from "@/components/auth/account-actions"
 import { MarketingConsent } from "@/components/auth/marketing-consent"
 import { AddressCount, Balance, CurrencyCard, RecentCount, ShareRow, WishlistCount } from "@/components/account/settings-client"
-import { CountPill, SettingsGroup, SettingsRow } from "@/components/account/settings-ui"
+import { PreferencesGroup, SettingsGroup, SettingsRow, StatTile } from "@/components/account/settings-ui"
 import { getCurrentCustomer } from "@/lib/otp/session"
 import { countOrdersForCustomer, getCustomerDisplayName } from "@/lib/otp/customer-orders"
 import { getSiteConfig } from "@/lib/site-config"
@@ -49,40 +49,57 @@ export default async function SettingsPage() {
       ])
     : [null, 0, null]
 
+  const tiles = [
+    { href: "/orders", icon: ClipboardList, label: "طلباتي", value: orderCount > 0 ? orderCount : 0 },
+    ...(site.payments.wallet
+      ? [{ href: "/account/wallet", icon: Wallet, label: "رصيدي", value: wallet ? <Balance base={wallet.balance} plain /> : 0 }]
+      : []),
+    { href: "/account/addresses", icon: MapPinned, label: "عناويني", value: <AddressCount plain /> },
+    { href: "/wishlist", icon: Heart, label: "قائمة الرغبات", value: <WishlistCount plain /> },
+  ]
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
       <main className="mx-auto w-full max-w-2xl px-4 py-6 pb-28">
-        <h1 className="mb-4 text-2xl font-bold tracking-tight">الإعدادات</h1>
+        <h1 className="mb-6 text-2xl font-bold tracking-tight">الإعدادات</h1>
 
-        {/* القسم A: الملف الشخصي (يتطلب حساباً) */}
+        {/* الملف الشخصي (يتطلب حساباً) أو دعوة تسجيل الدخول للزائر */}
         {customer ? (
-          <section aria-label="الملف الشخصي" className="mb-6">
-            <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
-              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary" aria-hidden="true">
+          <section aria-label="الملف الشخصي" className="mb-8 rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center gap-4">
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground" aria-hidden="true">
                 {name ? name.trim().charAt(0) : <User className="h-8 w-8" />}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-bold">{name ?? "عميلنا العزيز"}</p>
+                <p className="truncate text-xl font-bold">{name ?? "عميلنا العزيز"}</p>
                 <p className="mt-0.5 text-sm text-muted-foreground tabular-nums" dir="ltr" style={{ textAlign: "right" }}>
                   +{customer.phone}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">معرّف العميل: <span dir="ltr">{customer.publicId}</span></p>
               </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+              <p className="text-xs text-muted-foreground">
+                معرّف العميل: <span dir="ltr" className="font-medium text-foreground">{customer.publicId}</span>
+              </p>
+              <Link
+                href="/change-phone"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <PencilLine className="h-4 w-4" aria-hidden="true" />
+                تغيير رقم الهاتف
+              </Link>
             </div>
           </section>
         ) : (
-          <section aria-label="تسجيل الدخول" className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-5 text-center">
-            <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <User className="h-7 w-7 text-primary" aria-hidden="true" />
-            </span>
+          <section aria-label="تسجيل الدخول" className="mb-8 rounded-2xl border border-border bg-card p-5">
             <h2 className="text-lg font-bold">أهلاً بك في {site.name}</h2>
-            <p className="mx-auto mt-1 max-w-xs text-sm text-muted-foreground">
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
               سجّل الدخول أو أنشئ حساباً برقم هاتفك للوصول إلى طلباتك وعناوينك ورصيدك.
             </p>
             <Link
               href="/login?next=/account"
-              className="mt-4 inline-flex min-h-12 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
+              className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto"
             >
               <LogIn className="h-4 w-4" aria-hidden="true" />
               تسجيل الدخول / إنشاء حساب
@@ -90,51 +107,40 @@ export default async function SettingsPage() {
           </section>
         )}
 
-        {/* العملة: بارزة أعلى الصفحة وبنقرة واحدة */}
-        <CurrencyCard />
+        {/* مركز العميل: وصول سريع بلاطات (للزائر خافتة بقفل) */}
+        <section className="mb-8" aria-label="مركز العميل">
+          <h2 className="mb-2 px-1 text-sm font-bold text-muted-foreground">مركز العميل</h2>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {tiles.map((t, i) => (
+              <StatTile
+                key={t.href}
+                href={t.href}
+                icon={t.icon}
+                label={t.label}
+                value={t.value}
+                locked={!loggedIn}
+                className={tiles.length % 2 === 1 && i === tiles.length - 1 ? "col-span-2 md:col-span-1" : ""}
+              />
+            ))}
+          </div>
+          {!loggedIn && <p className="mt-2 px-1 text-xs text-muted-foreground">هذه الخدمات خاصة بحسابك وتُفتح بعد تسجيل الدخول.</p>}
+        </section>
 
-        <SettingsGroup title="حسابي">
-          <SettingsRow href="/change-phone" icon={PencilLine} label="تغيير رقم الهاتف" description="تحديث الرقم المسجّل بحسابك" locked={!loggedIn} />
-        </SettingsGroup>
+        {/* التفضيلات: عملة العرض، وموافقة العروض للمسجّل */}
+        <PreferencesGroup title="التفضيلات">
+          <CurrencyCard />
+          {customer && <MarketingConsent initial={customer.marketingOptIn} />}
+        </PreferencesGroup>
 
-        {/* القسم B: مركز العميل (يتطلب حساباً) */}
-        <SettingsGroup title="مركز العميل" hint={loggedIn ? undefined : "هذه الخدمات خاصة بحسابك وتُفتح بعد تسجيل الدخول."}>
-          <SettingsRow
-            href="/orders"
-            icon={ClipboardList}
-            label="طلباتي"
-            description="تتبّع طلباتك الحالية وسجل طلباتك"
-            trailing={loggedIn && orderCount > 0 ? <CountPill>{orderCount}</CountPill> : undefined}
-            locked={!loggedIn}
-          />
-          {site.payments.wallet && (
-            <SettingsRow
-              href="/account/wallet"
-              icon={Wallet}
-              label="رصيدي"
-              description="رصيد حسابك وشحنه"
-              trailing={wallet ? <Balance base={wallet.balance} /> : undefined}
-              locked={!loggedIn}
-            />
-          )}
-          <SettingsRow href="/account/addresses" icon={MapPinned} label="عناويني" description="المنزل والعمل وغيرها، لاختيارها بنقرة عند الطلب" trailing={loggedIn ? <AddressCount /> : undefined} locked={!loggedIn} />
-          <SettingsRow href="/wishlist" icon={Heart} label="قائمة الرغبات" description="المنتجات التي أعجبتك" trailing={loggedIn ? <WishlistCount /> : undefined} locked={!loggedIn} />
-        </SettingsGroup>
-
-        {/* القسم C: اكتشف وتابع (متاح للجميع): الإشعارات والماركات وما شاهدته في مكان واحد */}
+        {/* اكتشف وتابع (متاح للجميع) */}
         <SettingsGroup title="اكتشف وتابع">
           <SettingsRow href="/notifications" icon={Bell} label="الإشعارات" description="عروض المتجر وتحديثات طلباتك" />
           <SettingsRow href="/brands" icon={Store} label="الماركات" description="تصفّح ماركات المتجر" />
           {/* لا يتطلب حساباً: يُحفظ في متصفح الزائر نفسه */}
           <SettingsRow href="/recently-viewed" icon={Clock3} label="شوهد مؤخراً" description="منتجات تصفحتها حديثاً" trailing={<RecentCount />} />
         </SettingsGroup>
-        {customer && (
-          <div className="-mt-3 mb-6">
-            <MarketingConsent initial={customer.marketingOptIn} />
-          </div>
-        )}
 
-        {/* القسم D: المساعدة والمعلومات */}
+        {/* المساعدة والمعلومات */}
         <SettingsGroup title="المساعدة والمعلومات">
           <SettingsRow href="/faq" icon={HelpCircle} label="الأسئلة الشائعة" />
           <SettingsRow href="/contact" icon={Headphones} label="تواصل معنا" description="قنوات الدعم والتواصل" />
@@ -143,7 +149,7 @@ export default async function SettingsPage() {
           <SettingsRow href="/privacy" icon={ShieldCheck} label="الخصوصية والشروط" />
         </SettingsGroup>
 
-        {/* القسم E: إجراءات الحساب */}
+        {/* إجراءات الحساب: أخيراً ومنفصلة */}
         {customer && <AccountActions />}
       </main>
       <MobileNav />
