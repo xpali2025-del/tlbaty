@@ -5,6 +5,8 @@ const r2Url = r2Public ? new URL(r2Public) : null
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // صفحة الفحص تطبّق ترحيلات القاعدة من ملفات drizzle/ وقت التشغيل، فيجب أن تُرفق مع الدالة.
+  outputFileTracingIncludes: { '/api/diagnose': ['./drizzle/**/*'] },
   images: {
     // IMAGE_RESIZING=cloudflare: الصور تُصغَّر عبر Cloudflare Image Resizing على نطاق R2 (lib/image-loader.ts).
     // بدونه تُخدَم الصور كما هي (لا تحسين من Next لأن الصور على R2 لا على Vercel).
