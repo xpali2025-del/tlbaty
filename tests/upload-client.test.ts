@@ -95,22 +95,23 @@ describe('uploadFormImages performance behaviour', () => {
   }
   const field = [{ name: 'newImages', folder: 'products' as const, keyName: 'newImageKeys', multiple: true }]
 
-  it('asks for all upload URLs in one batch call and keeps the file order', async () => {
+  it('signs only the next upload wave and keeps the file order', async () => {
     const form = many(6)
-    const requestBatch = vi.fn(async (items: { folder: string }[]) => items.map((_, i) => ({ uploadUrl: `https://r2/${i}`, objectKey: `products/k${i}.png` })))
+    let next = 0
+    const requestBatch = vi.fn(async (items: { folder: string }[]) => items.map(() => { const i = next++; return { uploadUrl: `https://r2/${i}`, objectKey: `products/k${i}.png` } }))
     const request = vi.fn()
     const keys = await uploadFormImages(form, field, { request, requestBatch, put: async () => {} })
-    expect(requestBatch).toHaveBeenCalledTimes(1)
-    expect(requestBatch.mock.calls[0][0]).toHaveLength(6)
+    expect(requestBatch).toHaveBeenCalledTimes(2)
+    expect(requestBatch.mock.calls[0][0]).toHaveLength(3)
     expect(request).not.toHaveBeenCalled()
     expect(keys).toEqual([0, 1, 2, 3, 4, 5].map((i) => `products/k${i}.png`))
   })
 
-  it('splits more than 30 files into batches of 30 instead of failing', async () => {
+  it('splits large galleries into just-in-time waves instead of failing', async () => {
     const form = many(31)
     const requestBatch = vi.fn(async (items: { folder: string }[]) => items.map((_, i) => ({ uploadUrl: `https://r2/${i}`, objectKey: `products/b${i}.png` })))
     const keys = await uploadFormImages(form, field, { request: vi.fn(), requestBatch, put: async () => {} })
-    expect(requestBatch.mock.calls.map((c) => c[0].length)).toEqual([30, 1])
+    expect(requestBatch.mock.calls.map((c) => c[0].length)).toEqual([...Array(10).fill(3), 1])
     expect(keys).toHaveLength(31)
   })
 

@@ -1,4 +1,5 @@
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, type ImageFolder } from "./keys"
+import { putImage, uploadConcurrency, waitUntilOnline } from "./upload-transport"
 
 // رفع الصور من المتصفح مباشرة إلى R2 (بروابط موقَّعة) قبل إرسال النموذج إلى Server Action.
 // لا تمر الملفات عبر الخادم (حد حجم الطلب في Server Actions) ويصل للإجراء مفاتيحها فقط.
@@ -22,26 +23,7 @@ export type UploadDeps = {
    * إن غاب نستعمل request لكل ملف.
    */
   requestBatch?: (items: { folder: string; contentType: string; size: number }[]) => Promise<{ uploadUrl: string; objectKey: string }[]>
-  put: (uploadUrl: string, file: File) => Promise<void>
-}
-
-const PUT_ATTEMPTS = 3
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-/** رفع PUT مع إعادة محاولة لأخطاء الشبكة و5xx (شبكة الجوال تقطع أحياناً)؛ أخطاء 4xx (CORS/توقيع) لا تُعاد. */
-const defaultPut: UploadDeps["put"] = async (uploadUrl, file) => {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      const res = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
-      if (res.ok) return
-      if (res.status < 500 || attempt >= PUT_ATTEMPTS) throw new Error("فشل رفع الصورة إلى التخزين، تحقق من إعدادات CORS للـ bucket")
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("فشل رفع الصورة")) throw error
-      if (attempt >= PUT_ATTEMPTS) throw new Error("انقطع الاتصال أثناء رفع الصورة، تحقق من الشبكة وأعد المحاولة")
-    }
-    await sleep(400 * attempt)
-  }
+  put: (uploadUrl: string, file: File, options?: { onTimeout?: () => void }) => Promise<void>
 }
 
 /** ينفّذ المهام بتوازٍ محدود ويحفظ ترتيب النتائج؛ عند أول فشل يتوقف عن بدء مهام جديدة ويرمي الخطأ. */
@@ -60,15 +42,15 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  const results = await Promise.allSettled(Array.from({ length: Math.min(limit, items.length) }, worker))
+  const rejected = results.find((result) => result.status === "rejected")
+  if (rejected?.status === "rejected") throw rejected.reason
   return out
 }
 
 /** عدد الصور التي تُضغط معاً (ترميز الصور الكبيرة ثقيل على الذاكرة في الجوال) وعدد الرفوعات المتزامنة. */
 const PREPARE_CONCURRENCY = 2
-/** أقصى عدد روابط في نداء واحد (مطابق لـ MAX_BATCH في upload-actions). */
-const BATCH_SIZE = 30
-const UPLOAD_CONCURRENCY = 4
+const MAX_FALLBACK_BYTES = 1.5 * 1024 * 1024
 
 /** أقصى بعد (بكسل) لكل مجلد: كافٍ للعرض على الشاشات الكبيرة (2x) ولا يرفع صور هاتف 12 ميغابكسل كما هي. */
 const MAX_DIMENSION: Record<ImageFolder, number> = {
@@ -95,8 +77,9 @@ const RECODABLE = new Set(["image/jpeg", "image/png", "image/webp"])
 export async function compressImage(file: File, folder: ImageFolder): Promise<File> {
   if (typeof document === "undefined" || typeof createImageBitmap === "undefined") return file
   if (!RECODABLE.has(file.type) || file.size < SKIP_BELOW_BYTES) return file
+  let bitmap: ImageBitmap | undefined
   try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
     const max = MAX_DIMENSION[folder]
     const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
     const canvas = document.createElement("canvas")
@@ -105,12 +88,13 @@ export async function compressImage(file: File, folder: ImageFolder): Promise<Fi
     const ctx = canvas.getContext("2d")
     if (!ctx) return file
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    bitmap.close?.()
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.82))
     if (!blob || blob.type !== "image/webp" || blob.size >= file.size) return file
     return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" })
   } catch {
     return file
+  } finally {
+    bitmap?.close()
   }
 }
 
@@ -140,7 +124,7 @@ function validate(file: File) {
 export async function uploadFormImages(
   form: FormData,
   fields: UploadField[],
-  deps: UploadDeps = { prepare: compressImage, request: defaultRequest, requestBatch: defaultRequestBatch, put: defaultPut },
+  deps: UploadDeps = { prepare: compressImage, request: defaultRequest, requestBatch: defaultRequestBatch, put: putImage },
 ): Promise<string[]> {
   const pending = fields.map((f) => ({
     field: f,
@@ -152,27 +136,38 @@ export async function uploadFormImages(
     if (!field.multiple && files.length > 1) throw new Error("اختر صورة واحدة فقط")
   }
 
-  // كل الملفات عبر كل الحقول بترتيبها: نضغطها (بتوازٍ محدود)، ثم نطلب كل الروابط بنداء واحد، ثم نرفعها بالتوازي.
+  // نضغط الملفات بترتيب الحقول، ثم نوقّع روابط كل دفعة عند جاهزيتها للرفع لتجنّب انتهاء صلاحيتها أثناء الانتظار.
   const jobs = pending.flatMap(({ field, files }) => files.map((original) => ({ field, original })))
   if (jobs.length === 0) return []
 
   const prepared = await mapLimit(jobs, PREPARE_CONCURRENCY, async ({ field, original }) => {
     const file = deps.prepare ? await deps.prepare(original, field.folder) : original
     if (file.size > MAX_IMAGE_BYTES) throw new Error(`حجم الصورة بعد الضغط ما زال يتجاوز ${MAX_IMAGE_BYTES / 1024 / 1024} ميغابايت (${original.name})`)
+    if (deps.prepare && file.size >= original.size && file.size > MAX_FALLBACK_BYTES) {
+      throw new Error(`تعذّر ضغط الصورة (${original.name}). جرّب صورة أصغر أو صيغة JPEG أو WebP.`)
+    }
     return file
   })
 
   const items = prepared.map((file, i) => ({ folder: jobs[i].field.folder, contentType: file.type, size: file.size }))
   const slots: { uploadUrl: string; objectKey: string }[] = []
-  if (deps.requestBatch) {
-    // دفعات من 30 (حد الخادم) بدل رفض المعرض الكبير كله.
-    for (let i = 0; i < items.length; i += BATCH_SIZE) slots.push(...(await deps.requestBatch(items.slice(i, i + BATCH_SIZE))))
-  } else {
-    slots.push(...(await Promise.all(items.map((it) => deps.request(it.folder, it.contentType, it.size)))))
+  const maxConcurrency = uploadConcurrency()
+  let concurrency = maxConcurrency
+  for (let offset = 0; offset < items.length;) {
+    await waitUntilOnline()
+    const batch = items.slice(offset, offset + concurrency)
+    const signed = deps.requestBatch
+      ? await deps.requestBatch(batch)
+      : await Promise.all(batch.map((it) => deps.request(it.folder, it.contentType, it.size)))
+    if (signed.length !== batch.length) throw new Error("تعذّر تجهيز روابط الرفع، أعد المحاولة")
+    slots.push(...signed)
+    let timedOut = false
+    await mapLimit(batch, concurrency, (_, i) => deps.put(signed[i].uploadUrl, prepared[offset + i], {
+      onTimeout: () => { timedOut = true },
+    }))
+    concurrency = timedOut ? Math.max(1, Math.floor(concurrency / 2)) : Math.min(maxConcurrency, concurrency + 1)
+    offset += batch.length
   }
-  if (slots.length !== prepared.length) throw new Error("تعذّر تجهيز روابط الرفع، أعد المحاولة")
-
-  await mapLimit(prepared, UPLOAD_CONCURRENCY, (file, i) => deps.put(slots[i].uploadUrl, file))
 
   const uploaded: string[] = []
   for (const { field } of pending) {
