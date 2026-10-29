@@ -43,7 +43,7 @@ export async function createImageUpload(contentType: string, size: number, folde
       ContentType: contentType,
       ContentLength: size,
     }),
-    { expiresIn: 300 },
+    { expiresIn: 900 },
   )
   return { uploadUrl, objectKey }
 }

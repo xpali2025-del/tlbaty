@@ -8,7 +8,7 @@ import { createImageUpload, createVideoUpload } from "@/lib/storage/r2"
 import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/ads"
 
 /**
- * يعيد رابط رفع موقَّعاً (PUT، صالح 5 دقائق) ومفتاح الكائن لرفع صورة من المتصفح مباشرة إلى R2.
+ * يعيد رابط رفع موقَّعاً (PUT، صالح 15 دقيقة) ومفتاح الكائن لرفع صورة من المتصفح مباشرة إلى R2.
  * محميّ بجلسة الإدارة؛ النوع والحجم والمجلد تُتحقَّق هنا قبل توقيع الرابط (والرابط نفسه يثبّت النوع والحجم).
  */
 async function requestImageUploadImpl(folder: string, contentType: string, size: number) {
