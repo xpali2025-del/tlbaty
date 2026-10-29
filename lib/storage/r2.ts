@@ -42,6 +42,7 @@ export async function createImageUpload(contentType: string, size: number, folde
       Key: objectKey,
       ContentType: contentType,
       ContentLength: size,
+      CacheControl: 'public, max-age=31536000, immutable',
     }),
     { expiresIn: 900 },
   )
@@ -49,12 +50,13 @@ export async function createImageUpload(contentType: string, size: number, folde
 }
 
 /** Presigned PUT for an ad video (MP4, ads/ folder only). */
-export async function createVideoUpload(contentType: string, size: number) {
+export async function createVideoUpload(contentType: string, size: number, existingKey?: string) {
   const ext = ALLOWED_VIDEO_TYPES[contentType]
   if (!ext) throw new Error('Unsupported video type')
   if (size <= 0 || size > MAX_VIDEO_BYTES) throw new Error('Invalid video size')
 
-  const objectKey = `ads/${randomUUID()}.${ext}`
+  if (existingKey && !isValidVideoKey(existingKey)) throw new Error('مفتاح الفيديو غير صالح')
+  const objectKey = existingKey ?? `ads/${randomUUID()}.${ext}`
   const uploadUrl = await getSignedUrl(
     getClient(),
     new PutObjectCommand({
@@ -62,8 +64,9 @@ export async function createVideoUpload(contentType: string, size: number) {
       Key: objectKey,
       ContentType: contentType,
       ContentLength: size,
+      CacheControl: 'public, max-age=31536000, immutable',
     }),
-    { expiresIn: 300 },
+    { expiresIn: 900 },
   )
   return { uploadUrl, objectKey }
 }

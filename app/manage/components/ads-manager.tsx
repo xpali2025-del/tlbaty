@@ -24,7 +24,8 @@ import { saveAd, deleteAd, toggleAdActive } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 import { AD_PLACEMENTS, MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, normalizePlacements } from "@/lib/ads"
-import { extractVideoPoster, uploadAdVideo } from "@/lib/storage/video-client"
+import { useAdVideoUpload } from "@/lib/storage/use-ad-video-upload"
+import { Progress } from "@/components/ui/progress"
 
 function placementSummary(placements: string[]) {
   if (!placements.length) return "كل الأماكن"
@@ -145,13 +146,13 @@ export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: Ad
         </div>
       )}
 
-      <AdDialog
+      {open && <AdDialog
         key={editing?._id ?? "new"}
         open={open}
         onOpenChange={setOpen}
         ad={editing}
         categories={categories}
-      />
+      />}
     </div>
   )
 }
@@ -172,7 +173,8 @@ function AdDialog({
   const [kind, setKind] = useState<"image" | "video">(ad?.kind ?? "image")
   // فارغ في قاعدة البيانات = كل الأماكن، فنعرضها كلها محددة.
   const [placements, setPlacements] = useState<string[]>(ad?.placements?.length ? ad.placements : AD_PLACEMENTS.map((p) => p.key))
-  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const videoUpload = useAdVideoUpload()
+  const videoFile = videoUpload.file
   const [isPending, startTransition] = useTransition()
 
   function togglePlacement(key: string, checked: boolean) {
@@ -201,8 +203,9 @@ function AdDialog({
           const hasPoster = (form.get("image") as File | null)?.size
           if (!videoFile && !ad?.videoUrl) throw new Error("اختر ملف الفيديو (MP4)")
           if (videoFile) {
-            form.set("videoKey", await uploadAdVideo(videoFile))
-            if (!hasPoster && !ad?.image) form.set("image", await extractVideoPoster(videoFile))
+            const uploaded = await videoUpload.ready()
+            form.set("videoKey", uploaded.videoKey)
+            if (!hasPoster) form.set("imageKey", uploaded.posterKey)
           }
         }
         await uploadFormImages(form, [
@@ -212,7 +215,8 @@ function AdDialog({
         toast.success(ad ? "تم تحديث الإعلان" : "تمت إضافة الإعلان")
         onOpenChange(false)
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "تعذّر الحفظ")
+        if (err instanceof Error && err.name === "AbortError") return
+        toast.error(err instanceof Error && /[\u0600-\u06ff]/.test(err.message) ? err.message : "تعذّر الحفظ. تحقق من الاتصال ثم أعد المحاولة.")
       }
     })
   }
@@ -235,7 +239,7 @@ function AdDialog({
                   type="button"
                   role="radio"
                   aria-checked={kind === value}
-                  onClick={() => setKind(value)}
+                  onClick={() => { if (kind !== value) videoUpload.select(null); setKind(value) }}
                   className={`min-h-10 rounded-md text-sm font-medium transition ${kind === value ? "bg-background shadow-sm" : "text-muted-foreground"}`}
                 >
                   {label}
@@ -251,9 +255,21 @@ function AdDialog({
               </Label>
               <Input
                 type="file"
-                accept="video/mp4"
-                onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
+                accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
+                aria-label="ملف الفيديو"
+                onChange={(e) => videoUpload.select(e.target.files?.[0] ?? null)}
               />
+              {videoUpload.preview && <video src={videoUpload.preview} muted playsInline controls preload="metadata" className="max-h-48 w-full rounded-md" aria-label="معاينة الفيديو المحدد" />}
+              {videoUpload.stage && <div role="status" className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground">{videoUpload.stage} — {Math.round(videoUpload.progress * 100)}٪</p>
+                <Progress value={videoUpload.progress * 100} aria-label="تقدم تجهيز ورفع الفيديو" />
+              </div>}
+              {videoUpload.error && <p role="alert" className="text-sm text-destructive">{videoUpload.error}</p>}
+              {videoUpload.needsTrim && <Button type="button" variant="outline" onClick={() => videoFile && videoUpload.select(videoFile, true)}>قص إلى أول {MAX_VIDEO_SECONDS} ثانية</Button>}
+              {videoFile && <div className="flex gap-2">
+                {videoUpload.error && <Button type="button" variant="outline" onClick={() => videoUpload.select(videoFile)}>إعادة المحاولة</Button>}
+                <Button type="button" variant="ghost" onClick={() => videoUpload.select(null)}>إزالة الفيديو وإلغاء الرفع</Button>
+              </div>}
               {ad?.videoUrl && !videoFile && <p className="text-xs text-muted-foreground">الفيديو الحالي محفوظ؛ اختر ملفاً لاستبداله.</p>}
               <p className="text-xs text-muted-foreground">
                 يعمل تلقائياً بدون صوت وبتكرار. الحد الأقصى {MAX_VIDEO_BYTES / 1024 / 1024} ميغابايت و{MAX_VIDEO_SECONDS} ثانية (الأنسب من 5 إلى 15 ثانية)،

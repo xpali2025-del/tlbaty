@@ -1,4 +1,5 @@
 import { validateVideoFile } from "@/lib/ads"
+import { putWithRetry, checkAborted, type PutOptions } from "./put"
 
 // رفع فيديو إعلان من المتصفح مباشرة إلى R2 (رابط موقَّع)، مع قراءة مدته واستخراج صورة غلاف من إطاره الأول.
 // دوال المتصفح (inspect/poster) قابلة للحقن في الاختبار كما في upload-client.
@@ -7,8 +8,8 @@ export type VideoInfo = { duration: number; width: number; height: number }
 
 export type VideoUploadDeps = {
   inspect?: (file: File) => Promise<VideoInfo>
-  request: (contentType: string, size: number) => Promise<{ uploadUrl: string; objectKey: string }>
-  put: (uploadUrl: string, file: File) => Promise<void>
+  request: (contentType: string, size: number, ticket?: string) => Promise<{ uploadUrl: string; objectKey: string; ticket?: string }>
+  put: (uploadUrl: string, file: File, options?: PutOptions) => Promise<void>
 }
 
 const POSTER_MAX_WIDTH = 1200
@@ -30,9 +31,12 @@ function withVideoElement<T>(file: File, run: (video: HTMLVideoElement) => Promi
 
 function once(target: HTMLVideoElement, event: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("تعذّر قراءة الفيديو، تأكد أنه MP4 (H.264) سليم")), 15000)
-    target.addEventListener(event, () => (clearTimeout(timer), resolve()), { once: true })
-    target.addEventListener("error", () => (clearTimeout(timer), reject(new Error("تعذّر قراءة الفيديو، تأكد أنه MP4 (H.264) سليم"))), { once: true })
+    const cleanup = () => { clearTimeout(timer); target.removeEventListener(event, success); target.removeEventListener("error", failure) }
+    const success = () => { cleanup(); resolve() }
+    const failure = () => { cleanup(); reject(new Error("تعذّر قراءة الفيديو، اضغطه بصيغة MP4 (H.264) ثم أعد الرفع")) }
+    const timer = setTimeout(failure, 15000)
+    target.addEventListener(event, success, { once: true })
+    target.addEventListener("error", failure, { once: true })
   })
 }
 
@@ -68,25 +72,33 @@ export function extractVideoPoster(file: File): Promise<File> {
   })
 }
 
-async function defaultRequest(contentType: string, size: number) {
+async function defaultRequest(contentType: string, size: number, ticket?: string) {
   const { requestVideoUpload } = await import("@/app/manage/client-actions")
-  return requestVideoUpload(contentType, size)
-}
-
-const defaultPut: VideoUploadDeps["put"] = async (uploadUrl, file) => {
-  const res = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
-  if (!res.ok) throw new Error("فشل رفع الفيديو إلى التخزين، تحقق من إعدادات CORS للـ bucket")
+  return requestVideoUpload(contentType, size, ticket)
 }
 
 /** يتحقق من النوع والحجم والمدة ثم يرفع الفيديو ويعيد مفتاحه. */
 export async function uploadAdVideo(
   file: File,
-  deps: VideoUploadDeps = { inspect: inspectVideo, request: defaultRequest, put: defaultPut },
+  deps: VideoUploadDeps = { inspect: inspectVideo, request: defaultRequest, put: putWithRetry },
+  options: Pick<PutOptions, "onProgress" | "signal"> = {},
 ): Promise<string> {
+  checkAborted(options.signal)
   const info = deps.inspect ? await deps.inspect(file) : undefined
+  checkAborted(options.signal)
   const problem = validateVideoFile({ type: file.type, size: file.size, duration: info?.duration })
   if (problem) throw new Error(problem)
-  const { uploadUrl, objectKey } = await deps.request(file.type, file.size)
-  await deps.put(uploadUrl, file)
+  const { uploadUrl, objectKey, ticket } = await deps.request(file.type, file.size)
+  checkAborted(options.signal)
+  await deps.put(uploadUrl, file, {
+    ...options,
+    resign: ticket ? async () => {
+      checkAborted(options.signal)
+      const renewed = await deps.request(file.type, file.size, ticket)
+      if (renewed.objectKey !== objectKey) throw new Error("تغيّر مفتاح الفيديو أثناء تجديد الرابط")
+      return renewed.uploadUrl
+    } : undefined,
+  })
+  checkAborted(options.signal)
   return objectKey
 }

@@ -6,6 +6,7 @@ import { assertManageAuthenticated } from "@/lib/manage-auth"
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, isImageFolder, type ImageFolder } from "@/lib/storage/keys"
 import { createImageUpload, createVideoUpload } from "@/lib/storage/r2"
 import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/ads"
+import { videoUploadTicket, verifyVideoUploadTicket } from "@/lib/storage/upload-ticket"
 
 /**
  * يعيد رابط رفع موقَّعاً (PUT، صالح 15 دقيقة) ومفتاح الكائن لرفع صورة من المتصفح مباشرة إلى R2.
@@ -23,14 +24,16 @@ async function requestImageUploadImpl(folder: string, contentType: string, size:
 }
 
 /** رابط رفع موقَّع لفيديو إعلان (MP4 فقط، مجلد الإعلانات). */
-async function requestVideoUploadImpl(contentType: string, size: number) {
+async function requestVideoUploadImpl(contentType: string, size: number, ticket?: string) {
   await assertManageAuthenticated()
   if (!ALLOWED_VIDEO_TYPES[contentType]) throw new Error("نوع الفيديو غير مدعوم (MP4 فقط)")
   if (!Number.isFinite(size) || size <= 0 || size > MAX_VIDEO_BYTES) {
     throw new Error(`حجم الفيديو يجب ألا يتجاوز ${MAX_VIDEO_BYTES / 1024 / 1024} ميغابايت`)
   }
   if (!isR2Configured()) throw new Error("تخزين الصور (R2) غير مضبوط على الخادم")
-  return createVideoUpload(contentType, size)
+  const existingKey = ticket ? verifyVideoUploadTicket(ticket, contentType, size) : undefined
+  const slot = await createVideoUpload(contentType, size, existingKey)
+  return { ...slot, ticket: ticket ?? videoUploadTicket(slot.objectKey, contentType, size) }
 }
 
 const MAX_BATCH = 30
