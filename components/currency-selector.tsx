@@ -1,6 +1,6 @@
 "use client"
 
-import { DollarSign } from "lucide-react"
+import { ChevronDown, DollarSign } from "lucide-react"
 import { useCurrency } from "@/components/currency-provider"
 import {
   DropdownMenu,
@@ -13,11 +13,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 /**
- * تبديل العملة بأيقونة $ فقط (بلا نص ولا مساحة عريضة) في شريط الهيدر، على الهاتف وسطح المكتب.
+ * يعرض رمز العملة في مظهر الكبسولة، وأيقونة $ في المظهر الافتراضي.
  * العملة الحالية تظهر داخل القائمة وفي وصف الزر لقارئات الشاشة.
  * عملة واحدة فقط: لا خيار يُقدَّم فلا يظهر الزر.
  */
-export function CurrencyIconMenu({ align = "end" }: { align?: "start" | "end" }) {
+export function CurrencyIconMenu({ align = "end", variant = "icon" }: { align?: "start" | "end"; variant?: "icon" | "pill" }) {
   const { currencies, currency, setCurrencyCode } = useCurrency()
 
   if (currencies.length < 2) return null
@@ -27,11 +27,18 @@ export function CurrencyIconMenu({ align = "end" }: { align?: "start" | "end" })
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="p-2 text-foreground transition-colors hover:text-primary"
+          className={variant === "pill"
+            ? "flex h-11 min-w-16 max-w-24 items-center justify-center gap-1 rounded-full bg-primary/5 px-3 text-sm font-semibold text-foreground transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            : "p-2 text-foreground transition-colors hover:text-primary"}
           aria-label={`تغيير العملة (الحالية: ${currency.name})`}
           title="تغيير العملة"
         >
-          <DollarSign className="h-6 w-6" aria-hidden="true" />
+          {variant === "pill" ? (
+            <>
+              <bdi className="truncate">{currency.symbol || currency.code}</bdi>
+              <ChevronDown className="h-4 w-4 shrink-0" aria-hidden="true" />
+            </>
+          ) : <DollarSign className="h-6 w-6" aria-hidden="true" />}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="min-w-52">

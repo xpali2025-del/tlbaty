@@ -22,78 +22,47 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between gap-4">
-          {/* الهاتف: أيقونة البحث وحدها مكان زر القائمة (الروابط في الشريط السفلي وصفحة الإعدادات) */}
-          <Link href="/search" className="-mr-2 p-2 text-foreground transition-colors hover:text-primary lg:hidden" aria-label="البحث">
-            <Search className="h-6 w-6" aria-hidden="true" />
-          </Link>
+      <header className="sticky top-0 z-40 rounded-b-2xl border-b border-primary/5 bg-background/95 shadow-[0_6px_16px_-12px_rgba(0,0,0,0.3)] backdrop-blur-sm lg:rounded-none lg:border-border lg:shadow-[0_6px_18px_-14px_rgba(0,0,0,0.25)]">
+        <div dir="rtl" className="mx-auto flex h-[68px] max-w-7xl items-center justify-between gap-2 px-3 sm:px-4 lg:hidden">
+          <Logo className="min-w-0 shrink [&_img]:max-h-12 [&_img]:max-w-[min(96px,100%)] [&_img]:object-contain" />
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <CurrencyIconMenu variant="pill" />
+            <Link href="/search" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/5 text-foreground transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label="البحث">
+              <Search className="h-[22px] w-[22px]" aria-hidden="true" />
+            </Link>
+            <NotificationsBell badgeSide="right" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/5 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" />
+          </div>
+        </div>
+        <div dir="rtl" className="mx-auto hidden h-20 max-w-7xl items-center gap-3 px-4 lg:flex xl:gap-6">
+          <Logo className="shrink-0 [&_img]:max-h-14 [&_img]:max-w-[110px] [&_img]:object-contain" />
 
-          <Logo />
-
-          <nav className="hidden lg:flex items-center gap-8" aria-label="القائمة الرئيسية">
+          <nav className="flex min-w-0 flex-1 items-center justify-center gap-3 xl:gap-6" aria-label="القائمة الرئيسية">
             {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-              >
+              <Link key={link.href} href={link.href} className="whitespace-nowrap text-xs font-medium text-foreground transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary xl:text-sm">
                 {link.label}
               </Link>
             ))}
           </nav>
 
-          <div className="flex items-center gap-1">
-            {/* سطح المكتب: نفس أيقونتي البحث والعملة */}
-            <div className="hidden items-center lg:flex">
-              <Link href="/search" className="p-2 text-foreground transition-colors hover:text-primary" aria-label="البحث">
-                <Search className="h-6 w-6" aria-hidden="true" />
-              </Link>
-              <CurrencyIconMenu />
-            </div>
-            <Link
-              href="/recently-viewed"
-              className="p-2 text-foreground hover:text-primary transition-colors hidden lg:block"
-              aria-label="المنتجات المعروضة مؤخرًا"
-            >
-              <Clock3 className="w-6 h-6" />
+          <div className="flex shrink-0 items-center gap-1 xl:gap-2">
+            <CurrencyIconMenu variant="pill" />
+            <Link href="/search" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/5 text-foreground transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label="البحث">
+              <Search className="h-[22px] w-[22px]" aria-hidden="true" />
             </Link>
-            <Link
-              href="/wishlist"
-              className="p-2 text-foreground hover:text-primary transition-colors relative hidden lg:block"
-              aria-label={`الرغبات (${wishlistCount} منتج)`}
-            >
-              <Heart className="w-6 h-6" />
-              {wishlistCount > 0 && (
-                <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {wishlistCount}
-                </span>
-              )}
+            <NotificationsBell badgeSide="right" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/5 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" />
+            <Link href="/account" className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-primary/5 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label="حسابي">
+              <User className="h-[22px] w-[22px]" aria-hidden="true" />
             </Link>
-            <Link
-              href="/account"
-              className="p-2 text-foreground hover:text-primary transition-colors hidden lg:block"
-              aria-label="حسابي"
-            >
-              <User className="w-6 h-6" />
+            <Link href="/wishlist" className="relative flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-primary/5 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label={`الرغبات (${wishlistCount} منتج)`}>
+              <Heart className="h-[22px] w-[22px]" aria-hidden="true" />
+              {wishlistCount > 0 && <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground">{wishlistCount}</span>}
             </Link>
-            {/* الهاتف: العملة في الطرف الآخر مع الجرس والسلة (على سطح المكتب لها مكان في مجموعة البحث أعلاه) */}
-            <div className="lg:hidden">
-              <CurrencyIconMenu />
-            </div>
-            {/* الجرس بجانب السلة — ظاهر على الهاتف وسطح المكتب */}
-            <NotificationsBell />
-            <Link
-              href="/cart"
-              className="p-2 text-foreground hover:text-primary transition-colors relative"
-              aria-label={`السلة (${totalItems} منتج)`}
-            >
-              <ShoppingCart className="w-6 h-6" />
-              {totalItems > 0 && (
-                <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {totalItems}
-                </span>
-              )}
+            <Link href="/recently-viewed" className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-primary/5 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label="المنتجات المعروضة مؤخرًا">
+              <Clock3 className="h-[22px] w-[22px]" aria-hidden="true" />
+            </Link>
+            <Link href="/cart" className="relative flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-primary/5 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label={`السلة (${totalItems} منتج)`}>
+              <ShoppingCart className="h-[22px] w-[22px]" aria-hidden="true" />
+              {totalItems > 0 && <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground">{totalItems}</span>}
             </Link>
           </div>
         </div>
