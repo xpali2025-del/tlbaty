@@ -141,6 +141,8 @@ export const siteSettings = store.table('site_settings', {
   codEnabled: boolean('cod_enabled').notNull().default(true),
   transferEnabled: boolean('transfer_enabled').notNull().default(true),
   walletEnabled: boolean('wallet_enabled').notNull().default(true),
+  /** Enables image search on the storefront; true preserves existing behavior. */
+  imageSearchEnabled: boolean('image_search_enabled').notNull().default(true),
   /** Days after an order is delivered/cancelled/returned before its payment-proof image is deleted; null = keep forever. */
   proofRetentionDays: integer('proof_retention_days'),
   /** Number of the WhatsApp login bot (international digits). Null = use WHATSAPP_BOT_NUMBER from the environment. */

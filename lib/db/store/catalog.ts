@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
-  boolean, check, index, integer, jsonb, numeric, real, text, uniqueIndex, uuid,
+  boolean, check, index, integer, jsonb, numeric, real, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import { pk, store, timestamps } from './common'
 
@@ -85,6 +85,8 @@ export const products = store.table('products', {
   searchText: text('search_text').notNull().default(''),
   /** Dominant colors of the main image, [{ hex, weight }], used by search-by-image. */
   imagePalette: jsonb('image_palette').$type<{ hex: string; weight: number }[]>().notNull().default(sql`'[]'::jsonb`),
+  /** Retry time for a failed search palette; no effect on the product image. */
+  imagePaletteRetryAt: timestamp('image_palette_retry_at', { withTimezone: true }),
   sortOrder: integer('sort_order').notNull().default(0),
   rating: real('rating').notNull().default(5),
   reviewsCount: integer('reviews_count').notNull().default(0),

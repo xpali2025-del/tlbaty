@@ -3,7 +3,7 @@
 import { SizeChartEditor, emptyChart } from "./size-chart-editor"
 import { validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { VariantStockEditor, variantCombos, variantKey } from "./variant-stock-editor"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import Image from "next/image"
 import { Pencil, PackageX, Star, Sparkles } from "lucide-react"
 import { toast } from "sonner"
@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { AdminBrand, AdminCategory, AdminColor, AdminProduct, AdminSizeChart } from "@/lib/admin"
-import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes } from "../client-actions"
+import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes, getPaletteBackfillStatus } from "../client-actions"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 
@@ -593,6 +593,12 @@ function Field({ label, required, children }: { label: string; required?: boolea
 /** يحسب بصمات ألوان صور المنتجات القائمة ليعمل «البحث بالصورة» عليها (المنتجات الجديدة تُحسب تلقائياً عند الحفظ). */
 function PaletteBackfill() {
   const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<{ enabled: boolean; remaining: number; deferred: number } | null>(null)
+  useEffect(() => {
+    let mounted = true
+    getPaletteBackfillStatus().then(s => { if (mounted) setStatus(s) }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
   async function run() {
     setBusy(true)
     try {
@@ -600,8 +606,9 @@ function PaletteBackfill() {
       for (let i = 0; i < 50; i++) {
         const r = await backfillImagePalettes()
         total += r.done
-        if (r.remaining === 0 || r.done === 0) {
-          toast.success(r.remaining === 0 ? `اكتمل: حُدّثت بصمات ${total} منتج` : `حُدّثت ${total} منتج، وتعذّر تحليل ${r.remaining} (صورتها غير متاحة)`)
+        setStatus({ enabled: true, remaining: r.remaining, deferred: r.deferred })
+        if (r.remaining === 0 || r.attempted === 0) {
+          toast.success(r.remaining === 0 ? `اكتمل: حُدّثت بصمات ${total} منتج` : `حُدّثت ${total} منتج؛ تبقّى ${r.remaining} لإعادة المحاولة لاحقاً`)
           return
         }
       }
@@ -615,9 +622,10 @@ function PaletteBackfill() {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm">
       <p className="min-w-0 flex-1 text-muted-foreground">
-        البحث بالصورة يطابق ألوان صورة العميل مع صور منتجاتك. المنتجات الجديدة تُحلَّل تلقائياً؛ اضغط لتحليل الموجودة منها.
+        {status?.enabled === false ? "البحث بالصورة متوقف من إعدادات الموقع." : "البحث بالصورة يطابق ألوان صورة العميل مع صور منتجاتك. الصور الناقصة تُحلَّل تدريجياً."}
+        {status ? ` المتبقي: ${status.remaining}، منها ${status.deferred} لإعادة المحاولة لاحقاً.` : ""}
       </p>
-      <Button size="sm" variant="outline" onClick={run} disabled={busy}>
+      <Button size="sm" variant="outline" onClick={run} disabled={busy || status?.enabled === false}>
         {busy ? "جارٍ التحليل..." : "تحديث بصمات الصور"}
       </Button>
     </div>

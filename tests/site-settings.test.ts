@@ -126,3 +126,17 @@ describe('login countries setting', () => {
     await expect(A.saveSettings(null, withCountries('967', '971'))).rejects.toThrow('غير مدعومة')
   })
 })
+
+describe('image search setting', () => {
+  const base = { name: 'x', ...both }
+  it('defaults to enabled, persists both choices, and does not reset from an older form', async () => {
+    const { isImageSearchEnabled } = await import('@/lib/site-config')
+    expect(await isImageSearchEnabled()).toBe(true)
+    await A.saveSettings(null, form({ ...base, imageSearchPresent: '1' }))
+    expect(await isImageSearchEnabled()).toBe(false)
+    await A.saveSettings(null, form(base))
+    expect(await isImageSearchEnabled()).toBe(false)
+    await A.saveSettings(null, form({ ...base, imageSearchPresent: '1', imageSearchEnabled: 'true' }))
+    expect(await isImageSearchEnabled()).toBe(true)
+  })
+})

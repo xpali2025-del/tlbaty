@@ -211,6 +211,12 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
           </Section>
 
           <Section id="sales" title="الدفع والطلبات" description="ما يستطيع العميل استعماله عند إتمام الطلب، ومدة بقاء صور الإثبات." icon={CreditCard}>
+            <Row label="البحث بالصورة" help="عند إيقافه يختفي زر البحث وتتوقف معالجة بصمات الصور. عند تشغيله تُحدّث الصور الناقصة تدريجياً.">
+              <input type="hidden" name="imageSearchPresent" value="1" />
+              <div className="rounded-lg border">
+                <ToggleLine id="imageSearchEnabled" name="imageSearchEnabled" label="تفعيل البحث بالصورة" defaultChecked={settings?.imageSearchEnabled ?? true} />
+              </div>
+            </Row>
             <Row
               label="طرق الدفع"
               help="تُفرض على الخادم أيضاً: الطريقة المعطّلة تُرفض حتى لو أُرسلت من متصفح معدَّل. يجب تفعيل طريقة واحدة على الأقل."

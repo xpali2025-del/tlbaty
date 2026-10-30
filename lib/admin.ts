@@ -174,6 +174,7 @@ export type AdminSettings = {
   copyright?: string
   /** طرق الدفع المفعّلة في صفحة الدفع. */
   payments: { cashOnDelivery: boolean; manualTransfer: boolean; wallet: boolean }
+  imageSearchEnabled: boolean
   /** أيام الاحتفاظ بصور إثبات الدفع بعد انتهاء الطلب؛ null = بلا حذف تلقائي. */
   proofRetentionDays: number | null
   /** رقم بوت الدخول المحفوظ في الإعدادات (فارغ = من متغير البيئة). */
@@ -409,6 +410,7 @@ export const getAdminSettings = () =>
       },
       copyright: opt(x.copyright),
       payments: { cashOnDelivery: x.codEnabled, manualTransfer: x.transferEnabled, wallet: x.walletEnabled },
+      imageSearchEnabled: x.imageSearchEnabled ?? true,
       proofRetentionDays: x.proofRetentionDays ?? null,
       loginBotNumber: x.loginBotNumber ?? null,
       loginCountries: x.loginCountries?.length ? x.loginCountries : ["967"],

@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Camera, Flame, LayoutGrid, Loader2, Search as SearchIcon, SlidersHorizontal, Tag, X } from "lucide-react"
+import dynamic from "next/dynamic"
+import { Flame, LayoutGrid, Search as SearchIcon, SlidersHorizontal, Tag, X } from "lucide-react"
 import { ProductCard } from "@/components/product-card"
 import { AdBanner, interleaveAds } from "@/components/ad-banner"
 import { adsForPlacement } from "@/lib/ads"
@@ -10,13 +11,14 @@ import { BrandCard } from "@/components/brand-card"
 import { useCurrency } from "@/components/currency-provider"
 import { SearchFilterSheet, type FilterDraft } from "@/components/search-filter-sheet"
 import { Button } from "@/components/ui/button"
-import { paletteFromFile } from "@/lib/image-palette-client"
-import type { PaletteColor } from "@/lib/palette"
+import type { ImageMode } from "@/components/image-search"
 import { activeFilterCount, buildSearchQuery, SEARCH_PAGE_SIZE, type SearchParams } from "@/lib/search-params"
 import type { SearchFacets, SearchResult } from "@/lib/search-types"
-import type { Ad, Brand, Product } from "@/lib/types"
+import type { Ad, Brand } from "@/lib/types"
 
-type ImageMode = { previewUrl: string; palette: PaletteColor[]; items: (Product & { similarity: number })[]; total: number }
+// The image feature is a separate client chunk; the disabled page never renders it.
+const ImageSearchButton = dynamic(() => import("@/components/image-search").then(m => m.ImageSearchButton), { ssr: false })
+const ImageSearchResults = dynamic(() => import("@/components/image-search").then(m => m.ImageSearchResults), { ssr: false })
 
 const QUICK: { key: "all" | "sale" | "bestseller"; label: string; icon: typeof LayoutGrid }[] = [
   { key: "all", label: "الكل", icon: LayoutGrid },
@@ -25,6 +27,7 @@ const QUICK: { key: "all" | "sale" | "bestseller"; label: string; icon: typeof L
 ]
 
 export function SearchClient({
+  imageSearchEnabled,
   params,
   result,
   facets,
@@ -32,6 +35,7 @@ export function SearchClient({
   ads = [],
   basePath = "/search",
 }: {
+  imageSearchEnabled: boolean
   params: SearchParams
   result: SearchResult
   facets: SearchFacets
@@ -45,9 +49,7 @@ export function SearchClient({
   const [text, setText] = useState(params.q ?? "")
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [image, setImage] = useState<ImageMode | null>(null)
-  const [imageBusy, setImageBusy] = useState(false)
   const [imageError, setImageError] = useState("")
-  const fileRef = useRef<HTMLInputElement>(null)
 
   // الرابط هو مصدر الحقيقة: كل تغيير يحدّث الرابط فيعيد الخادم النتائج (يمكن مشاركة الرابط).
   const go = (next: SearchParams) => {
@@ -89,36 +91,8 @@ export function SearchClient({
   }, [ads, params.categories])
   const gridItems = useMemo(() => interleaveAds(shown, visibleAds), [shown, visibleAds])
 
-  async function onPickImage(file: File | undefined) {
-    if (!file) return
-    setImageError("")
-    setImageBusy(true)
-    try {
-      const { palette, previewUrl } = await paletteFromFile(file)
-      // نرسل الفلاتر كقوائم حتى لا يضيع أكثر من قسم/لون/مقاس (Object.fromEntries كان يُبقي آخر قيمة فقط).
-      const filters: Record<string, string[]> = {}
-      for (const [k, v] of new URLSearchParams(buildSearchQuery({ ...params, q: undefined, sort: undefined, limit: undefined }))) (filters[k] ??= []).push(v)
-      const res = await fetch("/api/search/image", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ palette, filters }),
-      })
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message ?? "تعذّر البحث بالصورة. حاول مرة أخرى.")
-      const data = (await res.json()) as { items: ImageMode["items"]; total: number }
-      setImage((old) => {
-        if (old) URL.revokeObjectURL(old.previewUrl)
-        return { previewUrl, palette, items: data.items, total: data.total }
-      })
-    } catch (e) {
-      setImageError(e instanceof Error ? e.message : "تعذّر البحث بالصورة.")
-    } finally {
-      setImageBusy(false)
-      if (fileRef.current) fileRef.current.value = ""
-    }
-  }
-
+  useEffect(() => () => { if (image) URL.revokeObjectURL(image.previewUrl) }, [image])
   function clearImage() {
-    if (image) URL.revokeObjectURL(image.previewUrl)
     setImage(null)
     setImageError("")
   }
@@ -134,7 +108,7 @@ export function SearchClient({
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
       <h1 className="mb-1 text-2xl font-bold md:text-3xl">{params.q ? "نتائج البحث" : "كافة المنتجات"}</h1>
-      <p className="mb-4 text-sm text-muted-foreground">ابحث بالاسم أو رمز المنتج أو بصورة، وفلتر لتصل لما يناسبك</p>
+      <p className="mb-4 text-sm text-muted-foreground">ابحث بالاسم أو رمز المنتج{imageSearchEnabled ? " أو بصورة" : ""}، وفلتر لتصل لما يناسبك</p>
 
       <div className="mb-3 flex items-center gap-2">
         <div className="relative flex-1">
@@ -158,17 +132,7 @@ export function SearchClient({
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
-            <input ref={fileRef} type="file" accept="image/*" className="sr-only" aria-label="اختيار صورة للبحث" tabIndex={-1} onChange={(e) => onPickImage(e.target.files?.[0])} />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={imageBusy}
-              aria-label="البحث بالصورة"
-              title="البحث بالصورة"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-primary hover:bg-primary/10 disabled:opacity-60"
-            >
-              {imageBusy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Camera className="h-5 w-5" aria-hidden="true" />}
-            </button>
+            {imageSearchEnabled && <ImageSearchButton params={params} onError={setImageError} onSelect={setImage} />}
           </div>
         </div>
         {/* أيقونة الفلتر بلا نص */}
@@ -209,8 +173,8 @@ export function SearchClient({
       {imageError && <p className="mb-3 rounded-xl bg-destructive/10 px-4 py-2 text-sm text-destructive">{imageError}</p>}
 
       <div className={`min-w-0 transition-opacity ${pending ? "opacity-60" : ""}`} aria-busy={pending}>
-        {image ? (
-          <ImageResults image={image} onClear={clearImage} />
+        {imageSearchEnabled && image ? (
+          <ImageSearchResults image={image} onClear={clearImage} />
         ) : (
           <>
             <ActiveChips params={params} facets={facets} update={update} onClear={() => { setText(""); go({}) }} />
@@ -271,45 +235,6 @@ export function SearchClient({
   )
 }
 
-function ImageResults({ image, onClear }: { image: ImageMode; onClear: () => void }) {
-  return (
-    <section aria-label="نتائج البحث بالصورة">
-      <div className="mb-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
-        {/* معاينة محلية من ذاكرة المتصفح — الصورة لا تُرفع */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={image.previewUrl} alt="الصورة التي بحثت بها" className="h-16 w-16 rounded-lg object-cover" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold">منتجات مشابهة لصورتك</p>
-          <div className="mt-1 flex items-center gap-1.5" aria-label="ألوان الصورة">
-            {image.palette.map((c) => (
-              <span key={c.hex} title={c.hex} className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: c.hex }} />
-            ))}
-            <span className="mr-2 text-xs text-muted-foreground">نطابق الألوان والمظهر العام؛ حدّد القسم لنتائج أدق.</span>
-          </div>
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClear} aria-label="إغلاق البحث بالصورة">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      {image.items.length === 0 ? (
-        <div className="rounded-2xl bg-secondary p-12 text-center">
-          <p className="text-muted-foreground">لم نجد منتجات قريبة من هذه الصورة. جرّب صورة أخرى أو ابحث بالاسم.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5 xl:grid-cols-4">
-          {image.items.map((product) => (
-            <div key={product.id} className="relative">
-              <ProductCard product={product} />
-              <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-background/90 px-2 py-0.5 text-xs font-bold text-primary shadow">
-                {Math.round(product.similarity * 100)}%
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
 
 function ActiveChips({ params, facets, update, onClear }: { params: SearchParams; facets: SearchFacets; update: (p: Partial<SearchParams>) => void; onClear: () => void }) {
   const { currency } = useCurrency()
