@@ -4,6 +4,7 @@ import { MobileNav } from "@/components/mobile-nav"
 import { SearchClient } from "@/components/search-client"
 import { getAds, getBrands } from "@/lib/data"
 import { getSearchFacets, searchProducts } from "@/lib/search"
+import { isImageSearchEnabled } from "@/lib/site-config"
 import { parseSearchParams } from "@/lib/search-params"
 
 /**
@@ -19,13 +20,13 @@ export async function SearchPageView({
   basePath: "/search" | "/categories"
 }) {
   const params = parseSearchParams(searchParams)
-  const [result, facets, brands, ads] = await Promise.all([searchProducts(params), getSearchFacets(), getBrands(), getAds()])
+  const [result, facets, brands, ads, imageSearchEnabled] = await Promise.all([searchProducts(params), getSearchFacets(), getBrands(), getAds(), isImageSearchEnabled()])
 
   return (
     <>
       <Header />
       <main className="pb-24 lg:pb-12">
-        <SearchClient params={params} result={result} facets={facets} brands={brands} ads={ads} basePath={basePath} />
+        <SearchClient imageSearchEnabled={imageSearchEnabled} params={params} result={result} facets={facets} brands={brands} ads={ads} basePath={basePath} />
       </main>
       <Footer />
       <MobileNav />

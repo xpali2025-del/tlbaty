@@ -3,7 +3,7 @@
 import { serverAction } from "@/lib/server-action"
 import { parseSizeChart, validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { generateText } from "ai"
-import { and, count, eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { and, count, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import {
   adCategories,
@@ -23,9 +23,10 @@ import {
   subcategories,
 } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
+import { isImageSearchEnabled } from "@/lib/site-config"
 import { refreshProductSearch } from "@/lib/search-index"
 import { buildSearchText } from "@/lib/search-text"
-import { productsMissingPalette, refreshProductPalette } from "@/lib/product-palette"
+import { refreshProductPalette, processPaletteBackfill, paletteBackfillStatus } from "@/lib/product-palette"
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
 import { isCategoryCode } from "@/lib/product-code"
 import { normalizePlacements, parseDateOnly } from "@/lib/ads"
@@ -263,6 +264,7 @@ async function saveProductImpl(id: string | null, form: FormData) {
             tags,
             searchText: searchText(existing.productNumber, tags),
             ...(mainKey ? { mainImageKey: mainKey } : {}),
+            ...(mainKey && existing.mainImageKey !== mainKey ? { imagePalette: [], imagePaletteRetryAt: null } : {}),
           })
           .where(eq(products.id, productId))
         if (mainKey && existing.mainImageKey !== mainKey) removed.push(existing.mainImageKey)
@@ -314,7 +316,7 @@ async function saveProductImpl(id: string | null, form: FormData) {
   // (قراءة من R2 + معالجة) عند صورة رئيسية جديدة.
   await removeObjects(removed)
   const paletteFor = mainKey && savedId ? { id: savedId, key: mainKey } : null
-  if (paletteFor) await runAfterResponse(() => refreshProductPalette(paletteFor.id, paletteFor.key).catch(() => false))
+  if (paletteFor && await isImageSearchEnabled()) await runAfterResponse(() => refreshProductPalette(paletteFor.id, paletteFor.key))
 }
 
 type VariantInput = { color: string; size: string; stock: number; base: number | undefined }
@@ -358,13 +360,15 @@ async function saveVariantStock(
 }
 
 /** تعبئة بصمات الألوان للمنتجات القائمة (صورها موجودة وبلا بصمة) — دفعة من 40 في كل نداء. */
-async function backfillImagePalettesImpl(): Promise<{ done: number; remaining: number }> {
+async function backfillImagePalettesImpl(): Promise<{ done: number; attempted: number; remaining: number; deferred: number }> {
   await assertManagePermission("products")
-  const batch = await productsMissingPalette(40)
-  let done = 0
-  for (const p of batch) if (await refreshProductPalette(p.id, p.imageKey).catch(() => false)) done++
-  const [{ n }] = await db.select({ n: count() }).from(products).where(and(isNotNull(products.mainImageKey), sql`${products.imagePalette} = '[]'::jsonb`))
-  return { done, remaining: Number(n) }
+  if (!(await isImageSearchEnabled())) throw new Error("البحث بالصورة متوقف في إعدادات الموقع")
+  return processPaletteBackfill()
+}
+
+async function paletteBackfillStatusImpl() {
+  await assertManagePermission("products")
+  return paletteBackfillStatus()
 }
 
 async function deleteProductImpl(id: string) {
@@ -841,6 +845,7 @@ async function saveSettingsImpl(_id: string | null, form: FormData) {
     loginBotNumber,
     ...(loginCountries ? { loginCountries } : {}),
     ...(otpChannelRaw ? { otpChannel: otpChannelRaw } : {}),
+    ...(form.get("imageSearchPresent") === "1" ? { imageSearchEnabled: bool(form, "imageSearchEnabled") } : {}),
     updatedAt: new Date(),
   }
 
@@ -852,6 +857,9 @@ async function saveSettingsImpl(_id: string | null, form: FormData) {
     .onConflictDoUpdate({ target: siteSettings.id, set })
 
   revalidateStore()
+  if (existing?.imageSearchEnabled === false && form.get("imageSearchPresent") === "1" && bool(form, "imageSearchEnabled")) {
+    await runAfterResponse(() => processPaletteBackfill())
+  }
   if (logoKey && existing?.logoKey && existing.logoKey !== logoKey) await removeObjects([existing.logoKey])
 }
 
@@ -980,6 +988,7 @@ async function fetchWhatsappStatusImpl() {
 export const generateProductSlug = serverAction(generateProductSlugImpl)
 export const saveProduct = serverAction(saveProductImpl)
 export const backfillImagePalettes = serverAction(backfillImagePalettesImpl)
+export const getPaletteBackfillStatus = serverAction(paletteBackfillStatusImpl)
 export const deleteProduct = serverAction(deleteProductImpl)
 export const toggleProductFlag = serverAction(toggleProductFlagImpl)
 export const saveCategory = serverAction(saveCategoryImpl)

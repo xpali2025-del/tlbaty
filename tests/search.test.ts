@@ -226,3 +226,15 @@ describe('image search route', () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe('image search feature switch', () => {
+  it('rejects direct requests when disabled, then permits them on re-enable', async () => {
+    const { POST } = await import('@/app/api/search/image/route')
+    const request = () => new Request('http://x/api/search/image', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '5.6.7.8' }, body: JSON.stringify({ palette: [{ hex: '#d02530', weight: 1 }] }) }) as never
+    await db.insert(s.siteSettings).values({ id: 1, imageSearchEnabled: false }).onConflictDoUpdate({ target: s.siteSettings.id, set: { imageSearchEnabled: false } })
+    expect((await POST(request())).status).toBe(403)
+    expect((await searchProducts({})).total).toBeGreaterThan(0)
+    await db.update(s.siteSettings).set({ imageSearchEnabled: true }).where(eq(s.siteSettings.id, 1))
+    expect((await POST(request())).status).toBe(200)
+  })
+})

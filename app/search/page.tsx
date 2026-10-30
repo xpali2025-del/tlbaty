@@ -1,12 +1,12 @@
 import type { Metadata } from "next"
 import { SearchPageView } from "@/components/search-page-view"
-import { getSiteConfig } from "@/lib/site-config"
+import { getSiteConfig, isImageSearchEnabled } from "@/lib/site-config"
 
 export async function generateMetadata(): Promise<Metadata> {
-  const site = await getSiteConfig()
+  const [site, imageSearchEnabled] = await Promise.all([getSiteConfig(), isImageSearchEnabled()])
   return {
     title: "البحث",
-    description: `ابحث عن المنتجات في متجر ${site.name} بالاسم أو رمز المنتج أو اللون أو الصورة.`,
+    description: `ابحث عن المنتجات في متجر ${site.name} بالاسم أو رمز المنتج أو اللون${imageSearchEnabled ? " أو الصورة" : ""}.`,
     robots: { index: false, follow: true },
   }
 }

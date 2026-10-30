@@ -3,6 +3,7 @@ import { sanitizePalette } from "@/lib/palette"
 import { hitRateLimit } from "@/lib/rate-limit-memory"
 import { searchByPalette } from "@/lib/search"
 import { parseSearchParams } from "@/lib/search-params"
+import { isImageSearchEnabled } from "@/lib/site-config"
 
 // POST /api/search/image
 // الصورة نفسها لا تُرفع إلى الخادم: المتصفح يصغّرها ويستخرج بصمة ألوانها (≤4 ألوان) ويرسلها فقط،
@@ -11,6 +12,7 @@ import { parseSearchParams } from "@/lib/search-params"
 export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
+  if (!(await isImageSearchEnabled())) return NextResponse.json({ error: "IMAGE_SEARCH_DISABLED" }, { status: 403 })
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
   if (hitRateLimit(`image-search:${ip}`, 20, 60_000)) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "محاولات كثيرة، انتظر قليلاً." }, { status: 429 })

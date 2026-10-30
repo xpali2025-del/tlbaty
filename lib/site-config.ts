@@ -4,7 +4,7 @@ import { cache } from "react"
 import { db } from "@/lib/db/client"
 import { siteSettings } from "@/lib/db/store"
 import { CACHE_TAGS } from "@/lib/cache-tags"
-import { dbCached } from "@/lib/db-cache"
+import { dbCached, isDbConfigured } from "@/lib/db-cache"
 import { resolveOptionalImageUrl } from "@/lib/images"
 import { SITE_CONFIG } from "@/lib/site"
 
@@ -107,4 +107,17 @@ export type PublicSiteConfig = Pick<SiteConfig, "name" | "nameEn" | "tagline" | 
 
 export function toPublicSiteConfig(c: SiteConfig): PublicSiteConfig {
   return { name: c.name, nameEn: c.nameEn, tagline: c.tagline, contact: c.contact, social: c.social, footer: c.footer, logoUrl: c.logoUrl, payments: c.payments }
+}
+
+/** Read live on each request, so a disabled feature is enforced across server instances. */
+export async function isImageSearchEnabled(): Promise<boolean> {
+  if (!isDbConfigured()) return true
+  try {
+    const [row] = await db.select({ enabled: siteSettings.imageSearchEnabled }).from(siteSettings).limit(1)
+    return row?.enabled ?? true
+  } catch (error) {
+    // Keep ordinary browsing available and fail closed for image search.
+    console.error("image search setting unavailable:", error instanceof Error ? error.message : "unknown")
+    return false
+  }
 }

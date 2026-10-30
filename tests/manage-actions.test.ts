@@ -593,3 +593,23 @@ describe('helpers', () => {
     expect(helpers.json(f, 'bad', 'fallback')).toBe('fallback')
   })
 })
+
+describe('image search disabled during product edits', () => {
+  it('keeps the new product image and clears the stale search palette', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://test:test@localhost/test')
+    try {
+      await db.insert(s.siteSettings).values({ id: 1, imageSearchEnabled: false }).onConflictDoUpdate({ target: s.siteSettings.id, set: { imageSearchEnabled: false } })
+      await A.saveProduct(null, productForm({ slug: 'image-switch-test', imageKey: KEY('products', 'old') }))
+      const [p] = await db.select().from(s.products).where(eq(s.products.slug, 'image-switch-test'))
+      await db.update(s.products).set({ imagePalette: [{ hex: '#ff0000', weight: 1 }] }).where(eq(s.products.id, p.id))
+      await A.saveProduct(p.id, productForm({ slug: 'image-switch-test', imageKey: KEY('products', 'new') }))
+      const [updated] = await db.select().from(s.products).where(eq(s.products.id, p.id))
+      expect(updated.mainImageKey).toBe(KEY('products', 'new'))
+      expect(updated.imagePalette).toEqual([])
+      expect(updated.imagePaletteRetryAt).toBeNull()
+    } finally {
+      await db.delete(s.siteSettings)
+      vi.unstubAllEnvs()
+    }
+  })
+})

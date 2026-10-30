@@ -12,6 +12,7 @@ export const {
   generateProductSlug,
   saveProduct,
   backfillImagePalettes,
+  getPaletteBackfillStatus,
   deleteProduct,
   toggleProductFlag,
   saveCategory,
