@@ -14,7 +14,7 @@ import { useNotifications } from "@/components/notifications-provider"
 //   فيتطابق HTML الخادم مع المتصفح (بلا Hydration Error).
 // ============================================
 
-export function NotificationsBell({ className = "" }: { className?: string }) {
+export function NotificationsBell({ className = "", badgeSide = "left" }: { className?: string; badgeSide?: "left" | "right" }) {
   const { unreadCount, hydrated } = useNotifications()
 
   const showBadge = hydrated && unreadCount > 0
@@ -29,7 +29,7 @@ export function NotificationsBell({ className = "" }: { className?: string }) {
       <Bell className="h-6 w-6" />
       {showBadge && (
         <span
-          className={`absolute top-0 left-0 flex h-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground ${
+          className={`absolute top-0 ${badgeSide === "right" ? "right-0" : "left-0"} flex h-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground ${
             // "99+" أعرض من رقم واحد، فنوسّع الحاوية بدل قصّ النص.
             unreadCount > 99 ? "min-w-[26px] px-1" : "w-5"
           }`}

@@ -22,12 +22,18 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between gap-4">
-          {/* الهاتف: أيقونة البحث وحدها مكان زر القائمة (الروابط في الشريط السفلي وصفحة الإعدادات) */}
-          <Link href="/search" className="-mr-2 p-2 text-foreground transition-colors hover:text-primary lg:hidden" aria-label="البحث">
-            <Search className="h-6 w-6" aria-hidden="true" />
-          </Link>
+      <header className="sticky top-0 z-40 rounded-b-2xl border-b border-primary/5 bg-background/95 shadow-[0_6px_16px_-12px_rgba(0,0,0,0.3)] backdrop-blur-sm lg:rounded-none lg:border-border lg:shadow-none">
+        <div dir="rtl" className="mx-auto flex h-[68px] max-w-7xl items-center justify-between gap-2 px-3 sm:px-4 lg:hidden">
+          <Logo className="min-w-0 shrink [&_img]:max-h-12 [&_img]:max-w-[min(96px,100%)] [&_img]:object-contain" />
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <CurrencyIconMenu variant="mobile" />
+            <Link href="/search" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/5 text-foreground transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label="البحث">
+              <Search className="h-[22px] w-[22px]" aria-hidden="true" />
+            </Link>
+            <NotificationsBell badgeSide="right" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/5 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" />
+          </div>
+        </div>
+        <div className="mx-auto hidden h-16 max-w-7xl items-center justify-between gap-4 px-4 lg:flex">
 
           <Logo />
 
@@ -77,11 +83,7 @@ export function Header() {
             >
               <User className="w-6 h-6" />
             </Link>
-            {/* الهاتف: العملة في الطرف الآخر مع الجرس والسلة (على سطح المكتب لها مكان في مجموعة البحث أعلاه) */}
-            <div className="lg:hidden">
-              <CurrencyIconMenu />
-            </div>
-            {/* الجرس بجانب السلة — ظاهر على الهاتف وسطح المكتب */}
+            {/* أدوات سطح المكتب */}
             <NotificationsBell />
             <Link
               href="/cart"
