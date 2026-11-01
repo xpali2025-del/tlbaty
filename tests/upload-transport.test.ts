@@ -39,7 +39,7 @@ describe('bounded image transport', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('aborts stalled attempts using the size-scaled timeout and clears timers', async () => {
+  it('bounds fetch fallback attempts at two minutes and clears timers', async () => {
     vi.useFakeTimers()
     const fetcher = vi.fn((_url: string, { signal }: { signal: AbortSignal }) => new Promise((_, reject) => {
       signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })
@@ -48,7 +48,7 @@ describe('bounded image transport', () => {
     const onTimeout = vi.fn()
     const pending = putImage('https://storage/upload', file(), { onTimeout })
     const result = pending.catch(error => error)
-    await vi.advanceTimersByTimeAsync(16_999)
+    await vi.advanceTimersByTimeAsync(119_999)
     expect(onTimeout).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(onTimeout).toHaveBeenCalledTimes(1)
@@ -119,5 +119,113 @@ describe('upload scheduling safeguards', () => {
     await expect(uploadFormImages(form, fields, { request, prepare: async file => file, put: vi.fn() })).rejects.toThrow('تعذّر ضغط الصورة')
     expect(request).not.toHaveBeenCalled()
     expect(form.has('keys')).toBe(false)
+  })
+})
+
+describe('browser upload progress', () => {
+  function xhrBrowser() {
+    const instances: FakeXHR[] = []
+    class FakeXHR {
+      status = 0
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      onabort: (() => void) | null = null
+      upload = { onprogress: null as ((event: { loaded: number }) => void) | null }
+      open = vi.fn()
+      setRequestHeader = vi.fn()
+      send = vi.fn()
+      abort = vi.fn(() => this.onabort?.())
+      constructor() { instances.push(this) }
+      progress(loaded: number) { this.upload.onprogress?.({ loaded }) }
+      respond(status: number) { this.status = status; this.onload?.() }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR)
+    return instances
+  }
+
+  it('allows a slow progressing transfer beyond the old deadline and waits for HTTP success', async () => {
+    vi.useFakeTimers()
+    const instances = xhrBrowser()
+    const onTimeout = vi.fn()
+    let done = false
+    const image = file()
+    const pending = putImage('https://storage/signed', image, { onTimeout }).then(() => { done = true })
+    await vi.advanceTimersByTimeAsync(0)
+    const xhr = instances[0]
+    expect(xhr.open).toHaveBeenCalledWith('PUT', 'https://storage/signed')
+    expect(xhr.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'image/png')
+    expect(xhr.send).toHaveBeenCalledWith(image)
+    await vi.advanceTimersByTimeAsync(40_000)
+    xhr.progress(40_000)
+    await vi.advanceTimersByTimeAsync(40_000)
+    xhr.progress(80_000)
+    expect(done).toBe(false) // 100% bytes sent is not a confirmed object write
+    expect(onTimeout).not.toHaveBeenCalled()
+    xhr.respond(200)
+    await pending
+    expect(instances).toHaveLength(1)
+    expect(xhr.upload.onprogress).toBeNull()
+    expect(xhr.onload).toBeNull()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('does not treat repeated progress counts as new bytes and bounds stalled retries', async () => {
+    vi.useFakeTimers()
+    const instances = xhrBrowser()
+    const onTimeout = vi.fn()
+    const pending = putImage('https://storage/signed', file(), { onTimeout }).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(0)
+    instances[0].progress(1)
+    await vi.advanceTimersByTimeAsync(40_000)
+    instances[0].progress(1)
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(onTimeout).toHaveBeenCalledOnce()
+    await vi.runAllTimersAsync()
+    expect(await pending).toMatchObject({ kind: 'timeout' })
+    expect(instances).toHaveLength(5)
+    expect(instances.every((x) => x.upload.onprogress === null)).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('enforces an overall two-minute attempt cap even with continuing progress', async () => {
+    vi.useFakeTimers()
+    const instances = xhrBrowser()
+    const onTimeout = vi.fn()
+    const pending = putImage('https://storage/signed', file(), { onTimeout }).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(0)
+    for (let i = 1; i <= 3; i++) {
+      await vi.advanceTimersByTimeAsync(30_000)
+      instances[0].progress(i * 10_000)
+    }
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(onTimeout).toHaveBeenCalledOnce()
+    await vi.runAllTimersAsync()
+    expect(await pending).toMatchObject({ kind: 'timeout' })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('reports a storage rejection as HTTP failure without retrying it as a connection loss', async () => {
+    vi.useFakeTimers()
+    const instances = xhrBrowser()
+    const pending = putImage('https://storage/signed', file()).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(0)
+    instances[0].respond(403)
+    expect(await pending).toMatchObject({ kind: 'http', status: 403 })
+    expect(instances).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('retries transient browser network errors on the same signed URL and succeeds', async () => {
+    vi.useFakeTimers()
+    const instances = xhrBrowser()
+    const pending = putImage('https://storage/signed', file())
+    await vi.advanceTimersByTimeAsync(0)
+    instances[0].onerror?.()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(instances).toHaveLength(2)
+    instances[1].respond(200)
+    await pending
+    expect(instances.every((x) => x.open.mock.calls[0][1] === 'https://storage/signed')).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
