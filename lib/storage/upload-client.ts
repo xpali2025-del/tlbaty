@@ -49,7 +49,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
 }
 
 /** عدد الصور التي تُضغط معاً (ترميز الصور الكبيرة ثقيل على الذاكرة في الجوال) وعدد الرفوعات المتزامنة. */
-const PREPARE_CONCURRENCY = 2
+const PREPARE_CONCURRENCY = 1
 const MAX_FALLBACK_BYTES = 1.5 * 1024 * 1024
 
 /** أقصى بعد (بكسل) لكل مجلد: كافٍ للعرض على الشاشات الكبيرة (2x) ولا يرفع صور هاتف 12 ميغابكسل كما هي. */
@@ -66,35 +66,90 @@ const MAX_DIMENSION: Record<ImageFolder, number> = {
   site: 800,
 }
 
+const TARGET_BYTES: Record<ImageFolder, number> = {
+  products: 500 * 1024,
+  slides: 500 * 1024,
+  ads: 500 * 1024,
+  categories: 250 * 1024,
+  brands: 150 * 1024,
+  reviews: 100 * 1024,
+  "payment-accounts": 150 * 1024,
+  couriers: 150 * 1024,
+  notifications: 350 * 1024,
+  site: 250 * 1024,
+}
+
+type DecodedImage = { source: CanvasImageSource; width: number; height: number; release: () => void }
+
+async function decodeImage(file: File): Promise<DecodedImage> {
+  if (typeof createImageBitmap !== "undefined") {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() }
+    } catch {
+      // Some browsers can display a file even when their bitmap decoder rejects it.
+    }
+  }
+  const url = URL.createObjectURL(file)
+  const image = new Image()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve()
+      image.onerror = () => reject(new Error("تعذّر قراءة الصورة"))
+      image.src = url
+    })
+    return { source: image, width: image.naturalWidth, height: image.naturalHeight, release: () => { image.src = ""; URL.revokeObjectURL(url) } }
+  } catch (error) {
+    URL.revokeObjectURL(url)
+    throw error
+  } finally {
+    image.onload = image.onerror = null
+  }
+}
+
 /** لا نمسّ ما هو صغير أصلاً أو بصيغة لا تُعاد ترميزها بأمان (AVIF متحرك/GIF/SVG). */
 const SKIP_BELOW_BYTES = 200 * 1024
 const RECODABLE = new Set(["image/jpeg", "image/png", "image/webp"])
 
 /**
- * يصغّر الصورة إلى الحد الأقصى للمجلد ويرمّزها WebP (جودة 0.82) قبل الرفع. صور الهاتف الأصلية بحجم 3–5 ميغابايت
- * تصبح عادةً 100–300 كيلوبايت: صفحات أسرع بكثير وتخزين ونقل أقل. يُستعمل الأصل إن لم يصغر الناتج.
+ * يحاول WebP بجودة 0.82 ثم 0.72، ويصغّر تدريجياً حتى نصف المقاس المسموح عند الحاجة.
+ * الحجم المستهدف يختلف حسب الاستخدام، ولا نكبّر الصورة أو نقصّها أو نرفع نتيجة أكبر من الأصل.
  */
 export async function compressImage(file: File, folder: ImageFolder): Promise<File> {
-  if (typeof document === "undefined" || typeof createImageBitmap === "undefined") return file
+  if (typeof document === "undefined") return file
   if (!RECODABLE.has(file.type) || file.size < SKIP_BELOW_BYTES) return file
-  let bitmap: ImageBitmap | undefined
+  let decoded: DecodedImage | undefined
+  let canvas: HTMLCanvasElement | undefined
   try {
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+    decoded = await decodeImage(file)
+    if (!decoded.width || !decoded.height) return file
     const max = MAX_DIMENSION[folder]
-    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement("canvas")
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const scale = Math.min(1, max / Math.max(decoded.width, decoded.height))
+    canvas = document.createElement("canvas")
     const ctx = canvas.getContext("2d")
     if (!ctx) return file
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.82))
-    if (!blob || blob.type !== "image/webp" || blob.size >= file.size) return file
-    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" })
+    let best = file
+    for (const factor of [1, 0.75, 0.5]) {
+      canvas.width = Math.max(1, Math.round(decoded.width * scale * factor))
+      canvas.height = Math.max(1, Math.round(decoded.height * scale * factor))
+      ctx.drawImage(decoded.source, 0, 0, canvas.width, canvas.height)
+      for (const quality of [0.82, 0.72]) {
+        const target = canvas
+        const blob = await new Promise<Blob | null>((resolve) => target.toBlob(resolve, "image/webp", quality))
+        // PNG is the browser fallback when WebP encoding is unavailable; keep its real MIME/extension and transparency.
+        if (blob && ["image/webp", "image/png"].includes(blob.type) && blob.size > 0 && blob.size < best.size) {
+          best = new File([blob], file.name.replace(/\.[^.]+$/, "") + (blob.type === "image/webp" ? ".webp" : ".png"), { type: blob.type })
+        }
+        if (best.size <= TARGET_BYTES[folder]) return best
+        if (blob?.type === "image/png") break // PNG ignores the quality argument.
+      }
+    }
+    return best
   } catch {
     return file
   } finally {
-    bitmap?.close()
+    decoded?.release()
+    if (canvas) canvas.width = canvas.height = 0
   }
 }
 
@@ -143,8 +198,8 @@ export async function uploadFormImages(
   const prepared = await mapLimit(jobs, PREPARE_CONCURRENCY, async ({ field, original }) => {
     const file = deps.prepare ? await deps.prepare(original, field.folder) : original
     if (file.size > MAX_IMAGE_BYTES) throw new Error(`حجم الصورة بعد الضغط ما زال يتجاوز ${MAX_IMAGE_BYTES / 1024 / 1024} ميغابايت (${original.name})`)
-    if (deps.prepare && file.size >= original.size && file.size > MAX_FALLBACK_BYTES) {
-      throw new Error(`تعذّر ضغط الصورة (${original.name}). جرّب صورة أصغر أو صيغة JPEG أو WebP.`)
+    if (deps.prepare && file.size > MAX_FALLBACK_BYTES) {
+      throw new Error(`تعذّر ضغط الصورة إلى حجم مناسب للرفع (${original.name}). جرّب صورة أصغر أو صيغة JPEG أو WebP.`)
     }
     return file
   })
