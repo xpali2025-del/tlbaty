@@ -1,7 +1,8 @@
 "use client"
 
-import { DollarSign } from "lucide-react"
+import { ChevronDown, DollarSign } from "lucide-react"
 import { useCurrency } from "@/components/currency-provider"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,26 +13,40 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-/**
- * تبديل العملة بأيقونة $ فقط (بلا نص ولا مساحة عريضة) في شريط الهيدر، على الهاتف وسطح المكتب.
- * العملة الحالية تظهر داخل القائمة وفي وصف الزر لقارئات الشاشة.
- * عملة واحدة فقط: لا خيار يُقدَّم فلا يظهر الزر.
- */
-export function CurrencyIconMenu({ align = "end" }: { align?: "start" | "end" }) {
+type CurrencyIconMenuProps = {
+  align?: "start" | "end"
+  appearance?: "icon" | "label"
+}
+
+export function CurrencyIconMenu({ align = "end", appearance = "icon" }: CurrencyIconMenuProps) {
   const { currencies, currency, setCurrencyCode } = useCurrency()
 
   if (currencies.length < 2) return null
+
+  const showLabel = appearance === "label"
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="p-2 text-foreground transition-colors hover:text-primary"
+          className={cn(
+            "text-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+            showLabel
+              ? "flex h-10 min-w-[78px] items-center justify-center gap-2 rounded-full bg-[#fff3f6] px-3 text-sm font-semibold text-black hover:bg-[#ffe7ee] hover:text-black"
+              : "p-2",
+          )}
           aria-label={`تغيير العملة (الحالية: ${currency.name})`}
           title="تغيير العملة"
         >
-          <DollarSign className="h-6 w-6" aria-hidden="true" />
+          {showLabel ? (
+            <>
+              <span dir="auto">{currency.symbol}</span>
+              <ChevronDown className="size-4" aria-hidden="true" />
+            </>
+          ) : (
+            <DollarSign className="size-6" aria-hidden="true" />
+          )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="min-w-52">
