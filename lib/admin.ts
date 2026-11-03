@@ -1,5 +1,5 @@
 import "server-only"
-import { asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm"
+import { asc, count, desc, eq, getTableColumns, inArray, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
 import { isOtpChannel, type OtpChannel } from "@/lib/otp/channel"
@@ -218,9 +218,12 @@ async function productCounts(column: typeof products.categoryId | typeof product
 
 export const getAdminProducts = () =>
   adminFetch<AdminProduct[]>([], async () => {
+    const { searchText: _searchText, imagePalette: _imagePalette, ...productColumns } = getTableColumns(products)
+    void _searchText
+    void _imagePalette
     const rows = await db
       .select({
-        p: products,
+        p: productColumns,
         categorySlug: categories.slug,
         categoryName: categories.name,
         subcategorySlug: subcategories.slug,
@@ -232,12 +235,24 @@ export const getAdminProducts = () =>
       .leftJoin(brands, eq(brands.id, products.brandId))
       .orderBy(asc(products.sortOrder), asc(products.name))
     if (rows.length === 0) return []
-    const ids = rows.map((r) => r.p.id)
+    const productIds = rows.map((row) => row.p.id)
     const [images, colors, variants] = await Promise.all([
-      db.select().from(productImages).where(inArray(productImages.productId, ids)).orderBy(asc(productImages.sortOrder)),
-      db.select().from(productColors).where(inArray(productColors.productId, ids)).orderBy(asc(productColors.sortOrder)),
-      db.select().from(productVariants).where(inArray(productVariants.productId, ids)),
+      db.select().from(productImages).where(inArray(productImages.productId, productIds)).orderBy(asc(productImages.sortOrder)),
+      db.select().from(productColors).where(inArray(productColors.productId, productIds)).orderBy(asc(productColors.sortOrder)),
+      db.select().from(productVariants).where(inArray(productVariants.productId, productIds)).orderBy(asc(productVariants.id)),
     ])
+    const groupByProduct = <T extends { productId: string }>(items: T[]) => {
+      const grouped = new Map<string, T[]>()
+      for (const item of items) {
+        const group = grouped.get(item.productId)
+        if (group) group.push(item)
+        else grouped.set(item.productId, [item])
+      }
+      return grouped
+    }
+    const imagesByProduct = groupByProduct(images)
+    const colorsByProduct = groupByProduct(colors)
+    const variantsByProduct = groupByProduct(variants)
     return rows.map(({ p, categorySlug, categoryName, subcategorySlug, brandName }) => ({
       _id: p.id,
       productId: p.productNumber,
@@ -253,9 +268,7 @@ export const getAdminProducts = () =>
       brandId: opt(p.brandId),
       brandName: opt(brandName),
       image: resolveOptionalImageUrl(p.mainImageKey),
-      images: images
-        .filter((i) => i.productId === p.id)
-        .map((i) => ({ url: resolveOptionalImageUrl(i.imageKey) as string, ref: i.imageKey })),
+      images: (imagesByProduct.get(p.id) ?? []).map((i) => ({ url: resolveOptionalImageUrl(i.imageKey) as string, ref: i.imageKey })),
       stock: p.stock,
       isNew: p.isNew,
       isBestseller: p.isBestseller,
@@ -267,9 +280,9 @@ export const getAdminProducts = () =>
       metaTitle: opt(p.metaTitle),
       metaDescription: opt(p.metaDescription),
       keywords: p.keywords,
-      colors: colors.filter((c) => c.productId === p.id).map((c) => ({ name: c.name, hex: c.hex })),
+      colors: (colorsByProduct.get(p.id) ?? []).map((c) => ({ name: c.name, hex: c.hex })),
       sizes: p.sizes,
-      variants: variants.filter((v) => v.productId === p.id).map((v) => ({ color: v.color, size: v.size, stock: v.stock })),
+      variants: (variantsByProduct.get(p.id) ?? []).map((v) => ({ color: v.color, size: v.size, stock: v.stock })),
       sizeChartId: opt(p.sizeChartId),
       customSizeChart: p.customSizeChart ?? undefined,
       tags: p.tags,
