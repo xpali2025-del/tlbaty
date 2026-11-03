@@ -10,7 +10,8 @@ import { CACHE_TAGS } from '@/lib/cache-tags'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
 import { unwrapAll } from '@/lib/action-result'
 
-const db = drizzle(new PGlite())
+const queries: string[] = []
+const db = drizzle(new PGlite(), { logger: { logQuery: (query) => queries.push(query) } })
 const mocks = vi.hoisted(() => ({
   revalidateTag: vi.fn(),
   revalidatePath: vi.fn(),
@@ -294,6 +295,58 @@ describe('toggleProductFlag and deleteProduct', () => {
 })
 
 describe('categories', () => {
+  it('batches hundreds of subcategories, preserves IDs, and skips unchanged writes', async () => {
+    const input = Array.from({ length: 251 }, (_, i) => ({ name: `Sub ${i}`, slug: `bulk-${i}`, description: `Description ${i}` }))
+    queries.length = 0
+    await A.saveCategory(null, form({ name: 'Bulk category', slug: 'bulk-category', code: 'BULK', subcategories: JSON.stringify(input) }))
+    expect(queries.filter((q) => q.startsWith('insert into "store"."subcategories"'))).toHaveLength(2)
+    const cat = (await rows(s.categories)).find((c) => c.slug === 'bulk-category')!
+    const before = (await rows(s.subcategories)).filter((c) => c.categoryId === cat.id).sort((a, b) => a.sortOrder - b.sortOrder)
+    expect(before.map((c) => [c.name, c.description, c.sortOrder])).toEqual(input.map((c, i) => [c.name, c.description, i]))
+
+    queries.length = 0
+    await A.saveCategory(cat.id, form({ name: cat.name, slug: cat.slug, description: 'Only metadata changed', sortOrder: '7', subcategories: JSON.stringify(input) }))
+    expect(queries.some((q) => /insert into "store"\."subcategories"|update "store"\."products"|from "store"\."products"/.test(q))).toBe(false)
+
+    const renamed = input.map((c) => ({ ...c, name: `${c.name} renamed`, description: null }))
+    queries.length = 0
+    await A.saveCategory(cat.id, form({ name: cat.name, slug: cat.slug, subcategories: JSON.stringify(renamed) }))
+    expect(queries.filter((q) => q.startsWith('insert into "store"."subcategories"'))).toHaveLength(2)
+    const after = (await rows(s.subcategories)).filter((c) => c.categoryId === cat.id).sort((a, b) => a.sortOrder - b.sortOrder)
+    expect(after.map((c) => c.id)).toEqual(before.map((c) => c.id))
+    expect(after.map((c) => [c.name, c.description, c.sortOrder])).toEqual(renamed.map((c, i) => [c.name, null, i]))
+  })
+
+  it('refreshes search on category/subcategory rename and removal, with atomic rollback on failure', async () => {
+    await A.saveCategory(null, form({ name: 'Originalcategory', slug: 'search-category', code: 'SRCH', subcategories: JSON.stringify([{ name: 'Originalsub', slug: 'search-sub' }]) }))
+    const cat = (await rows(s.categories)).find((c) => c.slug === 'search-category')!
+    const sub = (await rows(s.subcategories)).find((c) => c.categoryId === cat.id)!
+    await A.saveProduct(null, productForm({ name: 'Indexed product', slug: 'category-indexed-product', categoryId: cat.id, subcategory: sub.slug }))
+    const getProduct = async () => (await rows(s.products)).find((p) => p.slug === 'category-indexed-product')!
+    expect((await getProduct()).searchText).toContain('originalsub')
+    await A.saveCategory(cat.id, form({ name: 'Renamedcategory', slug: cat.slug, subcategories: JSON.stringify([{ name: 'Renamedsub', slug: sub.slug }]) }))
+    const renamed = await getProduct()
+    expect(renamed.searchText).toContain('renamedcategory renamedsub')
+    expect(renamed.searchText).not.toContain('original')
+    expect(renamed.subcategoryId).toBe(sub.id)
+
+    // A failed search write rolls back the category and subcategory edits too.
+    await db.execute(sql`alter table store.products add constraint test_reject_search check (search_text not like '%rejectedname%')`)
+    try {
+      await expect(A.saveCategory(cat.id, form({ name: 'Rejectedname', slug: cat.slug, subcategories: '[]' }))).rejects.toThrow()
+      expect((await rows(s.categories)).find((c) => c.id === cat.id)!.name).toBe('Renamedcategory')
+      expect((await getProduct()).subcategoryId).toBe(sub.id)
+      expect((await getProduct()).searchText).toBe(renamed.searchText)
+    } finally {
+      await db.execute(sql`alter table store.products drop constraint test_reject_search`)
+    }
+    await A.saveCategory(cat.id, form({ name: 'Renamedcategory', slug: cat.slug, subcategories: '[]' }))
+    const removed = await getProduct()
+    expect(removed.subcategoryId).toBeNull()
+    expect(removed.searchText).toContain('renamedcategory')
+    expect(removed.searchText).not.toContain('renamedsub')
+  })
+
   it('creates a category with subcategories, then diffs them on update, and guards deletion', async () => {
     await A.saveCategory(null, form({ name: 'قسم جديد', slug: 'new-cat', imageKey: KEY('categories', 'c1'), sortOrder: '3', subcategories: JSON.stringify([{ name: 'فرعي أ', slug: 'sub-a' }, { name: 'فرعي ب', slug: 'sub-b', description: 'وصف' }, { name: 'مكرر', slug: 'sub-a' }]) }))
     const cat = (await rows(s.categories)).find((c) => c.slug === 'new-cat')!

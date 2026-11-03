@@ -427,30 +427,42 @@ async function saveCategoryImpl(id: string | null, form: FormData) {
   try {
     await db.transaction(async (tx) => {
       let rowId: string
+      let searchChanged = false
+      let needsCode = !codeRaw
       if (categoryId) {
-        const [existing] = await tx.select().from(categories).where(eq(categories.id, categoryId)).limit(1)
+        const [existing] = await tx.select().from(categories).where(eq(categories.id, categoryId)).for("no key update")
         if (!existing) throw new Error("القسم غير موجود")
+        searchChanged = existing.name !== name
+        needsCode = !codeRaw && !existing.code
         await tx.update(categories).set({ ...values, ...(imageKey ? { imageKey } : {}) }).where(eq(categories.id, categoryId))
         if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
         rowId = categoryId
       } else {
         ;[{ id: rowId }] = await tx.insert(categories).values({ ...values, imageKey: imageKey ?? null }).returning({ id: categories.id })
       }
-      await ensureCategoryCode(tx, rowId)
+      if (needsCode) await ensureCategoryCode(tx, rowId)
 
       const current = await tx.select().from(subcategories).where(eq(subcategories.categoryId, rowId))
+      const bySlug = new Map(current.map((sub) => [sub.slug, sub]))
       const stale = current.filter((c) => !incoming.has(c.slug)).map((c) => c.id)
       if (stale.length) await tx.delete(subcategories).where(inArray(subcategories.id, stale))
-      let order = 0
-      for (const [slug, sub] of incoming) {
-        const row = { categoryId: rowId, slug, name: sub.name, description: sub.description, sortOrder: order++ }
+      const changed = [...incoming].map(([slug, sub], sortOrder) => ({ categoryId: rowId, slug, ...sub, sortOrder })).filter((sub) => {
+        const previous = bySlug.get(sub.slug)
+        if (previous && previous.name !== sub.name) searchChanged = true
+        return !previous || previous.name !== sub.name || previous.description !== sub.description || previous.sortOrder !== sub.sortOrder
+      })
+      // كتابة المتغيّر فقط، على دفعات محدودة بدل نداء لكل قسم فرعي؛ تحفظ المعرّفات والروابط القائمة.
+      for (let offset = 0; offset < changed.length; offset += 250) {
         await tx
           .insert(subcategories)
-          .values(row)
-          .onConflictDoUpdate({ target: [subcategories.categoryId, subcategories.slug], set: row })
+          .values(changed.slice(offset, offset + 250))
+          .onConflictDoUpdate({
+            target: [subcategories.categoryId, subcategories.slug],
+            set: { name: sql`excluded.name`, description: sql`excluded.description`, sortOrder: sql`excluded.sort_order` },
+          })
       }
-      // إعادة تسمية القسم أو أقسامه الفرعية تغيّر نص بحث منتجاته.
-      if (categoryId) await refreshProductSearch(tx, { categoryId: rowId })
+      // الوصف والصورة والترتيب لا تدخل في نص بحث المنتجات. الحذف يمحو اسم الفرعي من البحث أيضاً.
+      if (categoryId && (searchChanged || stale.length)) await refreshProductSearch(tx, { categoryId: rowId })
     })
   } catch (e) {
     const constraint = uniqueViolation(e)

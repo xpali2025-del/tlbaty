@@ -9,7 +9,8 @@ import { COMMON_SIZE_CHARTS, type SizeChart } from '@/lib/size-chart'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const queries: string[] = []
+const db = drizzle(new PGlite(), { logger: { logQuery: (query) => queries.push(query) } })
 const auth = vi.hoisted(() => vi.fn(async (_s?: string) => {}))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
@@ -83,6 +84,30 @@ describe('size guide on products', () => {
     expect(product?.sizeChart?.rows.map((r) => r.size)).toContain('XL')
     expect((await getAdminSizeCharts()).find((c) => c._id === men.id)?.productCount).toBe(1)
     expect((await getAdminProducts()).find((x) => x.slug === 'with-chart')?.sizeChartId).toBe(men.id)
+  })
+
+  it('loads admin products with a fixed query count and preserves child ordering without row multiplication', async () => {
+    const [product] = await db.select().from(s.products).where(eq(s.products.slug, 'with-chart'))
+    await db.insert(s.productImages).values([
+      { productId: product.id, imageKey: 'products/second.webp', sortOrder: 2 },
+      { productId: product.id, imageKey: 'products/first.webp', sortOrder: 1 },
+    ])
+    await db.insert(s.productColors).values([
+      { productId: product.id, name: 'أزرق', hex: '#0000FF', sortOrder: 2 },
+      { productId: product.id, name: 'أحمر', hex: '#FF0000', sortOrder: 1 },
+    ])
+    await db.insert(s.productVariants).values([
+      { productId: product.id, color: 'أحمر', size: 'L', stock: 3 },
+      { productId: product.id, color: 'أحمر', size: 'M', stock: 4 },
+    ])
+
+    queries.length = 0
+    const adminProduct = (await getAdminProducts()).find((item) => item._id === product.id)
+    expect(queries).toHaveLength(4)
+    expect(queries[0]).not.toMatch(/search_text|image_palette/)
+    expect(adminProduct?.images.map((image) => image.ref)).toEqual(['products/first.webp', 'products/second.webp'])
+    expect(adminProduct?.colors.map((color) => color.name)).toEqual(['أحمر', 'أزرق'])
+    expect(adminProduct?.variants.map((variant) => variant.size).sort()).toEqual(['L', 'M'])
   })
 
   it('uses a custom chart for one product, which wins over a shared one', async () => {
