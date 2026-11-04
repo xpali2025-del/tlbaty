@@ -33,17 +33,20 @@ export function HeroSlider({ slides }: { slides: Slide[] }) {
   if (slides.length === 0) return null
 
   return (
-    <section className="relative" aria-label="عروض المتجر">
-      <div className="overflow-hidden rounded-3xl mx-4 mt-4" ref={emblaRef}>
+    <section className="relative mx-auto max-w-7xl px-3 pt-3 sm:px-4 sm:pt-5" aria-label="عروض المتجر">
+      <div
+        className="overflow-hidden rounded-[1.75rem] border border-border/60 bg-muted shadow-[0_22px_60px_-36px_rgba(57,24,33,0.45)] sm:rounded-[2rem]"
+        ref={emblaRef}
+      >
         <div className="flex">
           {slides.map((slide, i) => (
             <Link
               key={slide.id}
               href={slide.href || "/categories"}
-              className="flex-[0_0_100%] min-w-0 relative block"
+              className="relative block min-w-0 flex-[0_0_100%] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
               aria-label={slide.title}
             >
-              <div className="relative aspect-[16/10] md:aspect-[21/9] bg-muted">
+              <div className="relative aspect-[16/10] bg-muted sm:aspect-[16/8] lg:aspect-[21/8]">
                 <SafeImage
                   src={slide.image}
                   alt={slide.title}
