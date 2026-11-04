@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Package,
@@ -28,7 +28,9 @@ import {
 import { cn } from "@/lib/utils"
 import type { Screen } from "@/lib/permissions"
 import type { ManageData } from "./page"
-import { DATA_KEYS, SCREEN_DATA, TAB_PARAM, type DataKey } from "./screen-data"
+import { AFFECTS, DATA_KEYS, SCREEN_DATA, TAB_PARAM, type DataKey } from "./screen-data"
+import { ManageStoreProvider, type ManageStoreActions } from "./manage-store"
+import type { AdminProduct } from "@/lib/admin"
 import { Button } from "@/components/ui/button"
 import { logout } from "./auth-actions"
 import { ProductsManager } from "./components/products-manager"
@@ -80,16 +82,48 @@ function merge(prev: Store | null, data: Partial<ManageData>, loaded: readonly D
   return { data: { ...prev?.data, ...data } as ManageData, stale }
 }
 
+const byProductOrder = (a: AdminProduct, b: AdminProduct) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ar")
+
+/** يستبدل المنتج في مكانه، وإن تغيّر ترتيبه (الاسم أو الترتيب) أو كان جديداً يُدرَج في موضعه من القائمة. */
+function upsertProductInList(list: AdminProduct[], item: AdminProduct): AdminProduct[] {
+  const index = list.findIndex((p) => p._id === item._id)
+  if (index >= 0 && list[index].name === item.name && list[index].sortOrder === item.sortOrder) return list.map((p, i) => (i === index ? item : p))
+  const rest = index >= 0 ? list.filter((_, i) => i !== index) : list
+  const at = rest.findIndex((p) => byProductOrder(item, p) < 0)
+  return at < 0 ? [...rest, item] : [...rest.slice(0, at), item, ...rest.slice(at)]
+}
+
 export function Dashboard({ data: incoming, loaded, afterAction, initialTab, currentUser, permissions, roleLabel }: DashboardProps) {
   const router = useRouter()
   const [, startRefresh] = useTransition()
   const [received, setReceived] = useState(incoming)
   const [store, setStore] = useState(() => merge(null, incoming, loaded, afterAction))
+  // عدد التعديلات المحلية (عنصر محفوظ أُدرج من رد الحفظ)، ورقمه حين بدأ آخر تحديث خلفي (null = لا تحديث جارٍ).
+  const [mutations, setMutations] = useState(0)
+  const [refreshStartedAt, setRefreshStartedAt] = useState<number | null>(null)
   if (incoming !== received) {
     setReceived(incoming)
-    setStore((prev) => merge(prev, incoming, loaded, afterAction))
+    // رد تحديث بدأ قبل حفظ محلي قرأ الخادم فيه نسخة أقدم مما في المتصفح: لو دُمج لاستبدل العنصر المحفوظ بنسخته القديمة
+    // (تبدو القائمة كأن الحفظ ضاع، ويُرفض التعديل التالي بتعارض كاذب). يُهمل، وتبقى البيانات معلَّمة قديمة فتُحدَّث لاحقاً.
+    const fromRefresh = !afterAction && refreshStartedAt !== null
+    if (fromRefresh) setRefreshStartedAt(null)
+    if (!(fromRefresh && refreshStartedAt !== mutations)) setStore((prev) => merge(prev, incoming, loaded, afterAction))
   }
   const props = store.data
+  const actions = useMemo<ManageStoreActions>(
+    () => ({
+      upsertProduct: (item) => {
+        setMutations((n) => n + 1)
+        setStore((prev) => {
+          const stale = new Set(prev.stale)
+          stale.delete("products")
+          for (const key of AFFECTS.products ?? []) stale.add(key)
+          return { data: { ...prev.data, products: upsertProductInList(prev.data.products, item) }, stale }
+        })
+      },
+    }),
+    [],
+  )
   const nav: { id: TabId; label: string; icon: typeof Package; count?: number }[] = ([
     { id: "orders", label: "الطلبات", icon: ClipboardList, count: props.orderStats.total },
     { id: "couriers", label: "المناديب والتوزيع", icon: Bike, count: props.couriers.length },
@@ -142,120 +176,125 @@ export function Dashboard({ data: incoming, loaded, afterAction, initialTab, cur
     setTab(next)
     syncUrl(next)
     // بيانات تغيّرت منذ تحميلها (حفظ في شاشة أخرى): تُحدَّث في الخلفية وتبقى المعروضة حتى تصل.
-    if (SCREEN_DATA[next].some((key) => store.stale.has(key))) startRefresh(() => router.refresh())
+    if (SCREEN_DATA[next].some((key) => store.stale.has(key))) {
+      setRefreshStartedAt(mutations)
+      startRefresh(() => router.refresh())
+    }
   }
 
   if (incomplete) return <p className="p-6 text-sm text-muted-foreground">جارٍ تحميل اللوحة…</p>
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col lg:flex-row">
-      {/* الشريط الجانبي */}
-      <aside className="border-b bg-card lg:min-h-screen lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-l">
-        <div className="flex items-center gap-2 border-b p-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Boxes className="h-5 w-5" />
+    <ManageStoreProvider value={actions}>
+      <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col lg:flex-row">
+        {/* الشريط الجانبي */}
+        <aside className="border-b bg-card lg:min-h-screen lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-l">
+          <div className="flex items-center gap-2 border-b p-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Boxes className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold">لوحة الإدارة</p>
+              <p className="truncate text-xs text-muted-foreground">{currentUser ? `${currentUser} · ${roleLabel}` : "لوحة تحكم المتجر"}</p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold">لوحة الإدارة</p>
-            <p className="truncate text-xs text-muted-foreground">{currentUser ? `${currentUser} · ${roleLabel}` : "لوحة تحكم المتجر"}</p>
+
+          <nav className="flex gap-1 overflow-x-auto p-2 lg:flex-col lg:overflow-visible">
+            {nav.map((item) => {
+              const Icon = item.icon
+              const active = tab === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openTab(item.id)}
+                  className={cn(
+                    "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors lg:w-full",
+                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                  {item.count !== undefined ? (
+                    <span
+                      className={cn(
+                        "mr-auto hidden rounded-full px-1.5 text-xs lg:inline",
+                        active ? "bg-primary-foreground/20" : "bg-muted-foreground/10",
+                      )}
+                    >
+                      {item.count}
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="flex gap-2 border-t p-2 lg:flex-col">
+            <Button variant="outline" size="sm" className="flex-1 justify-start gap-2 bg-transparent" asChild>
+              <a href="/" target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                عرض المتجر
+              </a>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 justify-start gap-2 text-destructive hover:text-destructive"
+              onClick={async () => {
+                await logout()
+                router.replace("/manage/login")
+                router.refresh()
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              تسجيل الخروج
+            </Button>
           </div>
-        </div>
 
-        <nav className="flex gap-1 overflow-x-auto p-2 lg:flex-col lg:overflow-visible">
-          {nav.map((item) => {
-            const Icon = item.icon
-            const active = tab === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => openTab(item.id)}
-                className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors lg:w-full",
-                  active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-                {item.count !== undefined ? (
-                  <span
-                    className={cn(
-                      "mr-auto hidden rounded-full px-1.5 text-xs lg:inline",
-                      active ? "bg-primary-foreground/20" : "bg-muted-foreground/10",
-                    )}
-                  >
-                    {item.count}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })}
-        </nav>
+          <div className="border-t p-4 text-center">
+            <p className="text-xs text-muted-foreground">
+              صُمم بواسطة <span className="font-semibold text-foreground">Nasim Mohammed</span>
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground" dir="ltr">
+              774786786
+            </p>
+          </div>
+        </aside>
 
-        <div className="flex gap-2 border-t p-2 lg:flex-col">
-          <Button variant="outline" size="sm" className="flex-1 justify-start gap-2 bg-transparent" asChild>
-            <a href="/" target="_blank" rel="noreferrer">
-              <ExternalLink className="h-4 w-4" />
-              عرض المتجر
-            </a>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex-1 justify-start gap-2 text-destructive hover:text-destructive"
-            onClick={async () => {
-              await logout()
-              router.replace("/manage/login")
-              router.refresh()
-            }}
-          >
-            <LogOut className="h-4 w-4" />
-            تسجيل الخروج
-          </Button>
-        </div>
-
-        <div className="border-t p-4 text-center">
-          <p className="text-xs text-muted-foreground">
-            صُمم بواسطة <span className="font-semibold text-foreground">Nasim Mohammed</span>
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground" dir="ltr">
-            774786786
-          </p>
-        </div>
-      </aside>
-
-      {/* المحتوى */}
-      <main className="flex-1 p-4 lg:p-6">
-        {nav.length === 0 && <p className="text-sm text-muted-foreground">لا توجد شاشات مسموحة لحسابك. تواصل مع مدير النظام.</p>}
-        {tab === "orders" && (
-          <OrdersManager
-            initialPage={props.ordersPage}
-            stats={props.orderStats}
-            couriers={props.couriers}
-          />
-        )}
-        {tab === "couriers" && <CouriersManager couriers={props.couriers} />}
-        {tab === "notifications" && <NotificationsManager data={props.notifications} />}
-        {tab === "payment-accounts" && <PaymentAccountsManager accounts={props.paymentAccounts} />}
-        {tab === "products" && (
-          <ProductsManager products={props.products} categories={props.categories} brands={props.brands} sizeCharts={props.sizeCharts} />
-        )}
-        {tab === "categories" && <CategoriesManager categories={props.categories} />}
-        {tab === "brands" && <BrandsManager brands={props.brands} />}
-        {tab === "slides" && <SlidesManager slides={props.slides} />}
-        {tab === "coupons" && <CouponsManager coupons={props.coupons} />}
-        {tab === "reviews" && <ReviewsManager reviews={props.reviews} />}
-        {tab === "ads" && <AdsManager ads={props.ads} categories={props.categories} />}
-        {tab === "users" && <UsersManager users={props.users} currentUser={currentUser} />}
-        {tab === "shipping" && <ShippingManager data={props.shipping} />}
-        {tab === "currencies" && (
-          <CurrenciesManager currencies={props.shipping.currencies} defaultCurrency={props.shipping.defaultCurrency} />
-        )}
-        {tab === "wallets" && <WalletsManager initial={props.wallets} />}
-        {tab === "marketing" && <MarketingManager initial={props.marketing} />}
-        {tab === "size-charts" && <SizeChartsManager charts={props.sizeCharts} />}
-        {tab === "settings" && <SettingsManager settings={props.settings} />}
-      </main>
-    </div>
+        {/* المحتوى */}
+        <main className="flex-1 p-4 lg:p-6">
+          {nav.length === 0 && <p className="text-sm text-muted-foreground">لا توجد شاشات مسموحة لحسابك. تواصل مع مدير النظام.</p>}
+          {tab === "orders" && (
+            <OrdersManager
+              initialPage={props.ordersPage}
+              stats={props.orderStats}
+              couriers={props.couriers}
+            />
+          )}
+          {tab === "couriers" && <CouriersManager couriers={props.couriers} />}
+          {tab === "notifications" && <NotificationsManager data={props.notifications} />}
+          {tab === "payment-accounts" && <PaymentAccountsManager accounts={props.paymentAccounts} />}
+          {tab === "products" && (
+            <ProductsManager products={props.products} categories={props.categories} brands={props.brands} sizeCharts={props.sizeCharts} />
+          )}
+          {tab === "categories" && <CategoriesManager categories={props.categories} />}
+          {tab === "brands" && <BrandsManager brands={props.brands} />}
+          {tab === "slides" && <SlidesManager slides={props.slides} />}
+          {tab === "coupons" && <CouponsManager coupons={props.coupons} />}
+          {tab === "reviews" && <ReviewsManager reviews={props.reviews} />}
+          {tab === "ads" && <AdsManager ads={props.ads} categories={props.categories} />}
+          {tab === "users" && <UsersManager users={props.users} currentUser={currentUser} />}
+          {tab === "shipping" && <ShippingManager data={props.shipping} />}
+          {tab === "currencies" && (
+            <CurrenciesManager currencies={props.shipping.currencies} defaultCurrency={props.shipping.defaultCurrency} />
+          )}
+          {tab === "wallets" && <WalletsManager initial={props.wallets} />}
+          {tab === "marketing" && <MarketingManager initial={props.marketing} />}
+          {tab === "size-charts" && <SizeChartsManager charts={props.sizeCharts} />}
+          {tab === "settings" && <SettingsManager settings={props.settings} />}
+        </main>
+      </div>
+    </ManageStoreProvider>
   )
 }

@@ -77,7 +77,14 @@ export type AdminProduct = {
   sizeChartId?: string
   customSizeChart?: import("@/lib/size-chart").SizeChart
   tags?: string[]
+  /** رقم نسخة المنتج: يرسله النموذج مع الحفظ ليكتشف الخادم أن المنتج تغيّر منذ فُتح النموذج. */
+  version: number
 }
+
+/** ما يعيده حفظ المنتج: المنتج المحفوظ، أو المنتج الحالي إن تغيّر منذ فُتح النموذج. */
+export type SaveProductResult =
+  | { status: "saved"; item: AdminProduct; replayed: boolean }
+  | { status: "conflict"; current: AdminProduct | null }
 
 export type AdminSizeChart = import("@/lib/size-chart").SizeChart & { _id: string; productCount: number }
 
@@ -216,65 +223,106 @@ async function productCounts(column: typeof products.categoryId | typeof product
   return new Map(rows.filter((r): r is { id: string; n: number } => Boolean(r.id)).map((r) => [r.id, r.n]))
 }
 
-export const getAdminProducts = () =>
-  adminFetch<AdminProduct[]>([], async () => {
-    const rows = await db
-      .select({
-        p: products,
-        categorySlug: categories.slug,
-        categoryName: categories.name,
-        subcategorySlug: subcategories.slug,
-        brandName: brands.name,
-      })
-      .from(products)
-      .innerJoin(categories, eq(categories.id, products.categoryId))
-      .leftJoin(subcategories, eq(subcategories.id, products.subcategoryId))
-      .leftJoin(brands, eq(brands.id, products.brandId))
-      .orderBy(asc(products.sortOrder), asc(products.name))
-    if (rows.length === 0) return []
-    const ids = rows.map((r) => r.p.id)
-    const [images, colors, variants] = await Promise.all([
-      db.select().from(productImages).where(inArray(productImages.productId, ids)).orderBy(asc(productImages.sortOrder)),
-      db.select().from(productColors).where(inArray(productColors.productId, ids)).orderBy(asc(productColors.sortOrder)),
-      db.select().from(productVariants).where(inArray(productVariants.productId, ids)),
-    ])
-    return rows.map(({ p, categorySlug, categoryName, subcategorySlug, brandName }) => ({
-      _id: p.id,
-      productId: p.productNumber,
-      name: p.name,
-      slug: p.slug,
-      description: p.description,
-      price: p.price,
-      oldPrice: opt(p.oldPrice),
-      categoryId: p.categoryId,
-      categoryName,
+type ProductRow = typeof products.$inferSelect
+
+/**
+ * صف المنتج + ما يلزم من الجداول المرتبطة ← عنصر قائمة اللوحة. مصدر وحيد للشكل: تقرأ منه القوائم،
+ * ويبني منه الحفظ العنصر المعاد من بياناته في الذاكرة بلا إعادة قراءة (كل قراءة ذهاب وإياب للقاعدة).
+ */
+export function toAdminProduct(
+  p: ProductRow,
+  related: {
+    categoryName: string
+    categorySlug: string
+    subcategorySlug?: string | null
+    brandName?: string | null
+    /** مفاتيح صور المعرض بترتيبها. */
+    images: string[]
+    colors: AdminColor[]
+    variants: { color: string; size: string; stock: number }[]
+  },
+): AdminProduct {
+  return {
+    _id: p.id,
+    productId: p.productNumber,
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    price: p.price,
+    oldPrice: opt(p.oldPrice),
+    categoryId: p.categoryId,
+    categoryName: related.categoryName,
+    categorySlug: related.categorySlug,
+    subcategory: opt(related.subcategorySlug),
+    brandId: opt(p.brandId),
+    brandName: opt(related.brandName),
+    image: resolveOptionalImageUrl(p.mainImageKey),
+    images: related.images.map((ref) => ({ url: resolveOptionalImageUrl(ref) as string, ref })),
+    stock: p.stock,
+    isNew: p.isNew,
+    isBestseller: p.isBestseller,
+    badge: opt(p.badge),
+    sortOrder: p.sortOrder,
+    rating: p.rating,
+    reviewsCount: p.reviewsCount,
+    sku: opt(p.sku),
+    metaTitle: opt(p.metaTitle),
+    metaDescription: opt(p.metaDescription),
+    keywords: p.keywords,
+    colors: related.colors,
+    sizes: p.sizes,
+    variants: related.variants,
+    sizeChartId: opt(p.sizeChartId),
+    customSizeChart: p.customSizeChart ?? undefined,
+    tags: p.tags,
+    version: p.version,
+  }
+}
+
+type ProductReader = Pick<typeof db, "select">
+
+/** صفوف المنتجات بشكل عنصر القائمة: كلها مرتّبة كما في اللوحة، أو منتجات محددة بمعرّفاتها. */
+async function readAdminProducts(reader: ProductReader, ids?: string[]): Promise<AdminProduct[]> {
+  const rows = await reader
+    .select({
+      p: products,
+      categorySlug: categories.slug,
+      categoryName: categories.name,
+      subcategorySlug: subcategories.slug,
+      brandName: brands.name,
+    })
+    .from(products)
+    .innerJoin(categories, eq(categories.id, products.categoryId))
+    .leftJoin(subcategories, eq(subcategories.id, products.subcategoryId))
+    .leftJoin(brands, eq(brands.id, products.brandId))
+    .where(ids ? inArray(products.id, ids) : undefined)
+    .orderBy(asc(products.sortOrder), asc(products.name))
+  if (rows.length === 0) return []
+  const rowIds = rows.map((r) => r.p.id)
+  const [images, colors, variants] = await Promise.all([
+    reader.select().from(productImages).where(inArray(productImages.productId, rowIds)).orderBy(asc(productImages.sortOrder)),
+    reader.select().from(productColors).where(inArray(productColors.productId, rowIds)).orderBy(asc(productColors.sortOrder)),
+    reader.select().from(productVariants).where(inArray(productVariants.productId, rowIds)),
+  ])
+  return rows.map(({ p, categorySlug, categoryName, subcategorySlug, brandName }) =>
+    toAdminProduct(p, {
       categorySlug,
-      subcategory: opt(subcategorySlug),
-      brandId: opt(p.brandId),
-      brandName: opt(brandName),
-      image: resolveOptionalImageUrl(p.mainImageKey),
-      images: images
-        .filter((i) => i.productId === p.id)
-        .map((i) => ({ url: resolveOptionalImageUrl(i.imageKey) as string, ref: i.imageKey })),
-      stock: p.stock,
-      isNew: p.isNew,
-      isBestseller: p.isBestseller,
-      badge: opt(p.badge),
-      sortOrder: p.sortOrder,
-      rating: p.rating,
-      reviewsCount: p.reviewsCount,
-      sku: opt(p.sku),
-      metaTitle: opt(p.metaTitle),
-      metaDescription: opt(p.metaDescription),
-      keywords: p.keywords,
+      categoryName,
+      subcategorySlug,
+      brandName,
+      images: images.filter((i) => i.productId === p.id).map((i) => i.imageKey),
       colors: colors.filter((c) => c.productId === p.id).map((c) => ({ name: c.name, hex: c.hex })),
-      sizes: p.sizes,
       variants: variants.filter((v) => v.productId === p.id).map((v) => ({ color: v.color, size: v.size, stock: v.stock })),
-      sizeChartId: opt(p.sizeChartId),
-      customSizeChart: p.customSizeChart ?? undefined,
-      tags: p.tags,
-    }))
-  })
+    }),
+  )
+}
+
+export const getAdminProducts = () => adminFetch<AdminProduct[]>([], () => readAdminProducts(db))
+
+/** منتج واحد بشكل عنصر القائمة (يعيده الحفظ للواجهة بدل إعادة تحميل كل المنتجات). null إن لم يوجد. */
+export async function getAdminProduct(id: string): Promise<AdminProduct | null> {
+  return (await readAdminProducts(db, [id]))[0] ?? null
+}
 
 export const getAdminCategories = () =>
   adminFetch<AdminCategory[]>([], async () => {

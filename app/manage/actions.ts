@@ -23,6 +23,8 @@ import {
   subcategories,
 } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
+import { getAdminProduct, toAdminProduct, type SaveProductResult } from "@/lib/admin"
+import { parseRequestId, withSaveRequest } from "@/lib/save-request"
 import { refreshProductSearch } from "@/lib/search-index"
 import { buildSearchText } from "@/lib/search-text"
 import { productsMissingPalette, refreshProductPalette } from "@/lib/product-palette"
@@ -109,7 +111,10 @@ const HEX = /^#[0-9a-fA-F]{6}$/
 
 // ---------- المنتجات ----------
 
-async function saveProductImpl(id: string | null, form: FormData) {
+/** يُرمى داخل معاملة الحفظ حين تغيّر المنتج منذ فُتح النموذج: تُلغى المعاملة ويُعاد المنتج الحالي للمدير. */
+class ProductConflict extends Error {}
+
+async function saveProductImpl(id: string | null, form: FormData): Promise<SaveProductResult> {
   await assertManagePermission("products")
 
   const name = str(form, "name")
@@ -121,6 +126,10 @@ async function saveProductImpl(id: string | null, form: FormData) {
   if (price < 0) throw new Error("السعر لا يمكن أن يكون سالباً")
   const categoryId = uuidParam(categoryRaw, "القسم غير صالح")
   const productId = id ? uuidParam(id) : null
+  // معرّف العملية (يمنع التكرار عند إعادة الإرسال) ورقم النسخة التي رآها المدير عند فتح النموذج (يكشف التعارض).
+  const requestId = parseRequestId(str(form, "requestId"))
+  const expectedVersionRaw = num(form, "expectedVersion")
+  const expectedVersion = expectedVersionRaw === undefined ? undefined : Math.trunc(expectedVersionRaw)
 
   const subSlug = str(form, "subcategory")
   const brandId = str(form, "brandId") ? uuidParam(str(form, "brandId"), "البراند غير صالح") : null
@@ -165,10 +174,10 @@ async function saveProductImpl(id: string | null, form: FormData) {
   }
   // قراءات التحقق مستقلة: تُرسل معاً (كل نداء للقاعدة ذهاب وإياب كامل، وعبر الـ pooler اثنان).
   const [[category], [sub], [brand], [chart]] = await Promise.all([
-    db.select({ name: categories.name }).from(categories).where(eq(categories.id, categoryId)).limit(1),
+    db.select({ name: categories.name, slug: categories.slug }).from(categories).where(eq(categories.id, categoryId)).limit(1),
     subSlug
       ? db
-          .select({ id: subcategories.id, name: subcategories.name })
+          .select({ id: subcategories.id, name: subcategories.name, slug: subcategories.slug })
           .from(subcategories)
           .where(and(eq(subcategories.categoryId, categoryId), eq(subcategories.slug, subSlug)))
           .limit(1)
@@ -210,7 +219,6 @@ async function saveProductImpl(id: string | null, form: FormData) {
   }
 
   const removed: (string | null)[] = []
-  let savedId: string | null = null
   const nextVariants = trackVariants ? [...variants.values()] : null
   const searchText = (code: string, tags: string[]) =>
     buildSearchText({
@@ -226,34 +234,44 @@ async function saveProductImpl(id: string | null, form: FormData) {
       tags,
       keywords: base.keywords,
     })
+  // معرّف المنتج يُحدَّد قبل المعاملة (الجديد بـ UUID نولّده هنا) فيُسجَّل مع معرّف العملية بجملة واحدة.
+  const entityId = productId ?? crypto.randomUUID()
+  let outcome: Awaited<ReturnType<typeof withSaveRequest<SavedProduct>>>
   try {
-    // كل جملة داخل المعاملة تنتظر سابقتها على نفس الاتصال، فنقلّل عددها: لا نعيد كتابة الصور والألوان إن لم تتغيّر،
-    // ومخزون المتغيّرات بجملة واحدة، ونص البحث يُحسب هنا بدل قراءته من القاعدة.
-    await db.transaction(async (tx) => {
-      let rowId: string
+    // كل جملة داخل المعاملة ذهاب وإياب للقاعدة، فنقلّل عددها: لا نعيد كتابة الصور والألوان إن لم تتغيّر،
+    // ومخزون المتغيّرات بجملة واحدة، ونص البحث يُحسب هنا، والصف المحفوظ يعود من جملة الحفظ نفسها (returning).
+    outcome = await withSaveRequest(requestId, "products", entityId, async (tx): Promise<SavedProduct> => {
       let existingKeys: string[] = []
       let sameColors = false
       // المتغيّرات تُقفل قبل المنتج، بنفس ترتيب إنشاء الطلب (متغيّرات ← منتج) فلا يتعارض الحفظ مع طلب متزامن.
-      const lockedVariants = productId ? await tx.select().from(productVariants).where(eq(productVariants.productId, productId)).for("update") : []
+      // القراءتان تُرسلان معاً (تُنفَّذان في الخادم بترتيب الإرسال نفسه) فتوفّران ذهاباً وإياباً.
+      const [lockedVariants, [existing]] = productId
+        ? await Promise.all([
+            tx.select().from(productVariants).where(eq(productVariants.productId, productId)).for("update"),
+            tx
+              .select({
+                tags: products.tags,
+                mainImageKey: products.mainImageKey,
+                productNumber: products.productNumber,
+                version: products.version,
+                imageKeys: sql<string[]>`coalesce((select array_agg(${productImages.imageKey} order by ${productImages.sortOrder}, ${productImages.id}) from ${productImages} where ${productImages.productId} = ${productId}), '{}')`,
+                colors: sql<{ name: string; hex: string }[]>`coalesce((select json_agg(json_build_object('name', ${productColors.name}, 'hex', ${productColors.hex}) order by ${productColors.sortOrder}, ${productColors.id}) from ${productColors} where ${productColors.productId} = ${productId}), '[]')`,
+              })
+              .from(products)
+              .where(eq(products.id, productId))
+              .for("update"),
+          ])
+        : [[], []]
       const applied = applyVariantStock(lockedVariants, nextVariants)
       const stock = applied?.total ?? null
+      let row: typeof products.$inferSelect
       if (productId) {
-        const [existing] = await tx
-          .select({
-            tags: products.tags,
-            mainImageKey: products.mainImageKey,
-            productNumber: products.productNumber,
-            imageKeys: sql<string[]>`coalesce((select array_agg(${productImages.imageKey} order by ${productImages.sortOrder}, ${productImages.id}) from ${productImages} where ${productImages.productId} = ${productId}), '{}')`,
-            colors: sql<{ name: string; hex: string }[]>`coalesce((select json_agg(json_build_object('name', ${productColors.name}, 'hex', ${productColors.hex}) order by ${productColors.sortOrder}, ${productColors.id}) from ${productColors} where ${productColors.productId} = ${productId}), '[]')`,
-          })
-          .from(products)
-          .where(eq(products.id, productId))
-          .for("update")
         if (!existing) throw new Error("المنتج غير موجود")
+        if (expectedVersion !== undefined && existing.version !== expectedVersion) throw new ProductConflict()
         existingKeys = existing.imageKeys
         sameColors = existing.colors.length === colors.length && existing.colors.every((c, i) => c.name === colors[i].name && c.hex === colors[i].hex)
         const tags = syncTags(existing.tags, flags)
-        await tx
+        ;[row] = await tx
           .update(products)
           .set({
             ...base,
@@ -262,18 +280,20 @@ async function saveProductImpl(id: string | null, form: FormData) {
             stock: stock ?? (stockBase === undefined ? base.stock : sql`greatest(0, ${products.stock} + ${base.stock - stockBase})`),
             tags,
             searchText: searchText(existing.productNumber, tags),
+            version: sql`${products.version} + 1`,
             ...(mainKey ? { mainImageKey: mainKey } : {}),
           })
           .where(eq(products.id, productId))
+          .returning()
         if (mainKey && existing.mainImageKey !== mainKey) removed.push(existing.mainImageKey)
-        rowId = productId
       } else {
         // رمز قصير بالتسلسل داخل القسم (مثل DR-012)، يُحجز ذرياً فلا يتكرر.
         const productNumber = await allocateProductCode(tx, categoryId)
-        const [inserted] = await tx
+        ;[row] = await tx
           .insert(products)
           .values({
             ...base,
+            id: entityId,
             stock: stock ?? base.stock,
             productNumber,
             rating: 5,
@@ -282,8 +302,7 @@ async function saveProductImpl(id: string | null, form: FormData) {
             searchText: searchText(productNumber, []),
             mainImageKey: mainKey ?? null,
           })
-          .returning({ id: products.id })
-        rowId = inserted.id
+          .returning()
       }
 
       // نثق فقط بالمراجع التي ما زالت موجودة فعلاً في معرض المنتج؛ أي مرجع غريب يُتجاهل.
@@ -292,29 +311,58 @@ async function saveProductImpl(id: string | null, form: FormData) {
       const gallery = [...kept, ...addedKeys]
       const sameGallery = gallery.length === existingKeys.length && gallery.every((k, i) => k === existingKeys[i])
       if (!sameGallery) {
-        if (existingKeys.length) await tx.delete(productImages).where(eq(productImages.productId, rowId))
-        if (gallery.length) await tx.insert(productImages).values(gallery.map((imageKey, i) => ({ productId: rowId, imageKey, sortOrder: i })))
+        if (existingKeys.length) await tx.delete(productImages).where(eq(productImages.productId, entityId))
+        if (gallery.length) await tx.insert(productImages).values(gallery.map((imageKey, i) => ({ productId: entityId, imageKey, sortOrder: i })))
       }
       if (!sameColors) {
-        if (productId) await tx.delete(productColors).where(eq(productColors.productId, rowId))
-        if (colors.length) await tx.insert(productColors).values(colors.map((c, i) => ({ productId: rowId, name: c.name, hex: c.hex, sortOrder: i })))
+        if (productId) await tx.delete(productColors).where(eq(productColors.productId, entityId))
+        if (colors.length) await tx.insert(productColors).values(colors.map((c, i) => ({ productId: entityId, name: c.name, hex: c.hex, sortOrder: i })))
       }
-      await saveVariantStock(tx, rowId, lockedVariants, applied?.rows ?? null)
-      savedId = rowId
+      await saveVariantStock(tx, entityId, lockedVariants, applied?.rows ?? null)
+      return { row, gallery, variants: (applied?.rows ?? []).map(({ color, size, stock }) => ({ color, size, stock })) }
     })
   } catch (e) {
+    if (e instanceof ProductConflict && productId) return { status: "conflict", current: await getAdminProduct(productId) }
     const constraint = uniqueViolation(e)
     if (constraint?.includes("slug")) throw new Error("هذا الرابط (slug) مستخدم لمنتج آخر، اختر رابطاً مختلفاً")
     if (constraint !== null) throw new Error("تعذّر الحفظ بسبب تعارض في البيانات")
     throw e
   }
 
-  revalidateStore()
+  // إعادة إرسال لعملية حُفظت سابقاً: لا آثار جانبية ثانية (حذف صور، بصمة ألوان، إبطال كاش)، والكيان هو الأول.
+  if (outcome.replayed) {
+    if (productId && productId !== outcome.entityId) throw new Error("معرّف عملية الحفظ مستخدم لمنتج آخر")
+    const item = await getAdminProduct(outcome.entityId)
+    if (!item) throw new Error("المنتج لم يعد موجوداً")
+    return { status: "saved", item, replayed: true }
+  }
+
+  // إبطال كاش المتجر بعد إرسال الرد: لا ينتظره المدير، والقائمة تتحدّث من العنصر المعاد لا من إعادة رسم الصفحة.
+  await runAfterResponse(async () => revalidateStore())
   // أعمال غير حرجة بعد الرد: حذف الصور القديمة (removeObjects يؤجّل نفسه)، وبصمة الألوان للبحث بالصورة
   // (قراءة من R2 + معالجة) عند صورة رئيسية جديدة.
   await removeObjects(removed)
-  const paletteFor = mainKey && savedId ? { id: savedId, key: mainKey } : null
-  if (paletteFor) await runAfterResponse(() => refreshProductPalette(paletteFor.id, paletteFor.key).catch(() => false))
+  if (mainKey) await runAfterResponse(() => refreshProductPalette(entityId, mainKey).catch(() => false))
+
+  // العنصر المعاد بشكل القائمة من بيانات الحفظ نفسها (لا قراءة إضافية من القاعدة).
+  const saved = outcome.value
+  const item = toAdminProduct(saved.row, {
+    categoryName: category.name,
+    categorySlug: category.slug,
+    subcategorySlug: sub?.slug,
+    brandName: brand?.name,
+    images: saved.gallery,
+    colors,
+    variants: saved.variants,
+  })
+  return { status: "saved", item, replayed: false }
+}
+
+/** ما تعيده معاملة حفظ المنتج: الصف المحفوظ، ومعرض صوره بترتيبه، ومخزون متغيّراته النهائي. */
+type SavedProduct = {
+  row: typeof products.$inferSelect
+  gallery: string[]
+  variants: { color: string; size: string; stock: number }[]
 }
 
 type VariantInput = { color: string; size: string; stock: number; base: number | undefined }
@@ -386,7 +434,7 @@ async function toggleProductFlagImpl(id: string, field: "isNew" | "isBestseller"
   if (!existing) throw new Error("المنتج غير موجود")
   await db
     .update(products)
-    .set({ [field]: value, tags: syncTags(existing.tags, { [field]: value }), updatedAt: new Date() })
+    .set({ [field]: value, tags: syncTags(existing.tags, { [field]: value }), updatedAt: new Date(), version: sql`${products.version} + 1` })
     .where(eq(products.id, productId))
   revalidateStore()
 }
@@ -427,11 +475,14 @@ async function saveCategoryImpl(id: string | null, form: FormData) {
   try {
     await db.transaction(async (tx) => {
       let rowId: string
+      // نص بحث المنتجات يحمل اسم القسم وأسماء أقسامه الفرعية: لا يُعاد بناؤه إلا إن تغيّر أحدها.
+      let searchTextStale = false
       if (categoryId) {
         const [existing] = await tx.select().from(categories).where(eq(categories.id, categoryId)).limit(1)
         if (!existing) throw new Error("القسم غير موجود")
         await tx.update(categories).set({ ...values, ...(imageKey ? { imageKey } : {}) }).where(eq(categories.id, categoryId))
         if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
+        searchTextStale = existing.name !== values.name
         rowId = categoryId
       } else {
         ;[{ id: rowId }] = await tx.insert(categories).values({ ...values, imageKey: imageKey ?? null }).returning({ id: categories.id })
@@ -440,17 +491,24 @@ async function saveCategoryImpl(id: string | null, form: FormData) {
 
       const current = await tx.select().from(subcategories).where(eq(subcategories.categoryId, rowId))
       const stale = current.filter((c) => !incoming.has(c.slug)).map((c) => c.id)
-      if (stale.length) await tx.delete(subcategories).where(inArray(subcategories.id, stale))
-      let order = 0
-      for (const [slug, sub] of incoming) {
-        const row = { categoryId: rowId, slug, name: sub.name, description: sub.description, sortOrder: order++ }
+      if (stale.length) {
+        await tx.delete(subcategories).where(inArray(subcategories.id, stale))
+        searchTextStale = true // منتجات القسم الفرعي المحذوف تفقد اسمه
+      }
+      const currentNames = new Map(current.map((c) => [c.slug, c.name]))
+      for (const [slug, sub] of incoming) if (currentNames.has(slug) && currentNames.get(slug) !== sub.name) searchTextStale = true
+      // كل الأقسام الفرعية بجملة واحدة (جملة لكل قسم فرعي = ذهاب وإياب لكل منها).
+      const subRows = [...incoming].map(([slug, sub], order) => ({ categoryId: rowId, slug, name: sub.name, description: sub.description, sortOrder: order }))
+      if (subRows.length) {
         await tx
           .insert(subcategories)
-          .values(row)
-          .onConflictDoUpdate({ target: [subcategories.categoryId, subcategories.slug], set: row })
+          .values(subRows)
+          .onConflictDoUpdate({
+            target: [subcategories.categoryId, subcategories.slug],
+            set: { name: sql`excluded.name`, description: sql`excluded.description`, sortOrder: sql`excluded.sort_order` },
+          })
       }
-      // إعادة تسمية القسم أو أقسامه الفرعية تغيّر نص بحث منتجاته.
-      if (categoryId) await refreshProductSearch(tx, { categoryId: rowId })
+      if (categoryId && searchTextStale) await refreshProductSearch(tx, { categoryId: rowId })
     })
   } catch (e) {
     const constraint = uniqueViolation(e)

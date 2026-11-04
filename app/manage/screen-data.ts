@@ -51,3 +51,11 @@ export const SCREEN_DATA: Record<Screen, readonly DataKey[]> = {
 
 /** معامل الرابط الذي يحمل الشاشة المفتوحة (?tab=products). */
 export const TAB_PARAM = "tab"
+
+/**
+ * حين يُحفظ عنصر ويحدّث المتصفح قائمته من رد الحفظ مباشرة (بلا إعادة رسم من الخادم)،
+ * تتغيّر بيانات في شاشات أخرى (عدّاد منتجات القسم مثلاً): تُعلَّم قديمة وتُحدَّث عند فتح شاشتها.
+ */
+export const AFFECTS: Partial<Record<DataKey, readonly DataKey[]>> = {
+  products: ["categories", "brands", "sizeCharts"],
+}

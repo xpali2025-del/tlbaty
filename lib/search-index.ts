@@ -1,7 +1,7 @@
 // يبني ويحدّث products.search_text (النص المفهرس للبحث). يعمل على أي اتصال Drizzle
 // (التطبيق والسكربتات والاختبارات) فلا server-only ومسارات نسبية.
 
-import { eq, inArray } from "drizzle-orm"
+import { eq, inArray, sql } from "drizzle-orm"
 import type { PgDatabase } from "drizzle-orm/pg-core"
 import { brands, categories, productColors, products, subcategories } from "./db/store"
 import { buildSearchText } from "./search-text"
@@ -55,9 +55,16 @@ export async function refreshProductSearch(
     colorsByProduct.set(c.productId, list)
   }
 
-  for (const r of rows as (typeof rows)[number][]) {
-    const searchText = buildSearchText({ ...r, colors: colorsByProduct.get(r.id) })
-    await db.update(products).set({ searchText }).where(eq(products.id, r.id))
+  // جملة UPDATE واحدة لكل دفعة بدل جملة لكل منتج: كل جملة ذهاب وإياب كامل للقاعدة (قسم بـ 200 منتج = 200 رحلة).
+  for (let i = 0; i < rows.length; i += UPDATE_CHUNK) {
+    const values = (rows as (typeof rows)[number][]).slice(i, i + UPDATE_CHUNK).map((r) => {
+      const text = buildSearchText({ ...r, colors: colorsByProduct.get(r.id) })
+      return sql`(${r.id}::uuid, ${text}::text)`
+    })
+    await db.execute(sql`update ${products} set search_text = v.t from (values ${sql.join(values, sql`, `)}) as v(id, t) where ${products.id} = v.id`)
   }
   return rows.length
 }
+
+/** صفوف كل جملة تحديث (حدّ معاملات الجملة الواحدة في Postgres 65534؛ هنا معاملان لكل صف). */
+const UPDATE_CHUNK = 500
