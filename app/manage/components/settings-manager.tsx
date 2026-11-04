@@ -15,6 +15,8 @@ import { fetchWhatsappStatus, saveSettings } from "../client-actions"
 import type { WhatsappStatus } from "@/lib/whatsapp-status"
 import { ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseSettingsForm } from "@/lib/validation/settings"
+import { problemOf } from "@/lib/validation/form"
 import { OTP_CHANNELS } from "@/lib/otp/channel"
 
 // صفحة إعدادات (Pattern 5): نموذج واحد وحفظ واحد، وأقسام مرتبة بحسب مهمة المدير،
@@ -69,6 +71,8 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
     e.preventDefault()
     if (isPending) return
     const form = new FormData(e.currentTarget)
+    const problem = problemOf(() => parseSettingsForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await uploadFormImages(form, [

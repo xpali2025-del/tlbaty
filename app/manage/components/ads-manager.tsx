@@ -23,6 +23,8 @@ import type { AdminAd, AdminCategory } from "@/lib/admin"
 import { saveAd, deleteAd, toggleAdActive } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader, UploadStatus, usePreUploadState } from "./shared"
 import { startPreUpload, uploadFormImages } from "@/lib/storage/upload-client"
+import { parseAdForm } from "@/lib/validation/ad"
+import { problemOf } from "@/lib/validation/form"
 import { PreUpload, discardPreUpload, markSubmitted, releasePreUpload } from "@/lib/storage/preupload-registry"
 import { AD_PLACEMENTS, MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, normalizePlacements } from "@/lib/ads"
 import { extractVideoPoster, uploadAdVideo } from "@/lib/storage/video-client"
@@ -242,6 +244,8 @@ function AdDialog({
     }
     form.set("placements", JSON.stringify(normalizePlacements(placements)))
 
+    const problem = problemOf(() => parseAdForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         if (kind === "video") {

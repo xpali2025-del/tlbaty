@@ -34,6 +34,8 @@ import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes 
 import { useManageStore } from "../manage-store"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseProductForm } from "@/lib/validation/product"
+import { problemOf } from "@/lib/validation/form"
 
 export function ProductsManager({
   products,
@@ -254,6 +256,9 @@ function ProductDialog({
       form.set("trackVariants", "true")
       form.set("variants", JSON.stringify(rows))
     }
+
+    const problem = problemOf(() => parseProductForm(form))
+    if (problem) return void toast.error(problem)
 
     // بصمة المحتوى قبل رفع الصور (ملفاتها ثابتة، ومفاتيحها تتغيّر مع كل رفع): محتوى جديد = معرّف عملية جديد.
     // الملف بالاسم والحجم فقط: المتصفح يضع لحقل الملف الفارغ وقت تعديل جديداً عند كل إرسال، فلا يصلح في البصمة.

@@ -22,6 +22,8 @@ import type { AdminBrand } from "@/lib/admin"
 import { saveBrand, deleteBrand } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseBrandForm } from "@/lib/validation/catalog"
+import { problemOf } from "@/lib/validation/form"
 
 export function BrandsManager({ brands }: { brands: AdminBrand[] }) {
   const [editing, setEditing] = useState<AdminBrand | null>(null)
@@ -99,6 +101,8 @@ function BrandDialog({
     const form = new FormData(e.currentTarget)
     form.set("featured", String(featured))
     form.set("keywords", JSON.stringify(keywords))
+    const problem = problemOf(() => parseBrandForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await uploadFormImages(form, [

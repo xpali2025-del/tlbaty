@@ -29,6 +29,8 @@ import type { AdminReview } from "@/lib/admin"
 import { saveReview, deleteReview } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseReviewForm } from "@/lib/validation/catalog"
+import { problemOf } from "@/lib/validation/form"
 
 export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
   const [editing, setEditing] = useState<AdminReview | null>(null)
@@ -117,6 +119,8 @@ function ReviewDialog({
     e.preventDefault()
     const form = new FormData(e.currentTarget)
     form.set("rating", rating)
+    const problem = problemOf(() => parseReviewForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await uploadFormImages(form, [

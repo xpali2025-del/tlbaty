@@ -1,7 +1,11 @@
 "use server"
 
 import { serverAction } from "@/lib/server-action"
-import { parseSizeChart, validateSizeChart, type SizeChart } from "@/lib/size-chart"
+import { parseAdForm } from "@/lib/validation/ad"
+import { parseBrandForm, parseCategoryForm, parseCouponForm, parseReviewForm, parseSlideForm } from "@/lib/validation/catalog"
+import { parseProductForm } from "@/lib/validation/product"
+import { parseSettingsForm } from "@/lib/validation/settings"
+import { parseUserForm } from "@/lib/validation/user"
 import { generateText } from "ai"
 import { and, count, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
@@ -29,16 +33,10 @@ import { skipUploadClaims, trackUploadKey } from "@/lib/upload-claims"
 import { refreshProductSearch } from "@/lib/search-index"
 import { buildSearchText } from "@/lib/search-text"
 import { productsMissingPalette, refreshProductPalette } from "@/lib/product-palette"
+import { normalizePermissions } from "@/lib/permissions"
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
-import { isCategoryCode } from "@/lib/product-code"
-import { normalizePlacements, parseDateOnly } from "@/lib/ads"
-import { isOtpChannel } from "@/lib/otp/channel"
 import { isSmsConfigured } from "@/lib/otp/providers/sms"
-import { isValidVideoKey } from "@/lib/storage/keys"
-import { isRole, normalizePermissions, ROLE_PRESETS, type Role } from "@/lib/permissions"
-import { SUPPORTED_COUNTRIES } from "@/lib/phone"
 import {
-  bool,
   englishSlug,
   json,
   newImageKey,
@@ -48,7 +46,6 @@ import {
   revalidateManage,
   revalidateStore,
   runAfterResponse,
-  slugify,
   str,
   syncTags,
   uniqueViolation,
@@ -108,8 +105,6 @@ async function generateProductSlugImpl(input: {
   }
 }
 
-const HEX = /^#[0-9a-fA-F]{6}$/
-
 // ---------- المنتجات ----------
 
 /** يُرمى داخل معاملة الحفظ حين تغيّر المنتج منذ فُتح النموذج: تُلغى المعاملة ويُعاد المنتج الحالي للمدير. */
@@ -118,61 +113,16 @@ class ProductConflict extends Error {}
 async function saveProductImpl(id: string | null, form: FormData): Promise<SaveProductResult> {
   await assertManagePermission("products")
 
-  const name = str(form, "name")
-  const categoryRaw = str(form, "categoryId")
-  const price = num(form, "price")
-  if (!name) throw new Error("اسم المنتج مطلوب")
-  if (!categoryRaw) throw new Error("اختر القسم الرئيسي للمنتج")
-  if (price === undefined) throw new Error("أدخل سعراً صحيحاً")
-  if (price < 0) throw new Error("السعر لا يمكن أن يكون سالباً")
-  const categoryId = uuidParam(categoryRaw, "القسم غير صالح")
+  const parsed = parseProductForm(form)
+  const { name, categoryId, price, subSlug, brandId, slug, colors, sizeList, trackVariants, sizeChartId, customSizeChart, isNew, isBestseller, stockBase } = parsed
   const productId = id ? uuidParam(id) : null
   // معرّف العملية (يمنع التكرار عند إعادة الإرسال) ورقم النسخة التي رآها المدير عند فتح النموذج (يكشف التعارض).
   const requestId = parseRequestId(str(form, "requestId"))
   const expectedVersionRaw = num(form, "expectedVersion")
   const expectedVersion = expectedVersionRaw === undefined ? undefined : Math.trunc(expectedVersionRaw)
-
-  const subSlug = str(form, "subcategory")
-  const brandId = str(form, "brandId") ? uuidParam(str(form, "brandId"), "البراند غير صالح") : null
-  const slug = slugify(str(form, "slug") ?? name)
   const mainKey = newImageKey(form, "imageKey")
   const addedKeys = newImageKeys(form, "newImageKeys")
   const keptRefs = json<string[]>(form, "keptImages", [])
-
-  const colors = json<{ name: string; hex: string }[]>(form, "colors", []).map((c) => {
-    if (!c?.name?.trim() || !HEX.test(c.hex ?? "")) throw new Error("لون غير صالح: الاسم مطلوب واللون بصيغة #RRGGBB")
-    return { name: c.name.trim(), hex: c.hex }
-  })
-  // نفس القائمة (بعد الحذف وإزالة الفارغ والمكرر) للمنتج ولمخزون المقاسات، وإلا لم يطابق مقاس « M» صف «M» عند الطلب.
-  const sizeList = [...new Set(json<string[]>(form, "sizes", []).map((x) => String(x).trim()).filter(Boolean))]
-  // مخزون كل لون/مقاس (اختياري): كل تركيبة يجب أن تكون من ألوان ومقاسات المنتج نفسه، بلا تكرار.
-  const trackVariants = bool(form, "trackVariants")
-  const variantInput = trackVariants ? json<{ color?: string; size?: string; stock?: number; base?: number }[]>(form, "variants", []) : []
-  const variants = new Map<string, { color: string; size: string; stock: number; base: number | undefined }>()
-  for (const v of variantInput) {
-    const color = String(v.color ?? "").trim()
-    const size = String(v.size ?? "").trim()
-    if (color && !colors.some((c) => c.name === color)) throw new Error(`اللون "${color}" ليس من ألوان المنتج`)
-    if (size && !sizeList.includes(size)) throw new Error(`المقاس "${size}" ليس من مقاسات المنتج`)
-    const stock = Math.trunc(Number(v.stock))
-    if (!Number.isFinite(stock) || stock < 0 || stock > 1_000_000) throw new Error("كمية المخزون لكل لون/مقاس يجب أن تكون عدداً صحيحاً من 0 إلى 1,000,000")
-    const baseRaw = v.base === undefined || v.base === null ? undefined : Math.trunc(Number(v.base))
-    const key = `${color}\u0000${size}`
-    if (variants.has(key)) throw new Error("تركيبة لون/مقاس مكررة")
-    variants.set(key, { color, size, stock, base: baseRaw !== undefined && Number.isFinite(baseRaw) && baseRaw >= 0 ? baseRaw : undefined })
-  }
-  if (trackVariants && variants.size === 0) throw new Error("أضف ألواناً أو مقاسات لتتبع مخزونها، أو أوقف تتبع المخزون حسب اللون والمقاس")
-  // دليل المقاسات (اختياري): none | chart (جدول مشترك) | custom (خاص بهذا المنتج).
-  const guide = json<{ mode?: string; chartId?: string; custom?: unknown }>(form, "sizeGuide", { mode: "none" })
-  let sizeChartId: string | null = null
-  let customSizeChart: SizeChart | null = null
-  if (guide.mode === "chart") {
-    sizeChartId = uuidParam(guide.chartId, "جدول المقاسات غير صالح")
-  } else if (guide.mode === "custom") {
-    customSizeChart = parseSizeChart(guide.custom)
-    const problem = customSizeChart ? validateSizeChart(customSizeChart) : "بيانات جدول المقاسات غير صالحة"
-    if (problem) throw new Error(problem)
-  }
   // قراءات التحقق مستقلة: تُرسل معاً (كل نداء للقاعدة ذهاب وإياب كامل، وعبر الـ pooler اثنان).
   const [[category], [sub], [brand], [chart]] = await Promise.all([
     db.select({ name: categories.name, slug: categories.slug }).from(categories).where(eq(categories.id, categoryId)).limit(1),
@@ -191,36 +141,32 @@ async function saveProductImpl(id: string | null, form: FormData): Promise<SaveP
   if (sizeChartId && !chart) throw new Error("جدول المقاسات المختار غير موجود")
   const subcategoryId = sub?.id ?? null
 
-  const flags = { isNew: bool(form, "isNew"), isBestseller: bool(form, "isBestseller") }
-  const stockBaseRaw = num(form, "stockBase")
-  const stockBase = stockBaseRaw === undefined ? undefined : Math.max(0, Math.trunc(stockBaseRaw))
-
   const base = {
     name,
     slug,
-    description: str(form, "description") ?? "",
+    description: parsed.fields.description,
     price,
-    oldPrice: num(form, "oldPrice") ?? null,
+    oldPrice: parsed.fields.oldPrice,
     categoryId,
     subcategoryId,
     brandId,
-    stock: Math.max(0, Math.trunc(num(form, "stock") ?? 0)),
-    isNew: flags.isNew,
-    isBestseller: flags.isBestseller,
-    badge: str(form, "badge") ?? null,
-    sortOrder: Math.trunc(num(form, "sortOrder") ?? 0),
-    sku: str(form, "sku") ?? null,
-    metaTitle: str(form, "metaTitle") ?? null,
-    metaDescription: str(form, "metaDescription") ?? null,
+    stock: parsed.fields.stock,
+    isNew,
+    isBestseller,
+    badge: parsed.fields.badge,
+    sortOrder: parsed.fields.sortOrder,
+    sku: parsed.fields.sku,
+    metaTitle: parsed.fields.metaTitle,
+    metaDescription: parsed.fields.metaDescription,
     sizes: sizeList,
     sizeChartId,
     customSizeChart,
-    keywords: json<string[]>(form, "keywords", []),
+    keywords: parsed.fields.keywords,
     updatedAt: new Date(),
   }
 
   const removed: (string | null)[] = []
-  const nextVariants = trackVariants ? [...variants.values()] : null
+  const nextVariants = trackVariants ? parsed.variants : null
   const searchText = (code: string, tags: string[]) =>
     buildSearchText({
       name,
@@ -271,7 +217,7 @@ async function saveProductImpl(id: string | null, form: FormData): Promise<SaveP
         if (expectedVersion !== undefined && existing.version !== expectedVersion) throw new ProductConflict()
         existingKeys = existing.imageKeys
         sameColors = existing.colors.length === colors.length && existing.colors.every((c, i) => c.name === colors[i].name && c.hex === colors[i].hex)
-        const tags = syncTags(existing.tags, flags)
+        const tags = syncTags(existing.tags, { isNew, isBestseller })
         ;[row] = await tx
           .update(products)
           .set({
@@ -448,32 +394,11 @@ async function toggleProductFlagImpl(id: string, field: "isNew" | "isBestseller"
 async function saveCategoryImpl(id: string | null, form: FormData) {
   await assertManagePermission("categories")
 
-  const name = str(form, "name")
-  if (!name) throw new Error("اسم القسم مطلوب")
+  const parsed = parseCategoryForm(form)
   const categoryId = id ? uuidParam(id) : null
   const imageKey = newImageKey(form, "imageKey")
-
-  // السلاج الفرعي فريد داخل القسم؛ عند تكراره في النموذج يفوز آخر إدخال.
-  const incoming = new Map<string, { name: string; description: string | null }>()
-  for (const s of json<{ name: string; slug?: string; description?: string }[]>(form, "subcategories", [])) {
-    if (!s?.name?.trim()) continue
-    incoming.set(slugify(s.slug || s.name), { name: s.name.trim(), description: s.description?.trim() || null })
-  }
-
-  const codeRaw = str(form, "code")?.toUpperCase()
-  if (codeRaw && !isCategoryCode(codeRaw)) throw new Error("رمز القسم: 2 إلى 4 أحرف إنجليزية (ورقم اختياري في الآخر)، مثل DR")
-
-  const values = {
-    name,
-    slug: slugify(str(form, "slug") ?? name),
-    ...(codeRaw ? { code: codeRaw } : {}),
-    description: str(form, "description") ?? null,
-    sortOrder: Math.max(0, Math.trunc(num(form, "sortOrder") ?? 0)),
-    metaTitle: str(form, "metaTitle") ?? null,
-    metaDescription: str(form, "metaDescription") ?? null,
-    keywords: json<string[]>(form, "keywords", []),
-    updatedAt: new Date(),
-  }
+  const { subcategories: incoming, ...fields } = parsed
+  const values = { ...fields, updatedAt: new Date() }
 
   let oldImage: string | null = null
   try {
@@ -544,22 +469,10 @@ async function deleteCategoryImpl(id: string) {
 async function saveBrandImpl(id: string | null, form: FormData) {
   await assertManagePermission("brands")
 
-  const name = str(form, "name")
-  if (!name) throw new Error("اسم البراند مطلوب")
+  const parsed = parseBrandForm(form)
   const brandId = id ? uuidParam(id) : null
   const imageKey = newImageKey(form, "imageKey")
-
-  const values = {
-    name,
-    slug: slugify(str(form, "slug") ?? name),
-    description: str(form, "description") ?? null,
-    featured: bool(form, "featured"),
-    sortOrder: Math.max(0, Math.trunc(num(form, "sortOrder") ?? 0)),
-    metaTitle: str(form, "metaTitle") ?? null,
-    metaDescription: str(form, "metaDescription") ?? null,
-    keywords: json<string[]>(form, "keywords", []),
-    updatedAt: new Date(),
-  }
+  const values = { ...parsed, updatedAt: new Date() }
 
   let oldImage: string | null = null
   try {
@@ -596,19 +509,10 @@ async function deleteBrandImpl(id: string) {
 async function saveSlideImpl(id: string | null, form: FormData) {
   await assertManagePermission("slides")
 
-  const title = str(form, "title")
-  if (!title) throw new Error("عنوان السلايد مطلوب")
+  const parsed = parseSlideForm(form)
   const slideId = id ? uuidParam(id) : null
   const imageKey = newImageKey(form, "imageKey")
-
-  const values = {
-    title,
-    subtitle: str(form, "subtitle") ?? null,
-    cta: str(form, "cta") ?? null,
-    href: str(form, "href") ?? "/",
-    sortOrder: Math.trunc(num(form, "sortOrder") ?? 0),
-    updatedAt: new Date(),
-  }
+  const values = { ...parsed, updatedAt: new Date() }
 
   let oldImage: string | null = null
   if (slideId) {
@@ -640,24 +544,7 @@ async function deleteSlideImpl(id: string) {
 async function saveCouponImpl(id: string | null, form: FormData) {
   await assertManagePermission("coupons")
 
-  const code = str(form, "code")
-  const discount = num(form, "discount")
-  const description = str(form, "description")
-  const type = str(form, "type") === "percent" ? "percent" : "fixed"
-  if (!code) throw new Error("كود الخصم مطلوب")
-  if (discount === undefined) throw new Error("قيمة الخصم مطلوبة")
-  if (discount < 0) throw new Error("قيمة الخصم لا يمكن أن تكون سالبة")
-  if (type === "percent" && discount > 100) throw new Error("نسبة الخصم لا يمكن أن تتجاوز 100%")
-  if (!description) throw new Error("وصف الكوبون مطلوب")
-
-  const values = {
-    code: code.toUpperCase(),
-    discount,
-    type,
-    minOrder: Math.max(0, num(form, "minOrder") ?? 0),
-    description,
-    updatedAt: new Date(),
-  } as const
+  const values = { ...parseCouponForm(form), updatedAt: new Date() } as const
 
   try {
     if (id) {
@@ -685,22 +572,9 @@ async function deleteCouponImpl(id: string) {
 async function saveReviewImpl(id: string | null, form: FormData) {
   await assertManagePermission("reviews")
 
-  const name = str(form, "name")
-  const comment = str(form, "comment")
-  const rating = num(form, "rating") ?? 5
-  if (!name) throw new Error("اسم العميل مطلوب")
-  if (!comment) throw new Error("نص التقييم مطلوب")
-  const date = str(form, "date") ?? new Date().toISOString().slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("تاريخ غير صالح")
+  const parsed = parseReviewForm(form)
   const avatarKey = newImageKey(form, "avatarKey")
-
-  const values = {
-    name,
-    comment,
-    rating: Math.min(5, Math.max(1, Math.round(rating))),
-    reviewDate: date,
-    updatedAt: new Date(),
-  }
+  const values = { ...parsed, updatedAt: new Date() }
 
   let oldImage: string | null = null
   if (id) {
@@ -732,34 +606,24 @@ async function deleteReviewImpl(id: string) {
 async function saveAdImpl(id: string | null, form: FormData) {
   await assertManagePermission("ads")
 
-  const title = str(form, "title")
-  if (!title) throw new Error("اسم الإعلان مطلوب")
+  const parsed = parseAdForm(form)
+  const { title, kind, newVideoKey, placements, startsOn, endsOn } = parsed
   const adId = id ? uuidParam(id) : null
   const imageKey = newImageKey(form, "imageKey")
-
-  const kind = str(form, "kind") === "video" ? "video" : "image"
-  const newVideoKey = str(form, "videoKey")
-  if (newVideoKey && !isValidVideoKey(newVideoKey)) throw new Error("مفتاح الفيديو غير صالح")
   trackUploadKey(newVideoKey)
-  const placements = normalizePlacements(json<unknown>(form, "placements", []))
-  const startsOn = parseDateOnly(str(form, "startsOn")) ?? null
-  const endsOn = parseDateOnly(str(form, "endsOn")) ?? null
-  if (str(form, "startsOn") && !startsOn) throw new Error("تاريخ البداية غير صالح")
-  if (str(form, "endsOn") && !endsOn) throw new Error("تاريخ النهاية غير صالح")
-  if (startsOn && endsOn && startsOn > endsOn) throw new Error("تاريخ النهاية يجب ألا يسبق تاريخ البداية")
 
   // نبقي فقط الأقسام الموجودة فعلاً، ونتجاهل أي معرّف غريب.
-  const requested = json<string[]>(form, "categoryIds", []).filter((c) => typeof c === "string")
+  const requested = parsed.requestedCategoryIds
   const categoryIds = requested.length
     ? (await db.select({ id: categories.id }).from(categories).where(inArray(categories.id, requested.map((c) => uuidParam(c))))).map((r) => r.id)
     : []
 
   const values = {
     title,
-    href: str(form, "href") ?? null,
-    active: bool(form, "active"),
-    frequency: Math.max(1, Math.trunc(num(form, "frequency") ?? 6)),
-    sortOrder: Math.trunc(num(form, "sortOrder") ?? 0),
+    href: parsed.href,
+    active: parsed.active,
+    frequency: parsed.frequency,
+    sortOrder: parsed.sortOrder,
     kind,
     placements,
     startsOn,
@@ -813,99 +677,16 @@ async function deleteAdImpl(id: string) {
 
 // ---------- إعدادات المتجر (صف واحد) ----------
 
-/** رابط تواصل اجتماعي: رابط http(s) كامل أو اسم حساب فقط. أي بروتوكول آخر (javascript: وغيره) مرفوض. */
-function socialField(form: FormData, key: string, label: string): string | null {
-  const value = str(form, key)
-  if (!value) return null
-  if (/^https?:\/\//i.test(value)) {
-    try {
-      const url = new URL(value)
-      if (url.protocol === "http:" || url.protocol === "https:") return url.toString().slice(0, 300)
-    } catch {
-      // يسقط إلى رسالة الخطأ
-    }
-    throw new Error(`رابط ${label} غير صالح`)
-  }
-  if (/^@?[A-Za-z0-9._-]{1,60}$/.test(value)) return value
-  throw new Error(`${label}: أدخل رابطاً كاملاً (https://…) أو اسم الحساب فقط`)
-}
-
 async function saveSettingsImpl(_id: string | null, form: FormData) {
   await assertManagePermission("settings")
 
   const logoKey = newImageKey(form, "logoKey")
-  const phone = str(form, "phone") ?? null
-  if (phone && !/^[+0-9][0-9 ()-]{4,24}$/.test(phone)) throw new Error("رقم الهاتف غير صالح")
-  const secondaryPhone = str(form, "secondaryPhone") ?? null
-  if (secondaryPhone && !/^[+0-9][0-9 ()-]{4,24}$/.test(secondaryPhone)) throw new Error("رقم الهاتف الثاني غير صالح")
-  const whatsapp = str(form, "whatsapp") ?? null
-  if (whatsapp) {
-    const digits = whatsapp.replace(/\D/g, "")
-    if (digits.length < 8 || digits.length > 15) throw new Error("رقم واتساب غير صالح (بالصيغة الدولية، مثل 967771234567)")
-  }
-  const email = str(form, "email") ?? null
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("البريد الإلكتروني غير صالح")
-
-  const codEnabled = bool(form, "codEnabled")
-  const transferEnabled = bool(form, "transferEnabled")
-  const walletEnabled = bool(form, "walletEnabled")
-  // رقم بوت واتساب للدخول: أرقام دولية فقط (8 إلى 15)، والفارغ يعني استعمال متغير البيئة.
-  const botRaw = (str(form, "loginBotNumber") ?? "").replace(/[\s+()-]/g, "")
-  if (botRaw && !/^[0-9]{8,15}$/.test(botRaw)) throw new Error("رقم بوت الدخول: أرقام دولية فقط بلا رموز (مثل 967777000000)")
-  const loginBotNumber = botRaw || null
-  // دول تسجيل الدخول: تُحدَّث فقط إذا أُرسل حقل الدول (علامة loginCountriesPresent)، لأن الخانة غير المعلّمة لا تُرسَل أصلاً.
-  // الأكواد المدعومة فقط ودولة واحدة على الأقل (الافتراضي اليمن).
-  let loginCountries: string[] | undefined
-  if (form.get("loginCountriesPresent") === "1") {
-    const wantedCountries = form.getAll("loginCountries").map(String)
-    if (wantedCountries.some((c) => !SUPPORTED_COUNTRIES.some((s) => s.code === c))) throw new Error("دولة غير مدعومة لتسجيل الدخول")
-    loginCountries = SUPPORTED_COUNTRIES.filter((c) => wantedCountries.includes(c.code)).map((c) => c.code as string)
-    if (loginCountries.length === 0) throw new Error("اختر دولة واحدة على الأقل لتسجيل دخول العملاء")
-  }
-  // قناة إرسال رمز التحقق: تُحدَّث فقط إذا أُرسلت (النماذج القديمة لا تحملها).
-  const otpChannelRaw = str(form, "otpChannel")
-  if (otpChannelRaw && !isOtpChannel(otpChannelRaw)) throw new Error("قناة إرسال رمز التحقق غير صالحة")
-  // «SMS فقط» بلا مفاتيح مضبوطة يعطّل دخول كل العملاء في الإنتاج، فنرفضه.
-  if (otpChannelRaw === "sms" && process.env.NODE_ENV === "production" && !isSmsConfigured()) {
+  const parsedSettings = parseSettingsForm(form)
+  // «SMS فقط» بلا مفاتيح مضبوطة يعطّل دخول كل العملاء في الإنتاج، فنرفضه (يقرأ متغيرات البيئة، فهو للخادم وحده).
+  if (parsedSettings.otpChannel === "sms" && process.env.NODE_ENV === "production" && !isSmsConfigured()) {
     throw new Error("اضبط SMS_GATE_USERNAME و SMS_GATE_PASSWORD في إعدادات الاستضافة أولاً، ثم اختر SMS")
   }
-  // حذف صور الإثبات تلقائياً: غير مفعّل افتراضياً؛ عند التفعيل المدة بين 7 و365 يوماً.
-  let proofRetentionDays: number | null = null
-  if (bool(form, "proofRetentionEnabled")) {
-    const days = Number(str(form, "proofRetentionDays"))
-    if (!Number.isInteger(days) || days < 7 || days > 365) throw new Error("مدة الاحتفاظ بصور الإثبات: عدد صحيح من 7 إلى 365 يوماً")
-    proofRetentionDays = days
-  }
-  if (!codEnabled && !transferEnabled) throw new Error("فعّل طريقة دفع واحدة على الأقل، وإلا لن يستطيع العملاء إتمام الطلب")
-
-  const values = {
-    name: str(form, "name") ?? null,
-    nameEn: str(form, "nameEn") ?? null,
-    tagline: str(form, "tagline") ?? null,
-    description: str(form, "description") ?? null,
-    phone,
-    secondaryPhone,
-    whatsapp,
-    email,
-    address: str(form, "address") ?? null,
-    workingHours: str(form, "workingHours") ?? null,
-    copyright: str(form, "copyright") ?? null,
-    instagram: socialField(form, "instagram", "إنستغرام"),
-    facebook: socialField(form, "facebook", "فيسبوك"),
-    tiktok: socialField(form, "tiktok", "تيك توك"),
-    x: socialField(form, "x", "إكس"),
-    youtube: socialField(form, "youtube", "يوتيوب"),
-    snapchat: socialField(form, "snapchat", "سناب شات"),
-    telegram: socialField(form, "telegram", "تيليجرام"),
-    codEnabled,
-    transferEnabled,
-    walletEnabled,
-    proofRetentionDays,
-    loginBotNumber,
-    ...(loginCountries ? { loginCountries } : {}),
-    ...(otpChannelRaw ? { otpChannel: otpChannelRaw } : {}),
-    updatedAt: new Date(),
-  }
+  const values = { ...parsedSettings, updatedAt: new Date() }
 
   const [existing] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1)
   const set = { ...values, ...(logoKey ? { logoKey } : {}) }
@@ -941,19 +722,8 @@ async function actorRowId(actor: { username: string; isOwner: boolean }): Promis
 async function saveUserImpl(id: string | null, form: FormData) {
   const actor = await assertManagePermission("users")
 
-  const username = str(form, "username")
-  const password = str(form, "password")
-  const name = str(form, "name")
-  const roleRaw = str(form, "role")
-  const role: Role = isRole(roleRaw) ? roleRaw : "editor"
-  const permissions = normalizePermissions(json<unknown>(form, "permissions", ROLE_PRESETS[role]))
-  const active = bool(form, "active")
   const userId = id ? uuidParam(id) : null
-
-  if (!username) throw new Error("اسم المستخدم مطلوب")
-  if (!/^[a-zA-Z0-9._-]{3,}$/.test(username)) {
-    throw new Error("اسم المستخدم يجب أن يكون 3 أحرف على الأقل (أحرف/أرقام إنجليزية بدون مسافات)")
-  }
+  const { username, password, name, role, permissions, active } = parseUserForm(form, { isNew: !userId })
   // اسم المالك محجوز: وإلا لأخذ مستخدم مخزَّن بنفس الاسم صلاحيات المالك الكاملة.
   if (username.toLowerCase() === getManageUsername().toLowerCase()) {
     throw new Error("اسم المستخدم محجوز لحساب المالك، اختر اسماً آخر")
@@ -985,7 +755,6 @@ async function saveUserImpl(id: string | null, form: FormData) {
 
   try {
     if (userId) {
-      if (password && password.length < 6) throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل")
       const updated = await db
         .update(manageUsers)
         .set({ ...base, ...(password ? { passwordHash: hashPassword(password) } : {}) })
@@ -993,10 +762,7 @@ async function saveUserImpl(id: string | null, form: FormData) {
         .returning({ id: manageUsers.id })
       if (!updated.length) throw new Error("المستخدم غير موجود")
     } else {
-      if (!password || password.length < 6) {
-        throw new Error("كلمة المرور مطلوبة (6 أحرف على الأقل)")
-      }
-      await db.insert(manageUsers).values({ ...base, passwordHash: hashPassword(password) })
+      await db.insert(manageUsers).values({ ...base, passwordHash: hashPassword(password!) })
     }
   } catch (e) {
     if (uniqueViolation(e) !== null) throw new Error("اسم المستخدم مُستخدم بالفعل، اختر اسماً آخر")

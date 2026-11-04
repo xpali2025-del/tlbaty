@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react"
 import { Pencil, User, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
+import { parseUserForm } from "@/lib/validation/user"
+import { problemOf } from "@/lib/validation/form"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -153,6 +155,8 @@ function UserDialog({
     form.set("role", role)
     form.set("permissions", JSON.stringify(permissions))
     form.set("active", active ? "true" : "false")
+    const problem = problemOf(() => parseUserForm(form, { isNew: !user }))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await saveUser(user?._id ?? null, form)

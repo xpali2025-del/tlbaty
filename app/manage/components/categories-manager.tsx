@@ -22,6 +22,8 @@ import type { AdminCategory, AdminSubcategory } from "@/lib/admin"
 import { saveCategory, deleteCategory } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput, sanitizeSlug } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseCategoryForm } from "@/lib/validation/catalog"
+import { problemOf } from "@/lib/validation/form"
 
 export function CategoriesManager({ categories }: { categories: AdminCategory[] }) {
   const [editing, setEditing] = useState<AdminCategory | null>(null)
@@ -108,6 +110,8 @@ function CategoryDialog({
     const form = new FormData(e.currentTarget)
     form.set("subcategories", JSON.stringify(subs))
     form.set("keywords", JSON.stringify(keywords))
+    const problem = problemOf(() => parseCategoryForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
