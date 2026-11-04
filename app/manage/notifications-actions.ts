@@ -7,6 +7,7 @@ import { db } from "@/lib/db/client"
 import { notifications } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser } from "@/lib/manage-auth"
 import { newImageKey, removeObjects, uuidParam } from "@/lib/manage-helpers"
+import { claimingUploads } from "@/lib/upload-claims"
 import { sanitizeInternalLink } from "@/lib/notification-link"
 import {
   NOTIFICATION_LIMITS,
@@ -96,7 +97,7 @@ function firstZodError(error: z.ZodError): string {
 /** يغلّف كل إجراء برسالة خطأ آمنة بدل رمي استثناء غير معالج. */
 async function run(fn: () => Promise<string>): Promise<NotificationActionResult> {
   try {
-    const message = await fn()
+    const message = await claimingUploads(fn)()
     return { ok: true, message }
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذّر تنفيذ العملية"

@@ -1,4 +1,5 @@
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, type ImageFolder } from "./keys"
+import { PreUpload, discardObjectKey, getPreUpload, markSubmitted, preUploadSignature, registerPreUpload } from "./preupload-registry"
 import { putImage, uploadConcurrency, waitUntilOnline } from "./upload-transport"
 
 // رفع الصور من المتصفح مباشرة إلى R2 (بروابط موقَّعة) قبل إرسال النموذج إلى Server Action.
@@ -185,38 +186,22 @@ function validate(file: File) {
   if (file.size > MAX_INPUT_BYTES) throw new Error(`حجم الصورة يتجاوز ${MAX_INPUT_BYTES / 1024 / 1024} ميغابايت (${file.name})`)
 }
 
-/**
- * يرفع كل ملفات الصور في النموذج ثم يستبدلها بمفاتيحها. الحقول الفارغة لا تُمَسّ،
- * فيحتفظ الخادم بالصورة الحالية. يتحقق من كل الملفات قبل رفع أي منها.
- * ملاحظة: عند فشل الحفظ بعد الرفع قد يبقى كائن يتيم في R2 (لا يظهر في الموقع).
- */
-export async function uploadFormImages(
-  form: FormData,
-  fields: UploadField[],
-  deps: UploadDeps = { prepare: compressImage, request: defaultRequest, requestBatch: defaultRequestBatch, put: putImage },
-): Promise<string[]> {
-  const pending = fields.map((f) => ({
-    field: f,
-    files: form.getAll(f.name).filter((v): v is File => v instanceof File && v.size > 0),
-  }))
-  for (const { field, files } of pending) {
-    form.delete(field.name) // لا نرسل الملفات الخام إلى الخادم أبداً
-    for (const file of files) validate(file)
-    if (!field.multiple && files.length > 1) throw new Error("اختر صورة واحدة فقط")
+const defaultDeps: UploadDeps = { prepare: compressImage, request: defaultRequest, requestBatch: defaultRequestBatch, put: putImage }
+
+/** ضغط ملف صورة والتحقق من حجمه بعد الضغط (مشترك بين الرفع عند الحفظ والرفع المسبق). */
+async function prepareForUpload(original: File, folder: ImageFolder, deps: UploadDeps): Promise<File> {
+  const file = deps.prepare ? await deps.prepare(original, folder) : original
+  if (file.size > MAX_IMAGE_BYTES) throw new Error(`حجم الصورة بعد الضغط ما زال يتجاوز ${MAX_IMAGE_BYTES / 1024 / 1024} ميغابايت (${original.name})`)
+  if (deps.prepare && file.size >= original.size && file.size > MAX_FALLBACK_BYTES) {
+    throw new Error(`تعذّر ضغط الصورة (${original.name}). جرّب صورة أصغر أو صيغة JPEG أو WebP.`)
   }
+  return file
+}
 
+/** يرفع هذه الملفات (ضغط ثم روابط موقَّعة ثم PUT) ويعيد مفاتيحها بترتيبها. */
+async function uploadNew(jobs: { field: UploadField; original: File }[], deps: UploadDeps): Promise<string[]> {
   // نضغط الملفات بترتيب الحقول، ثم نوقّع روابط كل دفعة عند جاهزيتها للرفع لتجنّب انتهاء صلاحيتها أثناء الانتظار.
-  const jobs = pending.flatMap(({ field, files }) => files.map((original) => ({ field, original })))
-  if (jobs.length === 0) return []
-
-  const prepared = await mapLimit(jobs, PREPARE_CONCURRENCY, async ({ field, original }) => {
-    const file = deps.prepare ? await deps.prepare(original, field.folder) : original
-    if (file.size > MAX_IMAGE_BYTES) throw new Error(`حجم الصورة بعد الضغط ما زال يتجاوز ${MAX_IMAGE_BYTES / 1024 / 1024} ميغابايت (${original.name})`)
-    if (deps.prepare && file.size >= original.size && file.size > MAX_FALLBACK_BYTES) {
-      throw new Error(`تعذّر ضغط الصورة (${original.name}). جرّب صورة أصغر أو صيغة JPEG أو WebP.`)
-    }
-    return file
-  })
+  const prepared = await mapLimit(jobs, PREPARE_CONCURRENCY, ({ field, original }) => prepareForUpload(original, field.folder, deps))
 
   const items = prepared.map((file, i) => ({ folder: jobs[i].field.folder, contentType: file.type, size: file.size }))
   const slots: { uploadUrl: string; objectKey: string }[] = []
@@ -237,13 +222,154 @@ export async function uploadFormImages(
     concurrency = timedOut ? Math.max(1, Math.floor(concurrency / 2)) : Math.min(maxConcurrency, concurrency + 1)
     offset += batch.length
   }
+  return slots.map((slot) => slot.objectKey)
+}
+
+/**
+ * يرفع كل ملفات الصور في النموذج ثم يستبدلها بمفاتيحها. الحقول الفارغة لا تُمَسّ،
+ * فيحتفظ الخادم بالصورة الحالية. يتحقق من كل الملفات قبل رفع أي منها.
+ * الصور التي بدأ رفعها عند اختيارها (startPreUpload) لا تُرفع ثانية: ينتظر الحفظ ما لم يكتمل منها فقط،
+ * وما فشل رفعه مسبقاً يُرفع هنا كالمعتاد.
+ * ملاحظة: عند فشل الحفظ بعد الرفع قد يبقى كائن يتيم في R2 (لا يظهر في الموقع) يحذفه التنظيف اليومي.
+ */
+export async function uploadFormImages(
+  form: FormData,
+  fields: UploadField[],
+  deps: UploadDeps = defaultDeps,
+): Promise<string[]> {
+  const pending = fields.map((f) => ({
+    field: f,
+    files: form.getAll(f.name).filter((v): v is File => v instanceof File && v.size > 0),
+  }))
+  for (const { field, files } of pending) {
+    form.delete(field.name) // لا نرسل الملفات الخام إلى الخادم أبداً
+    for (const file of files) validate(file)
+    if (!field.multiple && files.length > 1) throw new Error("اختر صورة واحدة فقط")
+  }
+
+  const jobs = pending.flatMap(({ field, files }) => files.map((original) => ({ field, original })))
+  if (jobs.length === 0) return []
+
+  const keys: (string | undefined)[] = new Array(jobs.length).fill(undefined)
+  const pres = jobs.map(({ field, original }) => getPreUpload(field.name, field.folder, original))
+
+  // ما لم يبدأ رفعه (اختاره المدير قبل تفعيل الرفع المسبق، أو لم يمرّ بحقل صورة) يبدأ الآن بالتوازي مع انتظار ما بدأ.
+  const fresh = jobs.flatMap((_, i) => (pres[i] ? [] : [i]))
+  const freshUpload = fresh.length ? uploadNew(fresh.map((i) => jobs[i]), deps) : Promise.resolve([] as string[])
+
+  // ما رُفع مسبقاً: ننتظر اكتماله (فوري إن اكتمل). وما فشل رفعه يُرفع ثانية كالمعتاد ويظهر خطؤه الفعلي إن تكرر.
+  const failed: number[] = []
+  await Promise.all(
+    jobs.map(async (_, i) => {
+      const pre = pres[i]
+      if (!pre) return
+      try {
+        keys[i] = await pre.promise
+        markSubmitted(pre)
+      } catch {
+        failed.push(i)
+      }
+    }),
+  )
+  const [freshKeys, retryKeys] = await Promise.all([freshUpload, failed.length ? uploadNew(failed.map((i) => jobs[i]), deps) : Promise.resolve([] as string[])])
+  fresh.forEach((index, n) => (keys[index] = freshKeys[n]))
+  failed.forEach((index, n) => (keys[index] = retryKeys[n]))
 
   const uploaded: string[] = []
   for (const { field } of pending) {
-    const keys = jobs.flatMap((j, i) => (j.field === field ? [slots[i].objectKey] : []))
-    if (!keys.length) continue
-    form.set(field.keyName, field.multiple ? JSON.stringify(keys) : keys[0])
-    uploaded.push(...keys)
+    const fieldKeys = jobs.flatMap((j, i) => (j.field === field ? [keys[i] as string] : []))
+    if (!fieldKeys.length) continue
+    form.set(field.keyName, field.multiple ? JSON.stringify(fieldKeys) : fieldKeys[0])
+    uploaded.push(...fieldKeys)
   }
   return uploaded
+}
+
+// ---------- الرفع المسبق: يبدأ حين يختار المدير الصورة، لا حين يضغط «حفظ» ----------
+
+/** طابور بسيط يحدّ التزامن (ضغط الصور الكبيرة ثقيل على ذاكرة الجوال، والرفع المتزامن الكثير يبطئ الكل). */
+function createLimiter(limit: () => number) {
+  let active = 0
+  const waiting: (() => void)[] = []
+  const next = () => {
+    while (active < limit() && waiting.length) {
+      active++
+      waiting.shift()!()
+    }
+  }
+  return async function run<T>(task: () => Promise<T>): Promise<T> {
+    await new Promise<void>((resolve) => {
+      waiting.push(resolve)
+      next()
+    })
+    try {
+      return await task()
+    } finally {
+      active--
+      next()
+    }
+  }
+}
+
+const prepareLimiter = createLimiter(() => PREPARE_CONCURRENCY)
+const putLimiter = createLimiter(() => uploadConcurrency())
+
+type SignItem = { folder: ImageFolder; contentType: string; size: number }
+type Slot = { uploadUrl: string; objectKey: string }
+const signQueue: { item: SignItem; deps: UploadDeps; resolve: (slot: Slot) => void; reject: (error: unknown) => void }[] = []
+let signTimer: ReturnType<typeof setTimeout> | undefined
+const MAX_SIGN_BATCH = 30
+
+/** طلبات توقيع الروابط الواقعة في الحدث نفسه (عدة صور اختيرت معاً) تُرسل بنداء خادم واحد، فنداءات الإجراءات تُنفَّذ بالتتابع. */
+function requestSlot(item: SignItem, deps: UploadDeps): Promise<Slot> {
+  return new Promise((resolve, reject) => {
+    signQueue.push({ item, deps, resolve, reject })
+    signTimer ??= setTimeout(flushSignQueue, 0)
+  })
+}
+
+async function flushSignQueue() {
+  signTimer = undefined
+  const queue = signQueue.splice(0, signQueue.length)
+  const byDeps = new Map<UploadDeps, typeof queue>()
+  for (const entry of queue) byDeps.set(entry.deps, [...(byDeps.get(entry.deps) ?? []), entry])
+  for (const [deps, group] of byDeps) {
+    for (let i = 0; i < group.length; i += MAX_SIGN_BATCH) {
+      const chunk = group.slice(i, i + MAX_SIGN_BATCH)
+      try {
+        const slots = deps.requestBatch
+          ? await deps.requestBatch(chunk.map((c) => c.item))
+          : await Promise.all(chunk.map((c) => deps.request(c.item.folder, c.item.contentType, c.item.size)))
+        if (slots.length !== chunk.length) throw new Error("تعذّر تجهيز روابط الرفع، أعد المحاولة")
+        chunk.forEach((c, n) => c.resolve(slots[n]))
+      } catch (error) {
+        chunk.forEach((c) => c.reject(error))
+      }
+    }
+  }
+}
+
+/**
+ * يبدأ الآن: تحقق، ضغط، توقيع رابط، رفع إلى R2. يعيد إدخالاً يمكن الاشتراك في حالته، ومفتاحه عند اكتماله.
+ * يُستدعى من حقل الصورة عند الاختيار. فشله لا يُظهر خطأً للمدير الآن: الحفظ يعيد الرفع ويُظهر الخطأ الفعلي إن تكرر.
+ */
+export function startPreUpload(file: File, folder: ImageFolder, fieldName: string, deps: UploadDeps = defaultDeps): PreUpload {
+  const existing = getPreUpload(fieldName, folder, file)
+  if (existing) return existing
+  const promise = (async () => {
+    validate(file)
+    const prepared = await prepareLimiter(() => prepareForUpload(file, folder, deps))
+    await waitUntilOnline()
+    const slot = await requestSlot({ folder, contentType: prepared.type, size: prepared.size }, deps)
+    try {
+      await putLimiter(() => deps.put(slot.uploadUrl, prepared))
+    } catch (error) {
+      discardObjectKey(slot.objectKey) // لا كائن له: يُزال سجله المعلّق الآن بدل انتظار التنظيف اليومي
+      throw error
+    }
+    return slot.objectKey
+  })()
+  const pre = new PreUpload(preUploadSignature(fieldName, folder, file), file, folder, promise)
+  registerPreUpload(pre)
+  return pre
 }

@@ -29,6 +29,8 @@ import type { AdminReview } from "@/lib/admin"
 import { saveReview, deleteReview } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseReviewForm } from "@/lib/validation/catalog"
+import { problemOf } from "@/lib/validation/form"
 
 export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
   const [editing, setEditing] = useState<AdminReview | null>(null)
@@ -117,6 +119,8 @@ function ReviewDialog({
     e.preventDefault()
     const form = new FormData(e.currentTarget)
     form.set("rating", rating)
+    const problem = problemOf(() => parseReviewForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
@@ -139,7 +143,7 @@ function ReviewDialog({
           <DialogDescription>يُحفظ ويظهر في المتجر.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField name="avatar" current={review?.avatar} label="الصورة الرمزية" />
+          <ImageField name="avatar" folder="reviews" current={review?.avatar} label="الصورة الرمزية" />
           <div className="flex flex-col gap-2">
             <Label>اسم العميل <span className="text-destructive">*</span></Label>
             <Input name="name" defaultValue={review?.name} required />

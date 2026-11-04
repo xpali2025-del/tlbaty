@@ -521,7 +521,7 @@ function NotificationFormDialog({
             </span>
           </div>
 
-          <ImageField name="image" label="صورة الإشعار (اختيارية)" current={notification?.imageUrl ?? undefined} />
+          <ImageField name="image" folder="notifications" label="صورة الإشعار (اختيارية)" current={notification?.imageUrl ?? undefined} />
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="notification-link">رابط داخلي (اختياري)</Label>

@@ -20,6 +20,8 @@ import type { AdminSlide } from "@/lib/admin"
 import { saveSlide, deleteSlide } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseSlideForm } from "@/lib/validation/catalog"
+import { problemOf } from "@/lib/validation/form"
 
 export function SlidesManager({ slides }: { slides: AdminSlide[] }) {
   const [editing, setEditing] = useState<AdminSlide | null>(null)
@@ -91,6 +93,8 @@ function SlideDialog({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = new FormData(e.currentTarget)
+    const problem = problemOf(() => parseSlideForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
@@ -113,7 +117,7 @@ function SlideDialog({
           <DialogDescription>يظهر في السلايدر الرئيسي بالصفحة الأولى.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField current={slide?.image} label="صورة السلايد" required={!slide} />
+          <ImageField folder="slides" current={slide?.image} label="صورة السلايد" required={!slide} />
           <div className="flex flex-col gap-2">
             <Label>العنوان <span className="text-destructive">*</span></Label>
             <Input name="title" defaultValue={slide?.title} required />

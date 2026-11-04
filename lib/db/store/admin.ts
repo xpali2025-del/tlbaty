@@ -12,3 +12,15 @@ export const saveRequests = store.table('save_requests', {
   entityId: uuid('entity_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('save_requests_created_idx').on(t.createdAt)])
+
+/**
+ * Objects uploaded straight to R2 from the admin forms (signed URL) that no saved row references yet.
+ * A row is written when the URL is signed and removed when a successful save claims the key, or when the
+ * admin cancels the form. The daily cron deletes what is still here after a day (and was never referenced).
+ */
+export const pendingUploads = store.table('pending_uploads', {
+  objectKey: text('object_key').primaryKey(),
+  /** Panel username that asked for the URL: only that admin can discard or claim the key. */
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('pending_uploads_created_idx').on(t.createdAt)])

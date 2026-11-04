@@ -8,6 +8,7 @@ import { couriers, orders } from "@/lib/db/store"
 import { assertManagePermission } from "@/lib/manage-auth"
 import { COURIER_STATUSES } from "@/lib/courier"
 import { newImageKey, removeObjects } from "@/lib/manage-helpers"
+import { claimingUploads } from "@/lib/upload-claims"
 
 export type CourierActionResult = { ok: true; message: string } | { ok: false; error: string }
 
@@ -31,7 +32,7 @@ function firstZodError(error: z.ZodError): string {
 
 async function run(fn: () => Promise<string>): Promise<CourierActionResult> {
   try {
-    return { ok: true, message: await fn() }
+    return { ok: true, message: await claimingUploads(fn)() }
   } catch (error) {
     if (error instanceof z.ZodError) return { ok: false, error: firstZodError(error) }
     const message = error instanceof Error ? error.message : "تعذّر تنفيذ العملية"

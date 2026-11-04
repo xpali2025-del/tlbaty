@@ -45,4 +45,4 @@ export const { savePaymentAccount, togglePaymentAccount, updatePaymentAccountOrd
 
 export const { saveCurrencies, saveShippingZone, deleteShippingZone } = unwrapAll(shipping)
 
-export const { requestImageUpload, requestImageUploads, requestVideoUpload } = unwrapAll(uploads)
+export const { requestImageUpload, requestImageUploads, requestVideoUpload, discardUploads } = unwrapAll(uploads)

@@ -4,69 +4,13 @@ import { after } from "next/server"
 import { CACHE_TAGS } from "@/lib/cache-tags"
 import { isValidImageKey } from "@/lib/storage/keys"
 import { deleteImageObject } from "@/lib/storage/r2"
+import { trackUploadKey } from "@/lib/upload-claims"
 
 // أدوات مشتركة بين إجراءات لوحة الإدارة. في ملف مستقل لأن ملفات "use server"
 // لا تصدّر إلا دوالاً غير متزامنة، ولأن هذه الأدوات قابلة للاختبار منفردة.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-/** يتحقق أن المعرّف UUID قبل أي استعلام (يمنع أخطاء cast ويرفض المدخلات الغريبة). */
-export function uuidParam(value: unknown, message = "معرّف غير صالح"): string {
-  if (typeof value !== "string" || !UUID.test(value)) throw new Error(message)
-  return value
-}
-
-/** تحويل نص عربي/إنجليزي إلى سلاج آمن. */
-export function slugify(input: string): string {
-  return (
-    input
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9؀-ۿ]+/g, "-")
-      .replace(/^-+|-+$/g, "") || `item-${Date.now().toString(36)}`
-  )
-}
-
-/** تنظيف نص لاتيني إلى سلاج إنجليزي آمن (حروف/أرقام وشرطات فقط). */
-export function englishSlug(input: string): string {
-  return (
-    input
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || `item-${Date.now().toString(36)}`
-  )
-}
-
-export function str(form: FormData, key: string): string | undefined {
-  const v = form.get(key)
-  if (typeof v !== "string") return undefined
-  const trimmed = v.trim()
-  return trimmed.length ? trimmed : undefined
-}
-
-export function num(form: FormData, key: string): number | undefined {
-  const v = str(form, key)
-  if (v === undefined) return undefined
-  const n = Number(v)
-  return Number.isFinite(n) ? n : undefined
-}
-
-export function bool(form: FormData, key: string): boolean {
-  return form.get(key) === "true" || form.get(key) === "on"
-}
-
-/** يقرأ حقل JSON من النموذج (للمصفوفات مثل الألوان والكلمات المفتاحية). */
-export function json<T>(form: FormData, key: string, fallback: T): T {
-  const raw = str(form, key)
-  if (!raw) return fallback
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
+export { bool, englishSlug, json, num, slugify, str, uuidParam } from "@/lib/validation/form"
+import { json, str } from "@/lib/validation/form"
 
 /**
  * مفتاح صورة جديدة رُفعت مباشرة إلى R2 من المتصفح. لا نقبل إلا مفتاحاً صالحاً داخل
@@ -76,6 +20,7 @@ export function newImageKey(form: FormData, field: string): string | undefined {
   const value = str(form, field)
   if (!value) return undefined
   if (!isValidImageKey(value)) throw new Error("مفتاح الصورة غير صالح")
+  trackUploadKey(value)
   return value
 }
 
@@ -85,6 +30,7 @@ export function newImageKeys(form: FormData, field: string): string[] {
   if (!Array.isArray(list)) throw new Error("مفاتيح الصور غير صالحة")
   return list.map((k) => {
     if (typeof k !== "string" || !isValidImageKey(k)) throw new Error("مفتاح الصورة غير صالح")
+    trackUploadKey(k)
     return k
   })
 }

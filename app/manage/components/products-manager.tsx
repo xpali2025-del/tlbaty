@@ -34,6 +34,8 @@ import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes 
 import { useManageStore } from "../manage-store"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { parseProductForm } from "@/lib/validation/product"
+import { problemOf } from "@/lib/validation/form"
 
 export function ProductsManager({
   products,
@@ -255,6 +257,9 @@ function ProductDialog({
       form.set("variants", JSON.stringify(rows))
     }
 
+    const problem = problemOf(() => parseProductForm(form))
+    if (problem) return void toast.error(problem)
+
     // بصمة المحتوى قبل رفع الصور (ملفاتها ثابتة، ومفاتيحها تتغيّر مع كل رفع): محتوى جديد = معرّف عملية جديد.
     // الملف بالاسم والحجم فقط: المتصفح يضع لحقل الملف الفارغ وقت تعديل جديداً عند كل إرسال، فلا يصلح في البصمة.
     const fingerprint = JSON.stringify([...form.entries()].map(([k, v]) => [k, v instanceof File ? `${v.name}:${v.size}` : v]))
@@ -294,9 +299,9 @@ function ProductDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField current={product?.image} label="صورة المنتج الرئيسية" isProcessing={isPending} />
+          <ImageField folder="products" current={product?.image} label="صورة المنتج الرئيسية" isProcessing={isPending} />
 
-          <MultiImageField current={product?.images} label="صور إضافية للمنتج" isProcessing={isPending} />
+          <MultiImageField folder="products" current={product?.images} label="صور إضافية للمنتج" isProcessing={isPending} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="اسم المنتج" required>

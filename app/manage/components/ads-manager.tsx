@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import Image from "next/image"
 import { ImageIcon, Megaphone, Pencil, Video } from "lucide-react"
 import { toast } from "sonner"
@@ -21,8 +21,11 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { AdminAd, AdminCategory } from "@/lib/admin"
 import { saveAd, deleteAd, toggleAdActive } from "../client-actions"
-import { DeleteButton, ImageField, SectionHeader } from "./shared"
-import { uploadFormImages } from "@/lib/storage/upload-client"
+import { DeleteButton, ImageField, SectionHeader, UploadStatus, usePreUploadState } from "./shared"
+import { startPreUpload, uploadFormImages } from "@/lib/storage/upload-client"
+import { parseAdForm } from "@/lib/validation/ad"
+import { problemOf } from "@/lib/validation/form"
+import { PreUpload, discardPreUpload, markSubmitted, releasePreUpload } from "@/lib/storage/preupload-registry"
 import { AD_PLACEMENTS, MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, normalizePlacements } from "@/lib/ads"
 import { extractVideoPoster, uploadAdVideo } from "@/lib/storage/video-client"
 
@@ -158,7 +161,7 @@ export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: Ad
 
 function AdDialog({
   open,
-  onOpenChange,
+  onOpenChange: setOpenState,
   ad,
   categories,
 }: {
@@ -174,6 +177,52 @@ function AdDialog({
   const [placements, setPlacements] = useState<string[]>(ad?.placements?.length ? ad.placements : AD_PLACEMENTS.map((p) => p.key))
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [isPending, startTransition] = useTransition()
+  // الفيديو (حتى 8 ميغابايت) هو أبطأ ما يُرفع: يبدأ رفعه وصورة غلافه حين يُختار، لا حين يُضغط «حفظ».
+  const [videoUpload, setVideoUpload] = useState<PreUpload | null>(null)
+  const videoRef = useRef<PreUpload | null>(null)
+  const posterRef = useRef<{ file: File; promise: Promise<PreUpload | null> } | null>(null)
+  const videoState = usePreUploadState(videoUpload)
+  // النافذة تُغلق (إلغاء، أو بعد حفظ ناجح): ما لم يُرسَل لحفظ يُحذف من R2، وتُصفَّر حالة الفيديو.
+  // لا يكفي تنظيف إزالة المكوّن: هذا المكوّن يبقى معروضاً بعد إغلاق النافذة (بخلاف حقول الصور داخل محتواها).
+  function releaseVideo() {
+    releasePreUpload(videoRef.current)
+    void posterRef.current?.promise.then((poster) => releasePreUpload(poster))
+    videoRef.current = null
+    posterRef.current = null
+    setVideoUpload(null)
+    setVideoFile(null)
+  }
+  function onOpenChange(next: boolean) {
+    if (!next) releaseVideo()
+    setOpenState(next)
+  }
+  useEffect(() => releaseVideo, []) // عند إزالة المكوّن نفسه
+
+  function pickVideo(file: File | null) {
+    const previous = videoRef.current
+    const previousPoster = posterRef.current
+    setVideoFile(file)
+    if (!file) {
+      videoRef.current = null
+      posterRef.current = null
+      setVideoUpload(null)
+    } else {
+      const pre = new PreUpload(`video|${file.name}|${file.size}|${file.lastModified}`, file, "ads", uploadAdVideo(file))
+      videoRef.current = pre
+      setVideoUpload(pre)
+      // خطأ الفيديو (المدة أو الحجم أو صيغة لا يفكها المتصفح) يظهر الآن لا بعد الانتظار حتى «حفظ»
+      pre.promise.catch((error) => toast.error(error instanceof Error ? error.message : "تعذّر رفع الفيديو"))
+      posterRef.current = {
+        file,
+        promise: extractVideoPoster(file).then(
+          (poster) => startPreUpload(poster, "ads", "image"),
+          () => null, // تعذّر الاستخراج: يُعاد عند الحفظ ويظهر خطؤه إن تكرر
+        ),
+      }
+    }
+    discardPreUpload(previous)
+    void previousPoster?.promise.then((poster) => discardPreUpload(poster))
+  }
 
   function togglePlacement(key: string, checked: boolean) {
     setPlacements((prev) => (checked ? [...prev, key] : prev.filter((k) => k !== key)))
@@ -195,14 +244,30 @@ function AdDialog({
     }
     form.set("placements", JSON.stringify(normalizePlacements(placements)))
 
+    const problem = problemOf(() => parseAdForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         if (kind === "video") {
           const hasPoster = (form.get("image") as File | null)?.size
           if (!videoFile && !ad?.videoUrl) throw new Error("اختر ملف الفيديو (MP4)")
           if (videoFile) {
-            form.set("videoKey", await uploadAdVideo(videoFile))
-            if (!hasPoster && !ad?.image) form.set("image", await extractVideoPoster(videoFile))
+            // الرفع المسبق: ينتظر ما لم يكتمل فقط. إن فشل يُرفع هنا كالمعتاد ويظهر خطؤه الفعلي.
+            const pre = videoRef.current?.file === videoFile ? videoRef.current : null
+            let videoKey: string | undefined
+            if (pre) {
+              videoKey = await pre.promise.then(
+                (key) => (markSubmitted(pre), key),
+                () => undefined,
+              )
+            }
+            form.set("videoKey", videoKey ?? (await uploadAdVideo(videoFile)))
+            const cached = posterRef.current?.file === videoFile ? await posterRef.current.promise : null
+            if (!hasPoster && !ad?.image) {
+              form.set("image", cached?.file ?? (await extractVideoPoster(videoFile)))
+            } else {
+              discardPreUpload(cached) // المدير اختار غلافاً بنفسه: غلاف الفيديو المستخرج لن يُستعمل
+            }
           }
         }
         await uploadFormImages(form, [
@@ -252,8 +317,9 @@ function AdDialog({
               <Input
                 type="file"
                 accept="video/mp4"
-                onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => pickVideo(e.target.files?.[0] ?? null)}
               />
+              <UploadStatus state={videoState} error={videoUpload?.error?.message} what="الفيديو" />
               {ad?.videoUrl && !videoFile && <p className="text-xs text-muted-foreground">الفيديو الحالي محفوظ؛ اختر ملفاً لاستبداله.</p>}
               <p className="text-xs text-muted-foreground">
                 يعمل تلقائياً بدون صوت وبتكرار. الحد الأقصى {MAX_VIDEO_BYTES / 1024 / 1024} ميغابايت و{MAX_VIDEO_SECONDS} ثانية (الأنسب من 5 إلى 15 ثانية)،
@@ -263,6 +329,7 @@ function AdDialog({
           )}
 
           <ImageField
+            folder="ads"
             current={ad?.image}
             label={kind === "video" ? "صورة الغلاف (اختيارية)" : "صورة الإعلان"}
             required={!ad && kind === "image"}

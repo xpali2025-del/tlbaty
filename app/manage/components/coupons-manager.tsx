@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react"
 import { Pencil, Ticket } from "lucide-react"
 import { toast } from "sonner"
+import { parseCouponForm } from "@/lib/validation/catalog"
+import { problemOf } from "@/lib/validation/form"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -97,6 +99,8 @@ function CouponDialog({
     e.preventDefault()
     const form = new FormData(e.currentTarget)
     form.set("type", type)
+    const problem = problemOf(() => parseCouponForm(form))
+    if (problem) return void toast.error(problem)
     startTransition(async () => {
       try {
         await saveCoupon(coupon?._id ?? null, form)
