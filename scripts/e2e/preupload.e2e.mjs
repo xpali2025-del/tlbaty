@@ -34,6 +34,8 @@ const CORS = { "access-control-allow-origin": "*", "access-control-expose-header
 const r2 = { puts: 0, delayMs: 0, failNext: 0 }
 
 async function login(context) {
+  // هذا الفحص يخص مسار «الانتظار ثم الإغلاق» (الحفظ الفوري للمنتجات يُفحص في save-queue.e2e.mjs)
+  await context.addInitScript(() => localStorage.setItem("manage:instant-save", "off"))
   const page = await context.newPage()
   await page.route(
     (url) => url.host.endsWith("r2.cloudflarestorage.com"),

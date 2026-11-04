@@ -20,6 +20,8 @@ const ok = (cond, msg) => {
 }
 
 async function login(context) {
+  // هذا الفحص يخص مسار «الانتظار ثم الإغلاق» (الحفظ الفوري للمنتجات يُفحص في save-queue.e2e.mjs)
+  await context.addInitScript(() => localStorage.setItem("manage:instant-save", "off"))
   const page = await context.newPage()
   await page.goto(BASE + "/manage/login")
   await page.fill("#username", process.env.MANAGE_USERNAME)
