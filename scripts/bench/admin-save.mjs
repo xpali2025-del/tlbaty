@@ -253,8 +253,13 @@ async function measure(page, scenario, run) {
   else {
     // الإعدادات بلا نافذة: يعود المدير حين يرجع الزر من «جارٍ الحفظ…» إلى «حفظ التغييرات»
     // (عدّاد الرسائل لا ينفع: تعرض الواجهة رسالة واحدة فقط وتستبدل القديمة)
-    await page.getByRole("button", { name: scenario.done.pending }).waitFor({ state: "visible", timeout: 5000 })
-    await page.getByRole("button", { name: scenario.done.pending }).waitFor({ state: "hidden", timeout: 120000 })
+    // الحفظ الفوري (المرحلة 5): يظهر شريط حالة الحفظ فوراً ويعود الزر؛ بلا طابور (كود قديم) يمر الزر بـ«جارٍ الحفظ…».
+    const pendingButton = page.getByRole("button", { name: scenario.done.pending })
+    const queued = await Promise.race([
+      page.getByTestId("settings-save").waitFor({ state: "visible", timeout: 5000 }).then(() => true),
+      pendingButton.waitFor({ state: "visible", timeout: 5000 }).then(() => false),
+    ])
+    if (!queued) await pendingButton.waitFor({ state: "hidden", timeout: 120000 })
   }
   const A = Date.now() - t0
   // الحفظ الفوري (المرحلة 4): النافذة تُغلق والحفظ يكتمل في الخلفية؛ ننتظر انتهاء الطابور ليُحسب B. بلا طابور (كود قديم) يمر فوراً.
