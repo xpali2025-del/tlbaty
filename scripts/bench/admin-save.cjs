@@ -135,6 +135,7 @@ const SCENARIOS = [
     label: "الإعدادات: تغيير الشعار",
     images: 1,
     async prepare(page) {
+      await page.click("nav >> text=السلايدر")
       await page.click("nav >> text=إعدادات الموقع")
       await page.waitForSelector("input[name=name]")
       await page.locator("input[type=file][name=logo]").setInputFiles(photo(1))
@@ -146,6 +147,8 @@ const SCENARIOS = [
     label: "الإعدادات: تعديل نص بلا صور",
     images: 0,
     async prepare(page, run) {
+      // نغادر الشاشة ثم نعود إليها: النموذج يحتفظ بالصورة المختارة في السيناريو السابق ما دام مفتوحاً
+      await page.click("nav >> text=السلايدر")
       await page.click("nav >> text=إعدادات الموقع")
       await page.waitForSelector("input[name=name]")
       await page.locator("input[name=tagline]").fill(`bench ${run}`)
