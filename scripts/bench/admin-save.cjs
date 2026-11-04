@@ -157,7 +157,21 @@ const SCENARIOS = [
   },
 ]
 
+// خط الرفع وخط التنزيل مشتركان بين كل الطلبات: رفعان متزامنان يتقاسمان السرعة (FIFO)،
+// فلا تأخذ كل صورة كامل السرعة وحدها كما لو كانت وحدها على الشبكة.
+const channel = (bps) => {
+  let freeAt = 0
+  return async (bytes, extraMs) => {
+    const now = Date.now()
+    const start = Math.max(now, freeAt)
+    freeAt = start + (bytes / bps) * 1000
+    await sleep(freeAt - now + extraMs)
+  }
+}
+
 async function throttle(page) {
+  const up = channel(NET.upBps)
+  const down = channel(NET.downBps)
   await page.route(
     (url) => url.host.endsWith("r2.cloudflarestorage.com") || url.pathname.startsWith("/manage"),
     async (route) => {
@@ -167,14 +181,14 @@ async function throttle(page) {
       const isAction = !isR2 && req.method() === "POST"
       if (!isR2 && !isAction) return route.continue()
       const size = req.postDataBuffer()?.length ?? 0
-      await sleep(NET.rttMs / 2 + (size / NET.upBps) * 1000)
+      await up(size, NET.rttMs / 2)
       if (isR2) {
         await sleep(NET.rttMs / 2)
         return route.fulfill({ status: 200, headers: { etag: '"bench"', "access-control-allow-origin": "*", "access-control-expose-headers": "etag" }, body: "" })
       }
       const res = await route.fetch()
       const body = await res.body()
-      await sleep(NET.rttMs / 2 + (body.length / NET.downBps) * 1000)
+      await down(body.length, NET.rttMs / 2)
       return route.fulfill({ response: res, body })
     },
   )
