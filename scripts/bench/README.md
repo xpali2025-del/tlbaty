@@ -49,3 +49,10 @@ FIXTURES=/tmp/fixtures ROUNDS=10 WARMUP=1 OUT=/tmp/results.json node scripts/ben
 - معالج الجهاز غير مُبطَّأ: ضغط الصور على الجوال أبطأ مما هنا.
 - متصفح Chromium المرفق لا يفك ترميز H.264: لا يمكن تشغيل إعلان الفيديو، فيُحسب زمن رفعه تحليلياً لا قياساً.
 - مع 10 قياسات، p95 (الرتبة الأقرب) يساوي أكبر قيمة.
+
+## فحص الرفع عند الاختيار (ليس ضمن CI)
+`scripts/e2e/preupload.e2e.mjs` و`scripts/e2e/admin-save-foundation.e2e.mjs`: نفس خطوات البناء والتشغيل أعلاه ثم
+`set -a; . /tmp/e2e.env; set +a; FIXTURES=/tmp/fixtures node scripts/e2e/preupload.e2e.mjs` (و`WIDTH=390` للهاتف).
+فيديو الإعلان يحتاج `ad-test.mp4` في مجلد الصور: `ffmpeg -f lavfi -i testsrc=size=1200x600:rate=10 -t 3 -c:v libvpx-vp9 -b:v 300k -an $FIXTURES/ad-test.mp4`
+(متصفح Chromium المرفق لا يفك H.264، ويفك VP9 داخل MP4).
+سكربت القياس `admin-save.mjs` ينتظر الآن انتهاء الرفع المسبق قبل الضغط على «حفظ» (يقيس ما يلي الحفظ لمن اختار صوره قبله).

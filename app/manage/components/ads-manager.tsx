@@ -159,7 +159,7 @@ export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: Ad
 
 function AdDialog({
   open,
-  onOpenChange,
+  onOpenChange: setOpenState,
   ad,
   categories,
 }: {
@@ -180,14 +180,21 @@ function AdDialog({
   const videoRef = useRef<PreUpload | null>(null)
   const posterRef = useRef<{ file: File; promise: Promise<PreUpload | null> } | null>(null)
   const videoState = usePreUploadState(videoUpload)
-  // النموذج أُغلق: ما لم يُرسَل لحفظ يُحذف من R2
-  useEffect(
-    () => () => {
-      releasePreUpload(videoRef.current)
-      void posterRef.current?.promise.then((poster) => releasePreUpload(poster))
-    },
-    [],
-  )
+  // النافذة تُغلق (إلغاء، أو بعد حفظ ناجح): ما لم يُرسَل لحفظ يُحذف من R2، وتُصفَّر حالة الفيديو.
+  // لا يكفي تنظيف إزالة المكوّن: هذا المكوّن يبقى معروضاً بعد إغلاق النافذة (بخلاف حقول الصور داخل محتواها).
+  function releaseVideo() {
+    releasePreUpload(videoRef.current)
+    void posterRef.current?.promise.then((poster) => releasePreUpload(poster))
+    videoRef.current = null
+    posterRef.current = null
+    setVideoUpload(null)
+    setVideoFile(null)
+  }
+  function onOpenChange(next: boolean) {
+    if (!next) releaseVideo()
+    setOpenState(next)
+  }
+  useEffect(() => releaseVideo, []) // عند إزالة المكوّن نفسه
 
   function pickVideo(file: File | null) {
     const previous = videoRef.current

@@ -2,7 +2,8 @@
 // ليس ضمن CI. التشغيل: انظر scripts/bench/README.md للبناء (متغيرات R2 الوهمية) والتشغيل، ثم:
 //   set -a; . /tmp/e2e.env; set +a; FIXTURES=/tmp/fixtures node scripts/e2e/preupload.e2e.mjs
 // R2 وهمي: يعترض الـ PUT ويردّ 200 ويعدّه. يحتاج DATABASE_URL (لقراءة الحقيقة من القاعدة) وصور الاختبار (make-fixtures).
-// الفيديو غير مشمول: متصفح Chromium المرفق لا يفك ترميز H.264.
+// الفيديو: متصفح Chromium المرفق لا يفك H.264، فيُختبر بـ MP4 بترميز VP9 (يفكه). الملف يُولَّد بـ ffmpeg:
+//   ffmpeg -f lavfi -i testsrc=size=1200x600:rate=10 -t 3 -c:v libvpx-vp9 -b:v 300k -an $FIXTURES/ad-test.mp4
 import { execFileSync } from "node:child_process"
 import path from "node:path"
 import { createRequire } from "node:module"
@@ -169,6 +170,44 @@ const save = (page) => page.getByRole("button", { name: "حفظ التغييرا
   await save(page)
   await sleep(2500)
   ok(r2.puts === before7 && sql("select logo_key from store.site_settings") === logo1, "حفظ ثانٍ بالحقل نفسه لم يرفع شيئاً ولم يغيّر المفتاح")
+
+  // ---------- 8) فيديو الإعلان: الفيديو وغلافه يُرفعان عند الاختيار ----------
+  const video = path.join(FIXTURES, "ad-test.mp4")
+  const openNewAd = async () => {
+    await page.click("nav >> text=الإعلانات")
+    await page.click("button:has-text('إعلان جديد')")
+    await page.waitForSelector("[role=dialog]")
+    await page.locator("[role=dialog] [role=radio]:has-text('فيديو')").click()
+  }
+  await openNewAd()
+  const before8 = r2.puts
+  await page.locator("[role=dialog] input[type=file][accept='video/mp4']").setInputFiles(video)
+  ok(await page.getByText("رُفع الفيديو").first().waitFor({ timeout: 30000 }).then(() => true).catch(() => false), "الفيديو رُفع بمجرد اختياره")
+  ok(await until(() => r2.puts === before8 + 2 && pendingCount() === 2, 15000), `الفيديو وصورة غلافه المستخرجة رُفعا قبل «حفظ» (PUT: ${r2.puts - before8}، معلّقة: ${pendingCount()})`)
+  await page.locator("[role=dialog] input[name=title]").fill("إعلان فيديو e2e")
+  const putsBeforeAdSave = r2.puts
+  await save(page)
+  await page.waitForSelector("[role=dialog]", { state: "hidden", timeout: 30000 })
+  ok(r2.puts === putsBeforeAdSave, "حفظ الإعلان لم يرفع الفيديو ولا الغلاف ثانية")
+  const adRow = sql("select video_key || '|' || image_key from store.ads where title = 'إعلان فيديو e2e'")
+  ok(adRow.includes("ads/") && adRow.includes(".mp4|ads/"), `الإعلان حُفظ بمفتاحي الفيديو والغلاف (${adRow ? "موجودان" : "ناقصان"})`)
+  ok(pendingCount() === 0, "طالب الحفظ بالمفتاحين فأُزيلا من المعلّقة")
+
+  // إلغاء نموذج فيه فيديو مرفوع
+  await openNewAd()
+  await page.locator("[role=dialog] input[type=file][accept='video/mp4']").setInputFiles(video)
+  ok(await until(() => pendingCount() === 2, 30000), "فيديو وغلاف جديدان معلّقان")
+  await page.getByRole("button", { name: "إلغاء" }).click()
+  await page.waitForSelector("[role=dialog]", { state: "hidden" })
+  ok(await until(() => pendingCount() === 0), "إلغاء نموذج الإعلان حذف الفيديو والغلاف المرفوعين")
+
+  // ملف غير صالح كفيديو: الخطأ يظهر عند الاختيار لا عند «حفظ»
+  await openNewAd()
+  await page.locator("[role=dialog] input[type=file][accept='video/mp4']").setInputFiles(photo(1))
+  ok(await page.getByText(/تعذّر قراءة الفيديو|نوع الفيديو غير مدعوم/).first().waitFor({ timeout: 30000 }).then(() => true).catch(() => false), "ملف غير فيديو رُفض عند اختياره برسالة واضحة")
+  await page.getByRole("button", { name: "إلغاء" }).click()
+  await page.waitForSelector("[role=dialog]", { state: "hidden" })
+  sql("delete from store.ads where title = 'إعلان فيديو e2e'")
 
   ok(errors.length === 0, `لا أخطاء في الصفحة ${errors.join(";")}`)
   await browser.close()
