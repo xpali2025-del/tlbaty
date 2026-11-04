@@ -3,7 +3,7 @@
 import { SizeChartEditor, emptyChart } from "./size-chart-editor"
 import { validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { VariantStockEditor, variantCombos, variantKey } from "./variant-stock-editor"
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useRef, useState, useTransition } from "react"
 import Image from "next/image"
 import { Pencil, PackageX, Star, Sparkles } from "lucide-react"
 import { toast } from "sonner"
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select"
 import type { AdminBrand, AdminCategory, AdminColor, AdminProduct, AdminSizeChart } from "@/lib/admin"
 import { saveProduct, deleteProduct, generateProductSlug, backfillImagePalettes } from "../client-actions"
+import { useManageStore } from "../manage-store"
 import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, TagInput } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 
@@ -149,7 +150,8 @@ export function ProductsManager({
       )}
 
       <ProductDialog
-        key={editing?._id ?? "new"}
+        // الإصدار في المفتاح: فتح منتج بعد حفظه يبدأ نموذجاً جديداً بنسخته الحالية لا بحالة قديمة
+        key={`${editing?._id ?? "new"}:${editing?.version ?? 0}`}
         open={open}
         onOpenChange={setOpen}
         product={editing}
@@ -205,6 +207,9 @@ function ProductDialog({
   // ما رآه المدير عند فتح النموذج، لتطبيق التغيير كفرق (لا يمسح خصم طلبات جرت أثناء التعديل).
   const savedVariantStock = new Map((product?.variants ?? []).map((v) => [variantKey(v.color, v.size), v.stock]))
   const [isPending, startTransition] = useTransition()
+  const { upsertProduct } = useManageStore()
+  // معرّف عملية الحفظ: يبقى نفسه إن أُعيد إرسال المحتوى نفسه (انقطع الرد بعد أن وصل الحفظ)، فلا يتكرر المنتج.
+  const attempt = useRef<{ id: string; fingerprint: string } | null>(null)
 
   const selectedCategory = categories.find((c) => c._id === categoryId)
   const subOptions = selectedCategory?.subcategories ?? []
@@ -250,17 +255,32 @@ function ProductDialog({
       form.set("variants", JSON.stringify(rows))
     }
 
+    // بصمة المحتوى قبل رفع الصور (ملفاتها ثابتة، ومفاتيحها تتغيّر مع كل رفع): محتوى جديد = معرّف عملية جديد.
+    // الملف بالاسم والحجم فقط: المتصفح يضع لحقل الملف الفارغ وقت تعديل جديداً عند كل إرسال، فلا يصلح في البصمة.
+    const fingerprint = JSON.stringify([...form.entries()].map(([k, v]) => [k, v instanceof File ? `${v.name}:${v.size}` : v]))
+    if (attempt.current?.fingerprint !== fingerprint) attempt.current = { id: crypto.randomUUID(), fingerprint }
+    form.set("requestId", attempt.current.id)
+    // نسخة المنتج التي رآها المدير عند فتح النموذج: إن تغيّر المنتج بعدها يرفض الخادم الحفظ بدل أن يمسح التعديل الآخر.
+    if (product) form.set("expectedVersion", String(product.version))
+
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
           { name: "image", folder: "products", keyName: "imageKey" },
           { name: "newImages", folder: "products", keyName: "newImageKeys", multiple: true },
         ])
-        await saveProduct(product?._id ?? null, form)
-        toast.success(product ? "تم تحديث المنتج" : "تمت إضافة المنتج")
+        const result = await saveProduct(product?._id ?? null, form)
+        if (result.status === "conflict") {
+          if (result.current) upsertProduct(result.current)
+          throw new Error("عدّل شخص آخر هذا المنتج بعد فتحك للنموذج، وحُدّثت القائمة بآخر نسخة. أغلق النافذة وافتح المنتج من جديد ثم كرّر تعديلك.")
+        }
+        attempt.current = null
         onOpenChange(false)
+        upsertProduct(result.item)
+        toast.success(product ? "تم تحديث المنتج" : "تمت إضافة المنتج")
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "تعذّر الحفظ")
+        // انقطاع الشبكة يظهر من المتصفح كـ TypeError بنص إنجليزي؛ ولأن إعادة الإرسال آمنة (معرّف العملية) نقول ذلك.
+        toast.error(err instanceof TypeError ? "انقطع الاتصال بالخادم. اضغط «حفظ التغييرات» مرة أخرى؛ لن يتكرر المنتج." : err instanceof Error ? err.message : "تعذّر الحفظ")
       }
     })
   }

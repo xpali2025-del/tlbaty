@@ -15,9 +15,9 @@
 //   - لا يُحاكى بطء معالج الجوال: الضغط يعمل على معالج هذا الجهاز.
 //
 // الاستخدام: انظر scripts/bench/README.md
-const { chromium } = require("playwright")
-const fs = require("node:fs")
-const path = require("node:path")
+import fs from "node:fs"
+import path from "node:path"
+import { chromium } from "playwright"
 
 const BASE = process.env.BASE || "http://127.0.0.1:3311"
 const COUNTER = process.env.COUNTER || "http://127.0.0.1:5434"

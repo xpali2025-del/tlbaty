@@ -26,7 +26,7 @@ export DATABASE_URL="postgresql://USER:PASS@127.0.0.1:5433/DB?sslmode=disable" N
 npx next start -p 3311 &
 
 # 5) القياس
-FIXTURES=/tmp/fixtures ROUNDS=10 WARMUP=1 OUT=/tmp/results.json node scripts/bench/admin-save.cjs
+FIXTURES=/tmp/fixtures ROUNDS=10 WARMUP=1 OUT=/tmp/results.json node scripts/bench/admin-save.mjs
 ```
 (في الخطوة 4 استبدل منفذ الرابط 5432 بـ 5433، منفذ الوسيط.)
 

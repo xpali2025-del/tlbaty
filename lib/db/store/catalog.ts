@@ -88,6 +88,8 @@ export const products = store.table('products', {
   sortOrder: integer('sort_order').notNull().default(0),
   rating: real('rating').notNull().default(5),
   reviewsCount: integer('reviews_count').notNull().default(0),
+  /** Bumped by every admin edit of the form's fields (not by orders or stock): lets a save detect that the product changed since the form was opened. */
+  version: integer('version').notNull().default(1),
   ...seo(),
   ...timestamps(),
 }, (t) => [
