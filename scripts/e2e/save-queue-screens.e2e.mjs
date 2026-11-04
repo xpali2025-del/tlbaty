@@ -283,6 +283,7 @@ async function armCloseTimer(page) {
     const vlabel = labelFor({})
     await dialog(page).locator("input[name=title]").fill(vlabel)
     const putsBefore = r2.puts
+    const pendingBefore = Number(sql("select count(*) from store.pending_uploads")) // رفع مسبق ضاع بتحديث صفحة سابق يبقى لتنظيف الـ24 ساعة
     await dialog(page).locator("input[type=file][accept='video/mp4']").setInputFiles(`${FIXTURES}/ad-test.mp4`)
     await page.getByText("رُفع الفيديو").first().waitFor({ timeout: 30000 })
     const t = Date.now()
@@ -296,14 +297,14 @@ async function armCloseTimer(page) {
     ok(await waitSaved(page, adsScreen, vlabel, 40000), "حُفظ الإعلان في الخلفية")
     ok(r2.puts === putsBefore + 2, `لم يُرفع شيء ثانية عند الحفظ (PUT: ${r2.puts - putsBefore})`)
     ok(Number(sql(`select count(*) from store.ads where title='${vlabel}' and kind='video' and video_key is not null and image_key is not null`)) === 1, "في القاعدة: إعلان فيديو بمفتاح فيديو وغلاف")
-    ok(Number(sql("select count(*) from store.pending_uploads")) === 0, "طُولب بالمفاتيح فلا معلّق")
+    ok(Number(sql("select count(*) from store.pending_uploads")) === pendingBefore, "طُولب بمفاتيح الفيديو والغلاف بعد الحفظ فلم يبقَ معلّق جديد")
   }
 
   // الإعدادات: صفحة بلا نافذة؛ يعود الزر فوراً والحفظ يكمل في الخلفية، ويصمد أمام الانقطاع
   if (!ONLY.length || ONLY.includes("إعدادات الموقع")) {
     console.log("\n## إعدادات الموقع")
     await page.click("nav >> text=إعدادات الموقع")
-    const tagline = page.locator("input[name=tagline]")
+    const tagline = page.locator("input[name=tagline]").first()
     await tagline.waitFor()
     const original = await tagline.inputValue()
     const slow = async (route) => {
@@ -336,7 +337,7 @@ async function armCloseTimer(page) {
     while (Date.now() < end2 && sql("select tagline from store.site_settings") !== v2) await sleep(200)
     ok(sql("select tagline from store.site_settings") === v2, "عاد الاتصال فاكتمل الحفظ")
     // رفض: رقم هاتف غير صالح يُرفض في المتصفح قبل أي إغلاق
-    await page.locator("input[name=phone]").fill("abc")
+    await page.locator("input[name=phone]").first().fill("abc")
     await page.getByRole("button", { name: "حفظ التغييرات" }).click()
     await sleep(500)
     ok(!(await page.getByTestId("settings-save").count()), "مدخل غير صالح يُرفض في المتصفح ولا يدخل الطابور")
