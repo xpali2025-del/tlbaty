@@ -25,6 +25,7 @@ import {
 import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
 import { getAdminProduct, toAdminProduct, type SaveProductResult } from "@/lib/admin"
 import { parseRequestId, withSaveRequest } from "@/lib/save-request"
+import { skipUploadClaims, trackUploadKey } from "@/lib/upload-claims"
 import { refreshProductSearch } from "@/lib/search-index"
 import { buildSearchText } from "@/lib/search-text"
 import { productsMissingPalette, refreshProductPalette } from "@/lib/product-palette"
@@ -322,7 +323,10 @@ async function saveProductImpl(id: string | null, form: FormData): Promise<SaveP
       return { row, gallery, variants: (applied?.rows ?? []).map(({ color, size, stock }) => ({ color, size, stock })) }
     })
   } catch (e) {
-    if (e instanceof ProductConflict && productId) return { status: "conflict", current: await getAdminProduct(productId) }
+    if (e instanceof ProductConflict && productId) {
+      skipUploadClaims() // الصور المرفوعة لم تُستعمل: تبقى معلّقة فيعيد المدير المحاولة أو ينظّفها التنظيف
+      return { status: "conflict", current: await getAdminProduct(productId) }
+    }
     const constraint = uniqueViolation(e)
     if (constraint?.includes("slug")) throw new Error("هذا الرابط (slug) مستخدم لمنتج آخر، اختر رابطاً مختلفاً")
     if (constraint !== null) throw new Error("تعذّر الحفظ بسبب تعارض في البيانات")
@@ -736,6 +740,7 @@ async function saveAdImpl(id: string | null, form: FormData) {
   const kind = str(form, "kind") === "video" ? "video" : "image"
   const newVideoKey = str(form, "videoKey")
   if (newVideoKey && !isValidVideoKey(newVideoKey)) throw new Error("مفتاح الفيديو غير صالح")
+  trackUploadKey(newVideoKey)
   const placements = normalizePlacements(json<unknown>(form, "placements", []))
   const startsOn = parseDateOnly(str(form, "startsOn")) ?? null
   const endsOn = parseDateOnly(str(form, "endsOn")) ?? null

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { CACHE_TAGS } from "@/lib/cache-tags"
 import { isCronAuthorized } from "@/lib/cron-auth"
 import { purgeExpiredAuthData, purgeOldPaymentProofs } from "@/lib/maintenance"
+import { purgePendingUploads } from "@/lib/pending-uploads"
 import { purgeSaveRequests } from "@/lib/save-request"
 
 // GET /api/cron/cleanup — يستدعيه جدول Vercel Cron يومياً مع Authorization: Bearer $CRON_SECRET.
@@ -24,6 +25,11 @@ export async function GET(request: NextRequest) {
       console.error("save requests purge failed:", error instanceof Error ? error.message : error)
       return null
     })
+    // صور رُفعت من نماذج لم تُحفظ (أُغلقت أو فشل حفظها): تُحذف بعد يوم إن لم يشر إليها صف حي.
+    const uploads = await purgePendingUploads().catch((error) => {
+      console.error("pending uploads purge failed:", error instanceof Error ? error.message : error)
+      return null
+    })
     // الإعلانات المؤرّخة تبدأ/تنتهي باليوم: نُبطل كاشها يومياً كي لا تنتظر تعديلاً من اللوحة.
     try {
       revalidateTag(CACHE_TAGS.ads, { expire: 0 })
@@ -31,7 +37,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error("ads revalidate failed:", error instanceof Error ? error.message : error)
     }
-    return NextResponse.json({ ok: true, deleted, proofs, saveRequests })
+    return NextResponse.json({ ok: true, deleted, proofs, saveRequests, uploads })
   } catch (error) {
     console.error("cleanup failed:", error instanceof Error ? error.message : error)
     return NextResponse.json({ ok: false }, { status: 500 })

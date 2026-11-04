@@ -380,6 +380,7 @@ function PaymentAccountDialog({
 
           <ImageField
             name="image"
+            folder="payment-accounts"
             label="صورة أو شعار الحساب (اختياري)"
             current={account?.image}
           />

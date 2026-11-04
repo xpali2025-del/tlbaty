@@ -121,7 +121,7 @@ function BrandDialog({
           <DialogDescription>يُحفظ مباشرة.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField current={brand?.image} label="شعار البراند" />
+          <ImageField folder="brands" current={brand?.image} label="شعار البراند" />
           <div className="flex flex-col gap-2">
             <Label>اسم البراند <span className="text-destructive">*</span></Label>
             <Input name="name" defaultValue={brand?.name} required />

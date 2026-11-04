@@ -139,7 +139,7 @@ function ReviewDialog({
           <DialogDescription>يُحفظ ويظهر في المتجر.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField name="avatar" current={review?.avatar} label="الصورة الرمزية" />
+          <ImageField name="avatar" folder="reviews" current={review?.avatar} label="الصورة الرمزية" />
           <div className="flex flex-col gap-2">
             <Label>اسم العميل <span className="text-destructive">*</span></Label>
             <Input name="name" defaultValue={review?.name} required />

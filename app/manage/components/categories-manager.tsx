@@ -130,7 +130,7 @@ function CategoryDialog({
           <DialogDescription>يُحفظ مباشرة.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField current={category?.image} label="صورة القسم" />
+          <ImageField folder="categories" current={category?.image} label="صورة القسم" />
           <div className="flex flex-col gap-2">
             <Label>اسم القسم <span className="text-destructive">*</span></Label>
             <Input name="name" defaultValue={category?.name} required />

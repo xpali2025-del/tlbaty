@@ -140,7 +140,7 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
         <div className="flex min-w-0 max-w-3xl flex-col gap-6">
           <Section id="identity" title="هوية المتجر" description="الاسم والشعار والوصف كما يراها العملاء." icon={Store}>
             <Row label="شعار المتجر">
-              <ImageField name="logo" current={settings?.logo} label="رفع الشعار" />
+              <ImageField name="logo" folder="site" current={settings?.logo} label="رفع الشعار" />
             </Row>
             <Row label="اسم المتجر">
               <div className="grid gap-3 sm:grid-cols-2">

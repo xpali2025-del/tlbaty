@@ -75,6 +75,22 @@ const SCENARIOS = [
     done: { dialog: true },
   },
   {
+    id: "products-new-noimg",
+    label: "المنتجات: منتج جديد بلا صور",
+    images: 0,
+    async prepare(page, run) {
+      await page.click("nav >> text=المنتجات")
+      await page.click("button:has-text('منتج جديد')")
+      await page.waitForSelector("[role=dialog]")
+      const dialog = page.locator("[role=dialog]")
+      await dialog.locator("input[name=name]").fill(`bench منتج بلا صور ${Date.now()}-${run}`)
+      await dialog.locator("input[name=price]").fill("120")
+      await dialog.getByRole("combobox").first().click()
+      await page.getByRole("option").first().click()
+    },
+    done: { dialog: true },
+  },
+  {
     id: "products-edit-price",
     label: "المنتجات: تعديل سعر بلا صور",
     images: 0,
@@ -207,6 +223,9 @@ let lastEvents = []
 async function measure(page, scenario, run) {
   await scenario.prepare(page, run)
   await sleep(400) // استقرار الواجهة بعد اختيار الملفات، لا يُحسب
+  // الرفع عند الاختيار (المرحلة 2): ننتظر انتهاء رفع الصور المختارة قبل الضغط، فالقياس هو ما يلي «حفظ» لمن اختار صوره مسبقاً.
+  // على كود بلا رفع مسبق لا توجد حقول بهذه الحالة فلا انتظار.
+  await page.waitForFunction(() => ![...document.querySelectorAll("[data-upload-state]")].some((e) => e.getAttribute("data-upload-state") === "working"), null, { timeout: 120000 })
   const events = []
   lastEvents = events
   let t0 = 0

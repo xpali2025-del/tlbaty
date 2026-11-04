@@ -4,6 +4,7 @@ import { after } from "next/server"
 import { CACHE_TAGS } from "@/lib/cache-tags"
 import { isValidImageKey } from "@/lib/storage/keys"
 import { deleteImageObject } from "@/lib/storage/r2"
+import { trackUploadKey } from "@/lib/upload-claims"
 
 // أدوات مشتركة بين إجراءات لوحة الإدارة. في ملف مستقل لأن ملفات "use server"
 // لا تصدّر إلا دوالاً غير متزامنة، ولأن هذه الأدوات قابلة للاختبار منفردة.
@@ -76,6 +77,7 @@ export function newImageKey(form: FormData, field: string): string | undefined {
   const value = str(form, field)
   if (!value) return undefined
   if (!isValidImageKey(value)) throw new Error("مفتاح الصورة غير صالح")
+  trackUploadKey(value)
   return value
 }
 
@@ -85,6 +87,7 @@ export function newImageKeys(form: FormData, field: string): string[] {
   if (!Array.isArray(list)) throw new Error("مفاتيح الصور غير صالحة")
   return list.map((k) => {
     if (typeof k !== "string" || !isValidImageKey(k)) throw new Error("مفتاح الصورة غير صالح")
+    trackUploadKey(k)
     return k
   })
 }

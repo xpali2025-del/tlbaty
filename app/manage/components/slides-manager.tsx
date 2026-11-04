@@ -113,7 +113,7 @@ function SlideDialog({
           <DialogDescription>يظهر في السلايدر الرئيسي بالصفحة الأولى.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField current={slide?.image} label="صورة السلايد" required={!slide} />
+          <ImageField folder="slides" current={slide?.image} label="صورة السلايد" required={!slide} />
           <div className="flex flex-col gap-2">
             <Label>العنوان <span className="text-destructive">*</span></Label>
             <Input name="title" defaultValue={slide?.title} required />

@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import Image from "next/image"
-import { ImagePlus, Plus, Search, Sparkles, Trash2, Upload, X } from "lucide-react"
+import { Check, ImagePlus, Loader2, Plus, Search, Sparkles, Trash2, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +17,63 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import type { ImageFolder } from "@/lib/storage/keys"
+import { discardPreUpload, releasePreUpload, type PreUpload, type PreUploadState } from "@/lib/storage/preupload-registry"
+import { startPreUpload } from "@/lib/storage/upload-client"
+
+// ---------- الرفع عند الاختيار ----------
+// حقل الصورة يبدأ ضغط الصورة ورفعها إلى R2 فور اختيارها (إن مُرّر له `folder`)، فحين يضغط المدير «حفظ»
+// يكون المفتاح جاهزاً. الحقل يُظهر حالة الرفع، ويلغي ما لم يُحفظ إن استُبدلت الصورة أو أُغلق النموذج.
+
+type UploadView = PreUploadState | "idle"
+
+/** حالة إدخال رفع مسبق (يعيد العرض عند تغيّرها). */
+export function usePreUploadState(pre: PreUpload | null): UploadView {
+  const subscribe = useCallback((notify: () => void) => (pre ? pre.subscribe(notify) : () => {}), [pre])
+  return useSyncExternalStore(subscribe, () => (pre ? pre.state : "idle"), () => "idle")
+}
+
+/** حالة مجموعة إدخالات: working إن بقي منها قيد الرفع، وإلا error إن فشل أحدها، وإلا done. */
+function usePreUploadStates(list: (PreUpload | null)[]): UploadView {
+  const identity = list.map((pre) => pre?.signature).join("\n")
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      const unsubscribe = list.map((pre) => pre?.subscribe(notify))
+      return () => unsubscribe.forEach((u) => u?.())
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- القائمة تُعاد بناؤها كل عرض؛ التغيير الفعلي بتغيّر الإدخالات (identity)
+    [identity],
+  )
+  const snapshot = () => list.map((pre) => pre?.state ?? "idle").join(",")
+  const joined = useSyncExternalStore(subscribe, snapshot, () => "")
+  const states = joined ? joined.split(",") : []
+  if (states.includes("working")) return "working"
+  if (states.includes("error")) return "error"
+  return states.includes("done") ? "done" : "idle"
+}
+
+export function UploadStatus({ state, error, what = "الصورة" }: { state: UploadView; error?: string; what?: string }) {
+  if (state === "idle") return null
+  if (state === "working") {
+    return (
+      <p className="flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
+        <Loader2 className="h-3 w-3 animate-spin" /> جارٍ رفع {what}...
+      </p>
+    )
+  }
+  if (state === "done") {
+    return (
+      <p className="flex items-center gap-1 text-xs text-emerald-700" aria-live="polite">
+        <Check className="h-3 w-3" /> {what === "الصورة" ? "رُفعت" : "رُفع"} {what}
+      </p>
+    )
+  }
+  return (
+    <p className="text-xs text-amber-700" aria-live="polite">
+      تعذّر رفع {what} الآن{error ? ` (${error})` : ""}؛ سيُعاد عند «حفظ».
+    </p>
+  )
+}
 
 /** ترويسة كل قسم في اللوحة مع زر الإضافة والبحث الاختياري. */
 export function SectionHeader({
@@ -68,12 +125,15 @@ export function SectionHeader({
 /** حقل رفع صورة مع معاينة. يُرسل الملف باسم `name` داخل FormData. */
 export function ImageField({
   name = "image",
+  folder,
   label = "الصورة",
   current,
   required,
   isProcessing = false,
 }: {
   name?: string
+  /** مجلد الصور في R2. إن مُرّر يبدأ الرفع فور اختيار الصورة؛ بدونه تُرفع عند الحفظ كالسابق. */
+  folder?: ImageFolder
   label?: string
   current?: string
   required?: boolean
@@ -82,9 +142,23 @@ export function ImageField({
   const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(current ?? null)
   const [cleared, setCleared] = useState(false)
+  const [pre, setPre] = useState<PreUpload | null>(null)
+  const preRef = useRef<PreUpload | null>(null)
+  const uploadState = usePreUploadState(pre)
+
+  // الحقل أُزيل (أُغلق النموذج): ما لم يُرسَل لحفظ يُحذف من R2
+  useEffect(() => () => releasePreUpload(preRef.current), [])
+
+  function select(file: File | null) {
+    const previous = preRef.current
+    const next = file && folder ? startPreUpload(file, folder, name) : null
+    if (previous && previous !== next) discardPreUpload(previous)
+    preRef.current = next
+    setPre(next)
+  }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-upload-state={uploadState}>
       <Label>{label}</Label>
       <div className="flex items-center gap-3">
         <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
@@ -112,6 +186,7 @@ export function ImageField({
               if (file) {
                 setPreview(URL.createObjectURL(file))
                 setCleared(false)
+                select(file)
               }
             }}
           />
@@ -128,12 +203,14 @@ export function ImageField({
                 if (inputRef.current) inputRef.current.value = ""
                 setPreview(null)
                 setCleared(true)
+                select(null)
               }}
             >
               <X className="ml-1 h-3 w-3" />
               إزالة الاختيار
             </Button>
           ) : null}
+          <UploadStatus state={uploadState} error={pre?.error?.message} />
         </div>
       </div>
       {current ? (
@@ -151,19 +228,30 @@ export function ImageField({
 export function MultiImageField({
   keptName = "keptImages",
   filesName = "newImages",
+  folder,
   label = "صور إضافية",
   current = [],
   isProcessing = false,
 }: {
   keptName?: string
   filesName?: string
+  /** مجلد الصور في R2. إن مُرّر يبدأ رفع كل صورة فور إضافتها. */
+  folder?: ImageFolder
   label?: string
   current?: { url: string; ref: string }[]
   isProcessing?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [kept, setKept] = useState(current)
-  const [newFiles, setNewFiles] = useState<{ file: File; preview: string }[]>([])
+  const [newFiles, setNewFiles] = useState<{ file: File; preview: string; pre: PreUpload | null }[]>([])
+  const newFilesRef = useRef(newFiles)
+  const uploadState = usePreUploadStates(newFiles.map((f) => f.pre))
+
+  useEffect(() => {
+    newFilesRef.current = newFiles
+  }, [newFiles])
+  // الحقل أُزيل (أُغلق النموذج): ما لم يُرسَل لحفظ يُحذف من R2
+  useEffect(() => () => newFilesRef.current.forEach((f) => releasePreUpload(f.pre)), [])
 
   // مزامنة قائمة الملفات الجديدة مع حقل الإدخال الفعلي عبر DataTransfer
   // حتى تُرسل ضمن FormData حتى بعد حذف أحد الملفات.
@@ -177,11 +265,19 @@ export function MultiImageField({
   function handleAdd(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? [])
     if (!picked.length) return
-    setNewFiles((prev) => [...prev, ...picked.map((file) => ({ file, preview: URL.createObjectURL(file) }))])
+    setNewFiles((prev) => [
+      ...prev,
+      ...picked.map((file) => ({ file, preview: URL.createObjectURL(file), pre: folder ? startPreUpload(file, folder, filesName) : null })),
+    ])
+  }
+
+  function removeNew(index: number) {
+    discardPreUpload(newFiles[index]?.pre)
+    setNewFiles((prev) => prev.filter((_, idx) => idx !== index))
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-upload-state={uploadState}>
       <Label>{label}</Label>
       <input type="hidden" name={keptName} value={JSON.stringify(kept.map((k) => k.ref))} readOnly />
       <input
@@ -220,7 +316,7 @@ export function MultiImageField({
             <button
               type="button"
               aria-label="حذف الصورة"
-              onClick={() => setNewFiles((prev) => prev.filter((_, idx) => idx !== i))}
+              onClick={() => removeNew(i)}
               className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
             >
               <X className="h-3 w-3" />
@@ -238,6 +334,7 @@ export function MultiImageField({
           <span className="text-[10px]">إضافة صورة</span>
         </button>
       </div>
+      <UploadStatus state={uploadState} />
       <p className="text-xs text-muted-foreground">أضف صوراً من زوايا مختلفة تظهر في معرض صور المنتج.</p>
     </div>
   )

@@ -405,7 +405,7 @@ function CourierForm({ courier, onClose }: { courier: Courier | null; onClose: (
             </p>
           </div>
 
-          <ImageField name="image" label="صورة المندوب (اختيارية)" current={courier?.imageUrl} />
+          <ImageField name="image" folder="couriers" label="صورة المندوب (اختيارية)" current={courier?.imageUrl} />
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="courier-note">ملاحظات إدارية</Label>

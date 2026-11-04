@@ -2,6 +2,7 @@ import "server-only"
 import { unstable_rethrow } from "next/navigation"
 import { ZodError } from "zod"
 import type { ActionFailure } from "@/lib/action-result"
+import { claimingUploads } from "@/lib/upload-claims"
 
 const ARABIC = /[؀-ۿ]/
 const GENERIC = "تعذّر تنفيذ العملية، حاول مجدداً. إن تكرر الخطأ راجع سجل الخادم."
@@ -22,9 +23,11 @@ export function actionErrorMessage(error: unknown): string {
  * أخطاء التحكم في Next (redirect/notFound) تُعاد رميها كما هي.
  */
 export function serverAction<A extends unknown[], R>(fn: (...args: A) => Promise<R>): (...args: A) => Promise<R | ActionFailure> {
+  // المفاتيح المرفوعة مسبقاً التي يقرؤها الإجراء تُزال من سجل المعلّق عند نجاحه (lib/upload-claims.ts).
+  const run = claimingUploads(fn)
   return async (...args: A) => {
     try {
-      return await fn(...args)
+      return await run(...args)
     } catch (error) {
       unstable_rethrow(error)
       return { __actionError: actionErrorMessage(error) }

@@ -495,7 +495,7 @@ describe('authorization', () => {
     expect([(await rows(s.products)).length, (await rows(s.categories)).length, (await rows(s.coupons)).length, (await rows(s.manageUsers)).length]).toEqual(before)
     expect(mocks.revalidateTag).not.toHaveBeenCalled()
     mocks.auth.mockReset()
-    mocks.auth.mockResolvedValue(undefined)
+    mocks.auth.mockResolvedValue({ username: 'tester', isOwner: true, permissions: [], role: 'owner' })
   })
 })
 
