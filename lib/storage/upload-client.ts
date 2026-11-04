@@ -54,7 +54,7 @@ const MAX_FALLBACK_BYTES = 1.5 * 1024 * 1024
 
 /** أقصى بعد (بكسل) لكل مجلد: كافٍ للعرض على الشاشات الكبيرة (2x) ولا يرفع صور هاتف 12 ميغابكسل كما هي. */
 const MAX_DIMENSION: Record<ImageFolder, number> = {
-  products: 1600,
+  products: 1200,
   slides: 1920,
   ads: 1600,
   categories: 800,
@@ -69,32 +69,101 @@ const MAX_DIMENSION: Record<ImageFolder, number> = {
 /** لا نمسّ ما هو صغير أصلاً أو بصيغة لا تُعاد ترميزها بأمان (AVIF متحرك/GIF/SVG). */
 const SKIP_BELOW_BYTES = 200 * 1024
 const RECODABLE = new Set(["image/jpeg", "image/png", "image/webp"])
+const WEBP_QUALITY = 0.82
+const WORKER_TIMEOUT_MS = 45_000
+
+type WorkerResponse =
+  | { success: true; blob: Blob }
+  | { success: false; error: string }
+
+function optimizedFile(blob: Blob): File {
+  const timestamp = Date.now()
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000)
+  return new File([blob], `tarafstore-${timestamp}-${randomSuffix}.webp`, {
+    type: "image/webp",
+    lastModified: timestamp,
+  })
+}
+
+async function compressInWorker(file: File, maxDimension: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./image-compressor.worker.ts", import.meta.url), { type: "module" })
+    const timer = window.setTimeout(() => {
+      worker.terminate()
+      reject(new Error("انتهت مهلة ضغط الصورة"))
+    }, WORKER_TIMEOUT_MS)
+    const finish = () => {
+      window.clearTimeout(timer)
+      worker.terminate()
+    }
+
+    worker.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
+      finish()
+      if (data.success) resolve(data.blob)
+      else reject(new Error(data.error))
+    }
+    worker.onerror = () => {
+      finish()
+      reject(new Error("تعذّر تشغيل عامل ضغط الصور"))
+    }
+    worker.postMessage({ file, maxDimension, quality: WEBP_QUALITY })
+  })
+}
+
+async function loadImage(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; cleanup: () => void }> {
+  if (typeof createImageBitmap === "function") {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+    return { source: bitmap, width: bitmap.width, height: bitmap.height, cleanup: () => bitmap.close() }
+  }
+
+  const objectUrl = URL.createObjectURL(file)
+  const image = new Image()
+  image.crossOrigin = "anonymous"
+  image.src = objectUrl
+  try {
+    await image.decode()
+    return { source: image, width: image.naturalWidth, height: image.naturalHeight, cleanup: () => URL.revokeObjectURL(objectUrl) }
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl)
+    throw error
+  }
+}
+
+async function compressOnMainThread(file: File, maxDimension: number): Promise<Blob | null> {
+  const image = await loadImage(file)
+  try {
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height))
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.max(1, Math.round(image.width * scale))
+    canvas.height = Math.max(1, Math.round(image.height * scale))
+    const context = canvas.getContext("2d")
+    if (!context) return null
+    context.drawImage(image.source, 0, 0, canvas.width, canvas.height)
+    return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", WEBP_QUALITY))
+  } finally {
+    image.cleanup()
+  }
+}
 
 /**
- * يصغّر الصورة إلى الحد الأقصى للمجلد ويرمّزها WebP (جودة 0.82) قبل الرفع. صور الهاتف الأصلية بحجم 3–5 ميغابايت
- * تصبح عادةً 100–300 كيلوبايت: صفحات أسرع بكثير وتخزين ونقل أقل. يُستعمل الأصل إن لم يصغر الناتج.
+ * يصغّر الصورة ويرمّزها WebP خارج خيط الواجهة عند دعم المتصفح، مع Canvas احتياطي للمتصفحات القديمة.
+ * يُستعمل الأصل إذا فشل التحويل أو لم يكن الناتج أصغر، فلا يمنع فشل التحسين حفظ المنتج.
  */
 export async function compressImage(file: File, folder: ImageFolder): Promise<File> {
-  if (typeof document === "undefined" || typeof createImageBitmap === "undefined") return file
-  if (!RECODABLE.has(file.type) || file.size < SKIP_BELOW_BYTES) return file
-  let bitmap: ImageBitmap | undefined
+  if (typeof window === "undefined" || !RECODABLE.has(file.type) || file.size < SKIP_BELOW_BYTES) return file
+
   try {
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
-    const max = MAX_DIMENSION[folder]
-    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement("canvas")
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return file
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.82))
+    const maxDimension = MAX_DIMENSION[folder]
+    const supportsWorkerCompression =
+      typeof Worker !== "undefined" && typeof OffscreenCanvas !== "undefined" && typeof createImageBitmap === "function"
+    const blob = supportsWorkerCompression
+      ? await compressInWorker(file, maxDimension).catch(() => compressOnMainThread(file, maxDimension))
+      : await compressOnMainThread(file, maxDimension)
+
     if (!blob || blob.type !== "image/webp" || blob.size >= file.size) return file
-    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" })
+    return optimizedFile(blob)
   } catch {
     return file
-  } finally {
-    bitmap?.close()
   }
 }
 

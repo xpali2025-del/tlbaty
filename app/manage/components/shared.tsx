@@ -71,11 +71,13 @@ export function ImageField({
   label = "الصورة",
   current,
   required,
+  isProcessing = false,
 }: {
   name?: string
   label?: string
   current?: string
   required?: boolean
+  isProcessing?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(current ?? null)
@@ -91,6 +93,11 @@ export function ImageField({
           ) : (
             <Upload className="h-6 w-6 text-muted-foreground" />
           )}
+          {isProcessing ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/55 px-1 text-center text-[10px] font-medium text-white" aria-live="polite">
+              جارٍ التحسين والرفع...
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col gap-2">
           <input
@@ -108,7 +115,7 @@ export function ImageField({
               }
             }}
           />
-          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isProcessing}>
             {current ? "تغيير الصورة" : "اختيار صورة"}
           </Button>
           {preview && !cleared ? (
@@ -146,11 +153,13 @@ export function MultiImageField({
   filesName = "newImages",
   label = "صور إضافية",
   current = [],
+  isProcessing = false,
 }: {
   keptName?: string
   filesName?: string
   label?: string
   current?: { url: string; ref: string }[]
+  isProcessing?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [kept, setKept] = useState(current)
@@ -185,7 +194,12 @@ export function MultiImageField({
         onChange={handleAdd}
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="relative flex flex-wrap gap-2">
+        {isProcessing ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-background/80 text-xs font-medium" aria-live="polite">
+            جارٍ تحسين الصور ورفعها مباشرة إلى التخزين...
+          </div>
+        ) : null}
         {kept.map((img) => (
           <div key={img.ref} className="relative h-20 w-20 overflow-hidden rounded-md border bg-muted">
             <Image src={img.url || "/placeholder.svg"} alt="" fill className="object-cover" unoptimized />
@@ -217,7 +231,8 @@ export function MultiImageField({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground transition hover:border-primary hover:text-primary"
+          disabled={isProcessing}
+          className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ImagePlus className="h-5 w-5" />
           <span className="text-[10px]">إضافة صورة</span>
