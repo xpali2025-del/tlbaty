@@ -4,12 +4,12 @@ import { AlertTriangle, Loader2, WifiOff } from "lucide-react"
 import { useSaveJobs } from "./queue"
 
 /** شريط حالة الحفظ في رأس اللوحة: «جارٍ حفظ 2…» أو «فشل حفظ 1 — عرض». لا يظهر إن لم يكن هناك شيء. */
-export function SaveStatusBar({ onShowProblems }: { onShowProblems: () => void }) {
+export function SaveStatusBar({ onShowProblems }: { onShowProblems: (screen: string) => void }) {
   const jobs = useSaveJobs()
   const problems = jobs.filter((j) => (j.state === "failed" && !j.offline) || j.state === "conflict")
   const waiting = jobs.filter((j) => j.state === "retrying" || (j.state === "failed" && j.offline))
   const working = jobs.filter((j) => j.state === "queued" || j.state === "running")
-  if (jobs.length === 0) return null
+  if (working.length + waiting.length + problems.length === 0) return null
 
   return (
     <div data-testid="save-status" role="status" aria-live="polite" className="sticky top-0 z-30 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-card px-3 py-2 text-sm shadow-sm">
@@ -24,7 +24,7 @@ export function SaveStatusBar({ onShowProblems }: { onShowProblems: () => void }
         </span>
       )}
       {problems.length > 0 && (
-        <button type="button" onClick={onShowProblems} className="flex items-center gap-1.5 font-medium text-destructive underline-offset-2 hover:underline" data-testid="save-status-problems">
+        <button type="button" onClick={() => onShowProblems(problems[0].screen)} className="flex items-center gap-1.5 font-medium text-destructive underline-offset-2 hover:underline" data-testid="save-status-problems">
           <AlertTriangle className="h-4 w-4" /> فشل حفظ {problems.length} — عرض
         </button>
       )}

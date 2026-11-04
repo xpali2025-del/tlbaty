@@ -25,6 +25,10 @@ describe('code format', () => {
     expect(isProductCode('TRF-ACC-GOL-AB12')).toBe(false)
     expect(isCategoryCode('DR')).toBe(true)
     expect(isCategoryCode('D')).toBe(false)
+    // الأكواد التي يولّدها النظام نفسه تُقبل عند حفظ القسم ثانية (CT2 … CT9 ثم CT10 … CT99)
+    for (const generated of ['CT', 'CT2', 'CT9', 'CT10', 'CT52', 'CT99']) expect(isCategoryCode(generated), generated).toBe(true)
+    expect(isCategoryCode('CT100')).toBe(false)
+    expect(isProductCode('CT52-007')).toBe(true)
     expect(isCategoryCode('dr')).toBe(false)
   })
   it('suggests category codes from slugs and avoids collisions', () => {
@@ -77,5 +81,14 @@ describe('allocation', () => {
     await db.update(s.categories).set({ code: 'ZZ' }).where(eq(s.categories.id, b.id)) // code ZZ reused by a new category (seq 0)
     // ZZ-001 and ZZ-002 exist already -> next free is ZZ-003 instead of a unique-violation
     expect(await allocateProductCode(db, b.id)).toBe('ZZ-003')
+  })
+
+  it('every code the system suggests is one the category form accepts when the admin saves that category again', () => {
+    const taken = new Set<string>()
+    for (let i = 0; i < 60; i++) {
+      const code = suggestCategoryCode('قسم-عربي', taken)
+      expect(isCategoryCode(code), code).toBe(true)
+      taken.add(code)
+    }
   })
 })

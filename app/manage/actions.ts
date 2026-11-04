@@ -28,7 +28,7 @@ import {
 } from "@/lib/db/store"
 import { assertManagePermission, getManageSessionUser, getManageUsername } from "@/lib/manage-auth"
 import { getAdminProduct, toAdminProduct, type SaveProductResult } from "@/lib/admin"
-import { parseRequestId, withSaveRequest } from "@/lib/save-request"
+import { createOnce, parseRequestId, withSaveRequest } from "@/lib/save-request"
 import { skipUploadClaims, trackUploadKey } from "@/lib/upload-claims"
 import { refreshProductSearch } from "@/lib/search-index"
 import { buildSearchText } from "@/lib/search-text"
@@ -399,10 +399,13 @@ async function saveCategoryImpl(id: string | null, form: FormData) {
   const imageKey = newImageKey(form, "imageKey")
   const { subcategories: incoming, ...fields } = parsed
   const values = { ...fields, updatedAt: new Date() }
+  // معرّف العملية: إعادة إرسال إنشاء وصل ثم ضاع ردّه لا تُنشئ قسماً ثانياً (ولا تُرفض كرابط مكرر).
+  const requestId = parseRequestId(str(form, "requestId"))
+  const entityId = categoryId ?? crypto.randomUUID()
 
   let oldImage: string | null = null
   try {
-    await db.transaction(async (tx) => {
+    await withSaveRequest(requestId, "categories", entityId, async (tx) => {
       let rowId: string
       // نص بحث المنتجات يحمل اسم القسم وأسماء أقسامه الفرعية: لا يُعاد بناؤه إلا إن تغيّر أحدها.
       let searchTextStale = false
@@ -414,7 +417,7 @@ async function saveCategoryImpl(id: string | null, form: FormData) {
         searchTextStale = existing.name !== values.name
         rowId = categoryId
       } else {
-        ;[{ id: rowId }] = await tx.insert(categories).values({ ...values, imageKey: imageKey ?? null }).returning({ id: categories.id })
+        ;[{ id: rowId }] = await tx.insert(categories).values({ id: entityId, ...values, imageKey: imageKey ?? null }).returning({ id: categories.id })
       }
       await ensureCategoryCode(tx, rowId)
 
@@ -483,7 +486,7 @@ async function saveBrandImpl(id: string | null, form: FormData) {
       if (existing.name !== values.name) await refreshProductSearch(db, { brandId })
       if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
     } else {
-      await db.insert(brands).values({ ...values, imageKey: imageKey ?? null })
+      await createOnce(parseRequestId(str(form, "requestId")), "brands", (tx, rowId) => tx.insert(brands).values({ id: rowId, ...values, imageKey: imageKey ?? null }).then(() => {}))
     }
   } catch (e) {
     if (uniqueViolation(e) !== null) throw new Error("هذا الرابط (slug) مستخدم لبراند آخر، اختر رابطاً مختلفاً")
@@ -522,7 +525,7 @@ async function saveSlideImpl(id: string | null, form: FormData) {
     if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
   } else {
     if (!imageKey) throw new Error("صورة السلايد مطلوبة")
-    await db.insert(slides).values({ ...values, imageKey })
+    await createOnce(parseRequestId(str(form, "requestId")), "slides", (tx, rowId) => tx.insert(slides).values({ id: rowId, ...values, imageKey }).then(() => {}))
   }
 
   revalidateStore()
@@ -552,7 +555,7 @@ async function saveCouponImpl(id: string | null, form: FormData) {
       const updated = await db.update(coupons).set(values).where(eq(coupons.id, couponId)).returning({ id: coupons.id })
       if (!updated.length) throw new Error("الكوبون غير موجود")
     } else {
-      await db.insert(coupons).values(values)
+      await createOnce(parseRequestId(str(form, "requestId")), "coupons", (tx, rowId) => tx.insert(coupons).values({ id: rowId, ...values }).then(() => {}))
     }
   } catch (e) {
     if (uniqueViolation(e) !== null) throw new Error("كود الخصم مستخدم بالفعل، اختر كوداً آخر")
@@ -584,7 +587,7 @@ async function saveReviewImpl(id: string | null, form: FormData) {
     await db.update(reviews).set({ ...values, ...(avatarKey ? { avatarKey } : {}) }).where(eq(reviews.id, reviewId))
     if (avatarKey && existing.avatarKey !== avatarKey) oldImage = existing.avatarKey
   } else {
-    await db.insert(reviews).values({ ...values, avatarKey: avatarKey ?? null })
+    await createOnce(parseRequestId(str(form, "requestId")), "reviews", (tx, rowId) => tx.insert(reviews).values({ id: rowId, ...values, avatarKey: avatarKey ?? null }).then(() => {}))
   }
 
   revalidateStore()
@@ -633,7 +636,8 @@ async function saveAdImpl(id: string | null, form: FormData) {
 
   let oldImage: string | null = null
   let oldVideo: string | null = null
-  await db.transaction(async (tx) => {
+  const requestId = parseRequestId(str(form, "requestId"))
+  await withSaveRequest(requestId, "ads", adId ?? crypto.randomUUID(), async (tx) => {
     let rowId: string
     if (adId) {
       const [existing] = await tx.select().from(ads).where(eq(ads.id, adId)).limit(1)

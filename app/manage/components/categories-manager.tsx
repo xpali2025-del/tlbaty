@@ -20,6 +20,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { AdminCategory, AdminSubcategory } from "@/lib/admin"
 import { saveCategory, deleteCategory } from "../client-actions"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useInstantRows } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput, sanitizeSlug } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 import { parseCategoryForm } from "@/lib/validation/catalog"
@@ -27,8 +32,11 @@ import { problemOf } from "@/lib/validation/form"
 
 export function CategoriesManager({ categories }: { categories: AdminCategory[] }) {
   const [editing, setEditing] = useState<AdminCategory | null>(null)
+  const [editingJob, setEditingJob] = useState<SaveJob<AdminCategory> | null>(null)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  const rows = useInstantRows("categories", categories)
 
   function handleDelete(c: AdminCategory) {
     startTransition(async () => {
@@ -46,13 +54,14 @@ export function CategoriesManager({ categories }: { categories: AdminCategory[] 
       <SectionHeader
         title="الأقسام"
         description="نظّم أقسام المتجر وأقسامها الفرعية."
-        onAdd={() => { setEditing(null); setOpen(true) }}
+        onAdd={() => { setEditing(null); setEditingJob(null); setOpen(true) }}
         addLabel="قسم جديد"
       />
+      <InstantSaveToggle />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {categories.map((c) => (
-          <Card key={c._id} className="flex items-start gap-3 p-3">
+        {rows.map(({ item: c, job }) => (
+          <Card key={c._id} data-testid="item-row" data-save-state={job?.state ?? "saved"} className={`flex flex-wrap items-start gap-3 p-3 ${job?.state === "failed" || job?.state === "conflict" ? "border-destructive" : ""}`}>
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-muted">
               {c.image ? (
                 <Image src={c.image || "/placeholder.svg"} alt={c.name} fill className="object-cover" unoptimized />
@@ -63,7 +72,10 @@ export function CategoriesManager({ categories }: { categories: AdminCategory[] 
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{c.name}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="truncate font-medium">{c.name}</p>
+                {job ? <SaveBadge job={job} /> : null}
+              </div>
               <p className="text-xs text-muted-foreground">{c.productCount} منتج</p>
               {c.subcategories.length ? (
                 <div className="mt-1.5 flex flex-wrap gap-1">
@@ -76,17 +88,23 @@ export function CategoriesManager({ categories }: { categories: AdminCategory[] 
               ) : null}
             </div>
             <div className="flex shrink-0">
-              <Button variant="ghost" size="icon" onClick={() => { setEditing(c); setOpen(true) }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={Boolean(job && c._id.startsWith("pending-") && job.state !== "failed" && job.state !== "conflict")}
+                onClick={() => { setEditing(c); setEditingJob(job && (job.state === "failed" || job.state === "conflict") ? job : null); setOpen(true) }}
+              >
                 <Pencil className="h-4 w-4" />
                 <span className="sr-only">تعديل</span>
               </Button>
-              <DeleteButton onConfirm={() => handleDelete(c)} itemLabel={c.name} disabled={isPending} />
+              <DeleteButton onConfirm={() => handleDelete(c)} itemLabel={c.name} disabled={isPending || Boolean(job)} />
             </div>
+            {job ? <SaveProblem job={job} onTakeTheirs={() => discardJob(job)} /> : null}
           </Card>
         ))}
       </div>
 
-      <CategoryDialog key={editing?._id ?? "new"} open={open} onOpenChange={setOpen} category={editing} />
+      <CategoryDialog key={`${editing?._id ?? "new"}:${editingJob?.id ?? ""}`} open={open} onOpenChange={setOpen} category={editing} replaceJob={editingJob} instant={instant} />
     </div>
   )
 }
@@ -95,10 +113,14 @@ function CategoryDialog({
   open,
   onOpenChange,
   category,
+  replaceJob,
+  instant,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   category: AdminCategory | null
+  replaceJob: SaveJob<AdminCategory> | null
+  instant: boolean
 }) {
   const [subs, setSubs] = useState<AdminSubcategory[]>(category?.subcategories ?? [])
   const [keywords, setKeywords] = useState<string[]>(category?.keywords ?? [])
@@ -112,12 +134,18 @@ function CategoryDialog({
     form.set("keywords", JSON.stringify(keywords))
     const problem = problemOf(() => parseCategoryForm(form))
     if (problem) return void toast.error(problem)
+    if (instant) {
+      // الحفظ الفوري: تدخل العملية الطابور وتُغلق النافذة، ويتابع الطابور الرفع والحفظ.
+      enqueueScreenSave(SCREEN_SPECS.categories, form, category, replaceJob)
+      onOpenChange(false)
+      return
+    }
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
           { name: "image", folder: "categories", keyName: "imageKey" },
         ])
-        await saveCategory(category?._id ?? null, form)
+        await saveCategory(category && !category._id.startsWith("pending-") ? category._id : null, form)
         toast.success(category ? "تم تحديث القسم" : "تمت إضافة القسم")
         onOpenChange(false)
       } catch (err) {

@@ -28,11 +28,19 @@ import {
 import type { AdminCoupon } from "@/lib/admin"
 import { saveCoupon, deleteCoupon } from "../client-actions"
 import { DeleteButton, SectionHeader } from "./shared"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useInstantRows } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 
 export function CouponsManager({ coupons }: { coupons: AdminCoupon[] }) {
   const [editing, setEditing] = useState<AdminCoupon | null>(null)
+  const [editingJob, setEditingJob] = useState<SaveJob<AdminCoupon> | null>(null)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  const rows = useInstantRows("coupons", coupons)
 
   function handleDelete(c: AdminCoupon) {
     startTransition(async () => {
@@ -50,12 +58,13 @@ export function CouponsManager({ coupons }: { coupons: AdminCoupon[] }) {
       <SectionHeader
         title="أكواد الخصم"
         description="أنشئ كوبونات خصم تُطبَّق عند الدفع."
-        onAdd={() => { setEditing(null); setOpen(true) }}
+        onAdd={() => { setEditing(null); setEditingJob(null); setOpen(true) }}
         addLabel="كوبون جديد"
       />
+      <InstantSaveToggle />
       <div className="grid gap-3 sm:grid-cols-2">
-        {coupons.map((c) => (
-          <Card key={c._id} className="flex items-center gap-3 p-3">
+        {rows.map(({ item: c, job }) => (
+          <Card key={c._id} data-testid="item-row" data-save-state={job?.state ?? "saved"} className={`flex flex-wrap items-center gap-3 p-3 ${job?.state === "failed" || job?.state === "conflict" ? "border-destructive" : ""}`}>
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-primary/10">
               <Ticket className="h-5 w-5 text-primary" />
             </div>
@@ -65,20 +74,27 @@ export function CouponsManager({ coupons }: { coupons: AdminCoupon[] }) {
                 <Badge variant="secondary">
                   {c.type === "percent" ? `${c.discount}%` : `${c.discount} ج.م`}
                 </Badge>
+                {job ? <SaveBadge job={job} /> : null}
               </div>
               <p className="truncate text-xs text-muted-foreground">{c.description}</p>
             </div>
             <div className="flex shrink-0">
-              <Button variant="ghost" size="icon" onClick={() => { setEditing(c); setOpen(true) }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={Boolean(job && c._id.startsWith("pending-") && job.state !== "failed" && job.state !== "conflict")}
+                onClick={() => { setEditing(c); setEditingJob(job && (job.state === "failed" || job.state === "conflict") ? job : null); setOpen(true) }}
+              >
                 <Pencil className="h-4 w-4" />
                 <span className="sr-only">تعديل</span>
               </Button>
-              <DeleteButton onConfirm={() => handleDelete(c)} itemLabel={c.code} disabled={isPending} />
+              <DeleteButton onConfirm={() => handleDelete(c)} itemLabel={c.code} disabled={isPending || Boolean(job)} />
             </div>
+            {job ? <SaveProblem job={job} onTakeTheirs={() => discardJob(job)} /> : null}
           </Card>
         ))}
       </div>
-      <CouponDialog key={editing?._id ?? "new"} open={open} onOpenChange={setOpen} coupon={editing} />
+      <CouponDialog key={`${editing?._id ?? "new"}:${editingJob?.id ?? ""}`} open={open} onOpenChange={setOpen} coupon={editing} replaceJob={editingJob} instant={instant} />
     </div>
   )
 }
@@ -87,10 +103,14 @@ function CouponDialog({
   open,
   onOpenChange,
   coupon,
+  replaceJob,
+  instant,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   coupon: AdminCoupon | null
+  replaceJob: SaveJob<AdminCoupon> | null
+  instant: boolean
 }) {
   const [type, setType] = useState<"percent" | "fixed">(coupon?.type ?? "percent")
   const [isPending, startTransition] = useTransition()
@@ -101,9 +121,14 @@ function CouponDialog({
     form.set("type", type)
     const problem = problemOf(() => parseCouponForm(form))
     if (problem) return void toast.error(problem)
+    if (instant) {
+      enqueueScreenSave(SCREEN_SPECS.coupons, form, coupon, replaceJob)
+      onOpenChange(false)
+      return
+    }
     startTransition(async () => {
       try {
-        await saveCoupon(coupon?._id ?? null, form)
+        await saveCoupon(coupon && !coupon._id.startsWith("pending-") ? coupon._id : null, form)
         toast.success(coupon ? "تم تحديث الكوبون" : "تمت إضافة الكوبون")
         onOpenChange(false)
       } catch (err) {

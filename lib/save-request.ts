@@ -47,6 +47,17 @@ export async function withSaveRequest<T>(
   })
 }
 
+/**
+ * إنشاء عنصر مرة واحدة لكل معرّف عملية (للشاشات البسيطة): يُنفَّذ `run` داخل معاملة تسجّل المعرّف معه،
+ * فإعادة الإرسال بعد ضياع الرد لا تُنشئ عنصراً ثانياً. يعيد true إن نُفِّذ، و false إن كانت العملية سبق تنفيذها.
+ * `entityId` معرّف الصف الجديد: يُكتب في عمود المعرّف ليُسجَّل مع معرّف العملية.
+ */
+export async function createOnce(requestId: string | null, screen: string, run: (tx: Tx, entityId: string) => Promise<void>): Promise<boolean> {
+  const entityId = crypto.randomUUID()
+  const outcome = await withSaveRequest(requestId, screen, entityId, (tx) => run(tx, entityId))
+  return !outcome.replayed
+}
+
 /** حذف معرّفات الحفظ الأقدم من `days` (تنظيف يومي). */
 export async function purgeSaveRequests(days = 7, now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - days * 86_400_000)

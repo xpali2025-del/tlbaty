@@ -28,6 +28,7 @@ const A = unwrapAll(await import('@/app/manage/actions'))
 const { hashPassword, verifyPasswordHash } = await import('@/lib/manage-users')
 const helpers = await import('@/lib/manage-helpers')
 const uploads = unwrapAll(await import('@/app/manage/upload-actions'))
+const PA = unwrapAll(await import('@/app/manage/payment-accounts-actions'))
 const { refreshProductSearch } = await import('@/lib/search-index')
 
 const seed = loadSeedData(path.resolve(__dirname, '../scripts/migration/data'))
@@ -591,5 +592,37 @@ describe('helpers', () => {
     expect(helpers.bool(f, 't')).toBe(true)
     expect(helpers.json(f, 'j', [])).toEqual([1])
     expect(helpers.json(f, 'bad', 'fallback')).toBe('fallback')
+  })
+})
+
+// المرحلة 5: إنشاء عنصر في أي شاشة لا يتكرر إن أُعيد إرساله بالمعرّف نفسه (ضاع الرد بعد أن التزم الخادم).
+describe('creating an item twice with the same request id', () => {
+  const rid = () => crypto.randomUUID()
+  const count = async (t: PgTable) => (await rows(t)).length
+  const KEYED = { imageKey: 'slides/a.webp' }
+
+  it.each([
+    ['categories', () => s.categories, (r: string, n: string) => A.saveCategory(null, form({ name: n, slug: `c-${n}`, requestId: r }))],
+    ['brands', () => s.brands, (r: string, n: string) => A.saveBrand(null, form({ name: n, slug: `b-${n}`, requestId: r }))],
+    ['coupons', () => s.coupons, (r: string, n: string) => A.saveCoupon(null, form({ code: `C${n}`, discount: '5', description: 'x', requestId: r }))],
+    ['slides', () => s.slides, (r: string, n: string) => A.saveSlide(null, form({ title: n, requestId: r, ...KEYED }))],
+    ['reviews', () => s.reviews, (r: string, n: string) => A.saveReview(null, form({ name: n, comment: 'c', requestId: r }))],
+    ['ads', () => s.ads, (r: string, n: string) => A.saveAd(null, form({ title: n, requestId: r, ...KEYED }))],
+    ['payment accounts', () => s.paymentAccounts, (r: string, n: string) => PA.savePaymentAccount(null, form({ providerName: n, accountHolderName: 'h', accountNumber: '1', requestId: r }))],
+  ] as const)('%s: a replay creates nothing new, a new id creates one more', async (_name, table, save) => {
+    const before = await count(table())
+    const id = rid()
+    await save(id, `idem${before}a`)
+    await save(id, `idem${before}a`) // the reply was lost: the browser sends it again
+    expect(await count(table())).toBe(before + 1)
+    await save(rid(), `idem${before}b`) // the admin really adds another
+    expect(await count(table())).toBe(before + 2)
+  })
+
+  it('a replay of a create whose slug or code is unique does not fail as a duplicate', async () => {
+    const id = rid()
+    await A.saveCategory(null, form({ name: 'مكرر', slug: 'dup-slug', requestId: id }))
+    await expect(A.saveCategory(null, form({ name: 'مكرر', slug: 'dup-slug', requestId: id }))).resolves.not.toThrow()
+    await expect(A.saveCategory(null, form({ name: 'مكرر', slug: 'dup-slug', requestId: rid() }))).rejects.toThrow('مستخدم لقسم آخر')
   })
 })
