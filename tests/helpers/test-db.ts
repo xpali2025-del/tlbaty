@@ -40,7 +40,8 @@ export async function openTestDb(options: Options = {}) {
   }
 
   if (kind === 'pg') {
-    const pool = new Pool({ connectionString: url.toString(), max: 5 })
+    // pipeline كما في lib/db/client.ts عند DB_DRIVER=pg
+    const pool = new Pool({ connectionString: url.toString(), max: 5, ...({ pipeline: true } as object) })
     const db = drizzlePg(pool, options) as unknown as TestDb
     return { db, migrate: () => migratePgDriver(db as never, { migrationsFolder }), close: async () => { await pool.end(); await dropAfter() }, driver: 'pg' as const }
   }

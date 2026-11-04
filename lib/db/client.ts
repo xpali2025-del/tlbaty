@@ -40,6 +40,9 @@ function withoutSslMode(connectionString: string): string {
   }
 }
 
+/** DB_LOG=1: يطبع كل استعلام (للتشخيص وعدّ الذهاب والإياب). */
+const logger = process.env.DB_LOG === '1' ? { logQuery: (query: string) => console.log('[sql]', Date.now() % 100000, query.replace(/\s+/g, ' ').slice(0, 150)) } : undefined
+
 function getDb(): Db {
   if (!globalForDb.db) {
     // Each serverless instance keeps a small pool: many instances x a large pool exhausts the database.
@@ -52,16 +55,19 @@ function getDb(): Db {
         max,
         idleTimeoutMillis: 20_000,
         connectionTimeoutMillis: 10_000,
+        // إرسال الاستعلامات المتزامنة على الاتصال نفسه معاً (كما يفعل postgres.js): قراءات القفل داخل معاملة الحفظ تمر في رحلة واحدة.
+        // بدونه تُنفَّذ بالتتابع وتنبّه pg إلى أن ذلك سيُزال في الإصدار 9. تجريبي في pg 8.23؛ DB_PG_PIPELINE=0 يعطّله.
+        ...(process.env.DB_PG_PIPELINE === '0' ? {} : ({ pipeline: true } as object)),
       })
       // خطأ على اتصال خامل (قطعه الـ pooler) لا يجوز أن يُسقط العملية؛ يُستبدل الاتصال عند الحاجة.
       pool.on('error', (error) => console.error('db pool error:', error.message))
       globalForDb.pool = pool
-      globalForDb.db = drizzlePg(pool, { schema }) as unknown as Db
+      globalForDb.db = drizzlePg(pool, { schema, logger }) as unknown as Db
     } else {
       // prepare:false is required for Supabase's transaction-mode pooler (port 6543).
       const client = postgres(url, { prepare: false, max, idle_timeout: 20, connect_timeout: 10 })
       globalForDb.pg = client
-      globalForDb.db = drizzle(client, { schema })
+      globalForDb.db = drizzle(client, { schema, logger })
     }
   }
   return globalForDb.db
