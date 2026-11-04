@@ -14,18 +14,19 @@ function initials(name: string) {
 export function CustomerReviews({ reviews }: { reviews: Review[] }) {
   if (!reviews.length) return null
   return (
-    <section className="py-10 bg-accent/40" aria-label="آراء العملاء">
+    <section className="bg-accent/35 py-12 md:py-16" aria-label="آراء العملاء">
       <div className="mx-auto max-w-7xl px-4">
-        <div className="text-center mb-6">
-          <h2 className="text-xl md:text-2xl font-bold text-foreground">آراء عملائنا</h2>
-          <p className="text-sm text-muted-foreground mt-1">ماذا قال عنا عملاؤنا الكرام</p>
+        <div className="mb-7 text-center">
+          <span className="text-xs font-bold tracking-wide text-primary">تجارب حقيقية</span>
+          <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground md:text-3xl">آراء عملائنا</h2>
+          <p className="mt-2 text-sm text-muted-foreground">ماذا قال عنا عملاؤنا الكرام</p>
         </div>
 
         <ul className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory">
           {reviews.map((review) => (
             <li
               key={review.id}
-              className="snap-start shrink-0 w-[85%] sm:w-[360px] bg-card border border-border rounded-3xl p-5 shadow-sm"
+              className="w-[85%] shrink-0 snap-start rounded-[1.5rem] border border-border/70 bg-card p-5 shadow-[0_18px_45px_-34px_rgba(57,24,33,0.5)] transition-transform hover:-translate-y-0.5 sm:w-[360px]"
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
