@@ -274,9 +274,9 @@ function ProductDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ImageField current={product?.image} label="صورة المنتج الرئيسية" />
+          <ImageField current={product?.image} label="صورة المنتج الرئيسية" isProcessing={isPending} />
 
-          <MultiImageField current={product?.images} label="صور إضافية للمنتج" />
+          <MultiImageField current={product?.images} label="صور إضافية للمنتج" isProcessing={isPending} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="اسم المنتج" required>
