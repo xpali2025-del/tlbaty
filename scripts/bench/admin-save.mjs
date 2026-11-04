@@ -257,6 +257,8 @@ async function measure(page, scenario, run) {
     await page.getByRole("button", { name: scenario.done.pending }).waitFor({ state: "hidden", timeout: 120000 })
   }
   const A = Date.now() - t0
+  // الحفظ الفوري (المرحلة 4): النافذة تُغلق والحفظ يكتمل في الخلفية؛ ننتظر انتهاء الطابور ليُحسب B. بلا طابور (كود قديم) يمر فوراً.
+  await page.waitForFunction(() => !document.querySelector("[data-testid=save-status]"), null, { timeout: 120000 })
   await sleep(1500) // يُكمل after() وإعادة الرسم
   const Q = await counter(false)
   page.off("request", onReq)

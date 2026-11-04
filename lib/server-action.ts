@@ -1,11 +1,10 @@
 import "server-only"
 import { unstable_rethrow } from "next/navigation"
 import { ZodError } from "zod"
-import type { ActionFailure } from "@/lib/action-result"
+import { GENERIC_ACTION_ERROR, type ActionFailure } from "@/lib/action-result"
 import { claimingUploads } from "@/lib/upload-claims"
 
 const ARABIC = /[؀-ۿ]/
-const GENERIC = "تعذّر تنفيذ العملية، حاول مجدداً. إن تكرر الخطأ راجع سجل الخادم."
 
 /**
  * رسالة آمنة للعرض: رسائلنا الموجّهة للمستخدم بالعربية تُعرض كما هي، وأخطاء Zod بأول سبب.
@@ -15,7 +14,7 @@ export function actionErrorMessage(error: unknown): string {
   if (error instanceof ZodError) return error.issues[0]?.message || "بيانات غير صالحة"
   if (error instanceof Error && ARABIC.test(error.message)) return error.message
   console.error("server action failed:", error)
-  return GENERIC
+  return GENERIC_ACTION_ERROR
 }
 
 /**

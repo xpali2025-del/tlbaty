@@ -373,3 +373,21 @@ export function startPreUpload(file: File, folder: ImageFolder, fieldName: strin
   registerPreUpload(pre)
   return pre
 }
+
+/**
+ * يستلم الرفع المسبق لملفات نموذج سيُحفظ لاحقاً من طابور الحفظ: يعلّمها «أُرسلت للحفظ» فلا يُلغى رفعها حين تُغلق النافذة
+ * (التي تُزيل حقولها من الصفحة). تعيدها ليُعاد تسجيلها عند التنفيذ فيجدها `uploadFormImages` جاهزة أو قيد الرفع.
+ */
+export function adoptPreUploads(form: FormData, fields: UploadField[]): PreUpload[] {
+  const adopted: PreUpload[] = []
+  for (const field of fields) {
+    for (const value of form.getAll(field.name)) {
+      if (!(value instanceof File) || value.size === 0) continue
+      const pre = getPreUpload(field.name, field.folder, value)
+      if (!pre) continue
+      markSubmitted(pre)
+      adopted.push(pre)
+    }
+  }
+  return adopted
+}
