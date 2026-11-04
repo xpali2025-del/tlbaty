@@ -9,7 +9,7 @@ import { saveRequests } from "@/lib/db/store"
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-export type SaveOutcome = { entityId: string; replayed: boolean }
+export type SaveOutcome<T> = { entityId: string; replayed: true } | { entityId: string; replayed: false; value: T }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -21,30 +21,29 @@ export function parseRequestId(raw: string | undefined): string | null {
 }
 
 /**
- * ينفّذ `run` داخل معاملة. مع `requestId`:
- * - معرّف جديد: يُسجَّل ثم يُنفَّذ `run` ويُخزَّن معرّف الكيان المحفوظ، وكلها ذرياً.
+ * ينفّذ `run` داخل معاملة. معرّف الكيان (`entityId`) يُحدَّد قبل التنفيذ (معرّف المنتج الموجود، أو UUID جديد لما سيُنشأ)
+ * فيُسجَّل مع المعرّف بجملة واحدة. مع `requestId`:
+ * - معرّف جديد: يُسجَّل ثم يُنفَّذ `run`، وكلها ذرياً.
  * - معرّف سبق حفظه: لا يُنفَّذ `run` ويعود كيان العملية الأولى مع `replayed: true`.
  * - فشل `run`: تُلغى المعاملة بما فيها تسجيل المعرّف، فتُنفَّذ إعادة المحاولة من جديد.
  * إرسالان متزامنان بالمعرّف نفسه: الثاني ينتظر الأول عند فهرس المفتاح الأساسي ثم يعيد نتيجته.
  */
-export async function withSaveRequest(
+export async function withSaveRequest<T>(
   requestId: string | null,
   screen: string,
-  run: (tx: Tx) => Promise<string>,
-): Promise<SaveOutcome> {
+  entityId: string,
+  run: (tx: Tx) => Promise<T>,
+): Promise<SaveOutcome<T>> {
   return db.transaction(async (tx) => {
     if (requestId) {
-      const claimed = await tx.insert(saveRequests).values({ requestId, screen }).onConflictDoNothing().returning({ id: saveRequests.requestId })
+      const claimed = await tx.insert(saveRequests).values({ requestId, screen, entityId }).onConflictDoNothing().returning({ id: saveRequests.requestId })
       if (claimed.length === 0) {
         const [prior] = await tx.select().from(saveRequests).where(eq(saveRequests.requestId, requestId)).limit(1)
         if (prior && prior.screen !== screen) throw new Error("معرّف عملية الحفظ مستخدم لعملية أخرى")
-        if (prior?.entityId) return { entityId: prior.entityId, replayed: true }
-        // صف بلا كيان: عملية سابقة لم تكتمل ولا يمكن أن تُلتزم هكذا؛ نتعامل معه كجديد.
+        if (prior?.entityId) return { entityId: prior.entityId, replayed: true as const }
       }
     }
-    const entityId = await run(tx)
-    if (requestId) await tx.update(saveRequests).set({ entityId }).where(eq(saveRequests.requestId, requestId))
-    return { entityId, replayed: false }
+    return { entityId, replayed: false as const, value: await run(tx) }
   })
 }
 

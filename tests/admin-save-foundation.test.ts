@@ -248,6 +248,30 @@ describe('saveProduct returns the list-shaped item', () => {
     expect(await getAdminProduct(edited.item._id)).toEqual(edited.item)
   })
 
+  it('the returned item always equals a fresh read, across creates and edits of every kind', async () => {
+    const colors = JSON.stringify([{ name: 'أحمر', hex: '#FF0000' }, { name: 'أزرق', hex: '#0000FF' }])
+    const sameAsFresh = async (r: Awaited<ReturnType<typeof A.saveProduct>>) => {
+      if (r.status !== 'saved') throw new Error('unreachable')
+      const fresh = await getAdminProduct(r.item._id)
+      // variant rows come back in no particular order from the database
+      const norm = (p: typeof r.item | null) => p && { ...p, variants: [...p.variants].sort((a, b) => `${a.color}${a.size}`.localeCompare(`${b.color}${b.size}`)) }
+      expect(norm(r.item)).toEqual(norm(fresh))
+      return r.item
+    }
+    const brandId = (await rows(s.brands))[0].id
+    const created = await sameAsFresh(await A.saveProduct(null, productForm({
+      slug: 'shape-1', colors, sizes: ['S', 'M'], keywords: ['ك'], subcategory: 'gold-accessories', brandId,
+      imageKey: KEY('products', 'sh-main'), newImageKeys: [KEY('products', 'sh-1'), KEY('products', 'sh-2')],
+      trackVariants: 'true', variants: JSON.stringify([{ color: 'أحمر', size: 'S', stock: 2 }, { color: 'أزرق', size: 'M', stock: 3 }]),
+    })))
+    const id = created.version === 1 ? created._id : created._id
+    // edit without touching images/colors/variants, then change each in turn
+    await sameAsFresh(await A.saveProduct(id, productForm({ slug: 'shape-1', colors, sizes: ['S', 'M'], keptImages: [KEY('products', 'sh-1'), KEY('products', 'sh-2')], trackVariants: 'true', variants: JSON.stringify([{ color: 'أحمر', size: 'S', stock: 2, base: 2 }, { color: 'أزرق', size: 'M', stock: 3, base: 3 }]), price: '55', expectedVersion: '1' })))
+    await sameAsFresh(await A.saveProduct(id, productForm({ slug: 'shape-1', colors, sizes: ['S', 'M'], keptImages: [KEY('products', 'sh-2'), KEY('products', 'sh-1')], newImageKeys: [KEY('products', 'sh-3')], trackVariants: 'true', variants: JSON.stringify([{ color: 'أحمر', size: 'S', stock: 9 }]), expectedVersion: '2' })))
+    await sameAsFresh(await A.saveProduct(id, productForm({ slug: 'shape-1', colors: JSON.stringify([{ name: 'أخضر', hex: '#00FF00' }]), sizes: ['L'], expectedVersion: '3', stock: '4' }))) // tracking off, colours changed, no brand/sub
+    await sameAsFresh(await A.saveProduct(id, productForm({ slug: 'shape-1', imageKey: KEY('products', 'sh-new-main'), isBestseller: 'true', badge: 'خصم', expectedVersion: '4' })))
+  })
+
   it('invalidates the storefront cache once per real save', async () => {
     await A.saveProduct(null, productForm({ slug: 'revalidate-once' }))
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/', 'layout')

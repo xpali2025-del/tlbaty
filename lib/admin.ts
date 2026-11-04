@@ -223,6 +223,62 @@ async function productCounts(column: typeof products.categoryId | typeof product
   return new Map(rows.filter((r): r is { id: string; n: number } => Boolean(r.id)).map((r) => [r.id, r.n]))
 }
 
+type ProductRow = typeof products.$inferSelect
+
+/**
+ * صف المنتج + ما يلزم من الجداول المرتبطة ← عنصر قائمة اللوحة. مصدر وحيد للشكل: تقرأ منه القوائم،
+ * ويبني منه الحفظ العنصر المعاد من بياناته في الذاكرة بلا إعادة قراءة (كل قراءة ذهاب وإياب للقاعدة).
+ */
+export function toAdminProduct(
+  p: ProductRow,
+  related: {
+    categoryName: string
+    categorySlug: string
+    subcategorySlug?: string | null
+    brandName?: string | null
+    /** مفاتيح صور المعرض بترتيبها. */
+    images: string[]
+    colors: AdminColor[]
+    variants: { color: string; size: string; stock: number }[]
+  },
+): AdminProduct {
+  return {
+    _id: p.id,
+    productId: p.productNumber,
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    price: p.price,
+    oldPrice: opt(p.oldPrice),
+    categoryId: p.categoryId,
+    categoryName: related.categoryName,
+    categorySlug: related.categorySlug,
+    subcategory: opt(related.subcategorySlug),
+    brandId: opt(p.brandId),
+    brandName: opt(related.brandName),
+    image: resolveOptionalImageUrl(p.mainImageKey),
+    images: related.images.map((ref) => ({ url: resolveOptionalImageUrl(ref) as string, ref })),
+    stock: p.stock,
+    isNew: p.isNew,
+    isBestseller: p.isBestseller,
+    badge: opt(p.badge),
+    sortOrder: p.sortOrder,
+    rating: p.rating,
+    reviewsCount: p.reviewsCount,
+    sku: opt(p.sku),
+    metaTitle: opt(p.metaTitle),
+    metaDescription: opt(p.metaDescription),
+    keywords: p.keywords,
+    colors: related.colors,
+    sizes: p.sizes,
+    variants: related.variants,
+    sizeChartId: opt(p.sizeChartId),
+    customSizeChart: p.customSizeChart ?? undefined,
+    tags: p.tags,
+    version: p.version,
+  }
+}
+
 type ProductReader = Pick<typeof db, "select">
 
 /** صفوف المنتجات بشكل عنصر القائمة: كلها مرتّبة كما في اللوحة، أو منتجات محددة بمعرّفاتها. */
@@ -248,43 +304,17 @@ async function readAdminProducts(reader: ProductReader, ids?: string[]): Promise
     reader.select().from(productColors).where(inArray(productColors.productId, rowIds)).orderBy(asc(productColors.sortOrder)),
     reader.select().from(productVariants).where(inArray(productVariants.productId, rowIds)),
   ])
-  return rows.map(({ p, categorySlug, categoryName, subcategorySlug, brandName }) => ({
-    _id: p.id,
-    productId: p.productNumber,
-    name: p.name,
-    slug: p.slug,
-    description: p.description,
-    price: p.price,
-    oldPrice: opt(p.oldPrice),
-    categoryId: p.categoryId,
-    categoryName,
-    categorySlug,
-    subcategory: opt(subcategorySlug),
-    brandId: opt(p.brandId),
-    brandName: opt(brandName),
-    image: resolveOptionalImageUrl(p.mainImageKey),
-    images: images
-      .filter((i) => i.productId === p.id)
-      .map((i) => ({ url: resolveOptionalImageUrl(i.imageKey) as string, ref: i.imageKey })),
-    stock: p.stock,
-    isNew: p.isNew,
-    isBestseller: p.isBestseller,
-    badge: opt(p.badge),
-    sortOrder: p.sortOrder,
-    rating: p.rating,
-    reviewsCount: p.reviewsCount,
-    sku: opt(p.sku),
-    metaTitle: opt(p.metaTitle),
-    metaDescription: opt(p.metaDescription),
-    keywords: p.keywords,
-    colors: colors.filter((c) => c.productId === p.id).map((c) => ({ name: c.name, hex: c.hex })),
-    sizes: p.sizes,
-    variants: variants.filter((v) => v.productId === p.id).map((v) => ({ color: v.color, size: v.size, stock: v.stock })),
-    sizeChartId: opt(p.sizeChartId),
-    customSizeChart: p.customSizeChart ?? undefined,
-    tags: p.tags,
-    version: p.version,
-  }))
+  return rows.map(({ p, categorySlug, categoryName, subcategorySlug, brandName }) =>
+    toAdminProduct(p, {
+      categorySlug,
+      categoryName,
+      subcategorySlug,
+      brandName,
+      images: images.filter((i) => i.productId === p.id).map((i) => i.imageKey),
+      colors: colors.filter((c) => c.productId === p.id).map((c) => ({ name: c.name, hex: c.hex })),
+      variants: variants.filter((v) => v.productId === p.id).map((v) => ({ color: v.color, size: v.size, stock: v.stock })),
+    }),
+  )
 }
 
 export const getAdminProducts = () => adminFetch<AdminProduct[]>([], () => readAdminProducts(db))
