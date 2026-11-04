@@ -3,7 +3,10 @@
 //   set -a; . /tmp/e2e.env; set +a; node scripts/e2e/admin-save-foundation.e2e.mjs
 // يحتاج DATABASE_URL (لقراءة الحقيقة من القاعدة) وMANAGE_USERNAME/MANAGE_PASSWORD.
 import { execFileSync } from "node:child_process"
-import { chromium } from "playwright"
+import { createRequire } from "node:module"
+
+// Playwright ليس اعتمادية للمشروع (يأتي مع بيئة التشغيل)، وحلّه عبر NODE_PATH لا يعمل مع import.
+const { chromium } = createRequire(import.meta.url)("playwright")
 
 const BASE = process.env.BASE || "http://127.0.0.1:3311"
 const sql = (q) => execFileSync("psql", [process.env.DATABASE_URL, "-tAc", q], { encoding: "utf8" }).trim()

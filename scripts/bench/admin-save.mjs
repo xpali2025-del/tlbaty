@@ -17,7 +17,10 @@
 // الاستخدام: انظر scripts/bench/README.md
 import fs from "node:fs"
 import path from "node:path"
-import { chromium } from "playwright"
+import { createRequire } from "node:module"
+
+// Playwright ليس اعتمادية للمشروع (يأتي مع بيئة التشغيل)، وحلّه عبر NODE_PATH لا يعمل مع import.
+const { chromium } = createRequire(import.meta.url)("playwright")
 
 const BASE = process.env.BASE || "http://127.0.0.1:3311"
 const COUNTER = process.env.COUNTER || "http://127.0.0.1:5434"
