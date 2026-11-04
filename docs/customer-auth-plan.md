@@ -7,6 +7,7 @@
 | Baseline | `main` at `3b55afc` |
 | Evidence tags | **[V]** verified in source (file named). **[A]** assumption or default, needs confirmation. **[S]** external source, listed in §12. |
 | Decisions applied | The defaults in §11 are used throughout. Changing one changes only the sections it names. |
+| Implementation | Split into 8 agent-ready phases with exact tests: `docs/customer-auth-phases/` (start with its `README.md`). |
 
 ---
 
