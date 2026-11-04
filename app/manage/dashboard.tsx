@@ -30,6 +30,8 @@ import type { Screen } from "@/lib/permissions"
 import type { ManageData } from "./page"
 import { AFFECTS, DATA_KEYS, SCREEN_DATA, TAB_PARAM, type DataKey } from "./screen-data"
 import { ManageStoreProvider, type ManageStoreActions } from "./manage-store"
+import { setProductSavedHandler, useSaveQueueLifecycle } from "./save-queue/queue"
+import { SaveStatusBar } from "./save-queue/status-bar"
 import type { AdminProduct } from "@/lib/admin"
 import { Button } from "@/components/ui/button"
 import { logout } from "./auth-actions"
@@ -124,6 +126,11 @@ export function Dashboard({ data: incoming, loaded, afterAction, initialTab, cur
     }),
     [],
   )
+  // طابور الحفظ: ما يُحفظ في الخلفية يُدرَج في القائمة عند وصول رد الخادم، من أي شاشة كان المدير.
+  useEffect(() => {
+    setProductSavedHandler(actions.upsertProduct)
+  }, [actions])
+  useSaveQueueLifecycle()
   const nav: { id: TabId; label: string; icon: typeof Package; count?: number }[] = ([
     { id: "orders", label: "الطلبات", icon: ClipboardList, count: props.orderStats.total },
     { id: "couriers", label: "المناديب والتوزيع", icon: Bike, count: props.couriers.length },
@@ -263,7 +270,8 @@ export function Dashboard({ data: incoming, loaded, afterAction, initialTab, cur
         </aside>
 
         {/* المحتوى */}
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="min-w-0 flex-1 p-4 lg:p-6">
+          <SaveStatusBar onShowProblems={() => openTab("products")} />
           {nav.length === 0 && <p className="text-sm text-muted-foreground">لا توجد شاشات مسموحة لحسابك. تواصل مع مدير النظام.</p>}
           {tab === "orders" && (
             <OrdersManager

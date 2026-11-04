@@ -2,6 +2,9 @@
 // (فيرى المدير "Minified React error #441" بدل السبب). التوثيق الرسمي: الأخطاء المتوقعة تُعاد كقيم.
 // هذا الملف بلا اعتماد على الخادم: يُستعمل في الواجهة لفك النتيجة وإعادة رمي الخطأ برسالته.
 
+/** الرسالة العامة لخطأ تقني في الخادم (قاعدة بيانات، مكتبة): قد يكون مؤقتاً، فتعيد الواجهة المحاولة قبل أن تعرضه. */
+export const GENERIC_ACTION_ERROR = "تعذّر تنفيذ العملية، حاول مجدداً. إن تكرر الخطأ راجع سجل الخادم."
+
 export type ActionFailure = { readonly __actionError: string }
 
 export function isActionFailure(value: unknown): value is ActionFailure {

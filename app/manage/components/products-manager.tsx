@@ -5,7 +5,7 @@ import { validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { VariantStockEditor, variantCombos, variantKey } from "./variant-stock-editor"
 import { useMemo, useRef, useState, useTransition } from "react"
 import Image from "next/image"
-import { Pencil, PackageX, Star, Sparkles } from "lucide-react"
+import { AlertTriangle, Loader2, Pencil, PackageX, RotateCcw, Star, Sparkles, WifiOff, X } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,6 +36,9 @@ import { DeleteButton, ImageField, MultiImageField, SectionHeader, SlugField, Ta
 import { uploadFormImages } from "@/lib/storage/upload-client"
 import { parseProductForm } from "@/lib/validation/product"
 import { problemOf } from "@/lib/validation/form"
+import { getSaveQueue, discardJob, useSaveJobs } from "../save-queue/queue"
+import { buildProductJob, isPendingId, PRODUCT_SCREEN, type ProductJob } from "../save-queue/product-job"
+import { setInstantSave, useInstantSave } from "../save-queue/instant-save"
 
 export function ProductsManager({
   products,
@@ -50,29 +53,69 @@ export function ProductsManager({
 }) {
   const [search, setSearch] = useState("")
   const [editing, setEditing] = useState<AdminProduct | null>(null)
+  // ما يلزم النموذج غير الحقول: نسخة الخادم الأصلية (لأساس المخزون ورقم النسخة)، وعملية فاشلة يستبدلها هذا الحفظ.
+  const [editingBase, setEditingBase] = useState<AdminProduct | null>(null)
+  const [editingJob, setEditingJob] = useState<ProductJob | null>(null)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const { upsertProduct } = useManageStore()
+  const instant = useInstantSave()
+  const jobs = useSaveJobs(PRODUCT_SCREEN) as readonly ProductJob[]
+
+  // القائمة = نسخ الخادم، وفوقها ما يُحفظ الآن: المنتج المعدَّل يظهر بتعديله، والجديد في أول القائمة، وعلى كلٍّ شارة حالته.
+  const rows = useMemo(() => {
+    const latest = new Map<string, ProductJob>()
+    for (const job of jobs) latest.set(job.entityId, job)
+    const known = new Set(products.map((p) => p._id))
+    const fresh = [...latest.values()].filter((j) => !known.has(j.entityId)).reverse().map((job) => ({ product: job.optimistic, job }))
+    return [...fresh, ...products.map((p) => ({ product: latest.get(p._id)?.optimistic ?? p, job: latest.get(p._id) }))]
+  }, [products, jobs])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return products
-    return products.filter(
-      (p) =>
+    if (!q) return rows
+    return rows.filter(
+      ({ product: p }) =>
         p.name.toLowerCase().includes(q) ||
         p.categoryName?.toLowerCase().includes(q) ||
         p.brandName?.toLowerCase().includes(q) ||
         p.productId?.toLowerCase().includes(q),
     )
-  }, [products, search])
+  }, [rows, search])
 
   function openNew() {
     setEditing(null)
+    setEditingBase(null)
+    setEditingJob(null)
     setOpen(true)
   }
 
-  function openEdit(p: AdminProduct) {
-    setEditing(p)
+  function openEdit(row: { product: AdminProduct; job?: ProductJob }) {
+    const failed = row.job && (row.job.state === "failed" || row.job.state === "conflict") ? row.job : null
+    setEditing(row.product)
+    setEditingBase(products.find((p) => p._id === row.product._id) ?? null)
+    setEditingJob(failed)
+    if (failed && row.job!.entries.some(([name, value]) => typeof value !== "string" && (name === "image" || name === "newImages"))) {
+      toast.warning("الصور الجديدة في هذا الحفظ لم تُحفظ بعد؛ اخترها من جديد قبل الحفظ.")
+    }
     setOpen(true)
+  }
+
+  /** نسخة الخادم الحالية بدل تعديلي (بعد تعارض): تُدرَج ويُترك الحفظ. */
+  function takeTheirs(job: ProductJob) {
+    if (job.conflict) upsertProduct(job.conflict as AdminProduct)
+    discardJob(job)
+  }
+
+  /** احتفظ بتعديلي (بعد تعارض): يُعاد إرساله فوق نسخة الخادم الحالية. */
+  function keepMine(job: ProductJob) {
+    const version = (job.conflict as AdminProduct | null | undefined)?.version
+    if (version === undefined) return void discardJob(job) // حُذف المنتج من مكان آخر: لا شيء نعدّله
+    getSaveQueue().patch(job.id, {
+      entries: [...job.entries.filter(([name]) => name !== "expectedVersion"), ["expectedVersion", String(version)]],
+      requestId: crypto.randomUUID(),
+    })
+    getSaveQueue().retry(job.id)
   }
 
   function handleDelete(p: AdminProduct) {
@@ -100,63 +143,83 @@ export function ProductsManager({
 
       <PaletteBackfill />
 
+      <label className="mb-3 flex w-fit items-center gap-2 text-xs text-muted-foreground">
+        <Switch checked={instant} onCheckedChange={setInstantSave} data-testid="instant-save-toggle" />
+        الحفظ الفوري: تُغلق النافذة عند الضغط ويُكمل الحفظ في الخلفية
+      </label>
+
       {filtered.length === 0 ? (
         <EmptyState label="لا توجد منتجات مطابقة." />
       ) : (
         <div className="grid gap-3">
-          {filtered.map((p) => (
-            <Card key={p._id} className="flex items-center gap-4 p-3">
-              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
-                {p.image ? (
-                  <Image src={p.image || "/placeholder.svg"} alt={p.name} fill className="object-cover" unoptimized />
-                ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <PackageX className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-medium">{p.name}</p>
-                  {p.isNew ? (
-                    <Badge variant="secondary" className="gap-1">
-                      <Sparkles className="h-3 w-3" /> جديد
-                    </Badge>
-                  ) : null}
-                  {p.isBestseller ? (
-                    <Badge variant="secondary" className="gap-1">
-                      <Star className="h-3 w-3" /> الأكثر مبيعاً
-                    </Badge>
-                  ) : null}
+          {filtered.map((row) => {
+            const { product: p, job } = row
+            const busy = job && (job.state === "queued" || job.state === "running" || job.state === "retrying")
+            const bad = job && ((job.state === "failed" && !job.offline) || job.state === "conflict")
+            return (
+              <Card
+                key={p._id}
+                data-testid="product-row"
+                data-save-state={job?.state ?? "saved"}
+                className={`flex flex-wrap items-center gap-4 p-3 ${bad ? "border-destructive" : ""} ${busy ? "opacity-80" : ""}`}
+              >
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
+                  {p.image ? (
+                    <Image src={p.image || "/placeholder.svg"} alt={p.name} fill className="object-cover" unoptimized />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <PackageX className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
-                <p className="truncate text-xs text-muted-foreground">
-                  {p.categoryName ?? "بدون قسم"}
-                  {p.brandName ? ` • ${p.brandName}` : ""}
-                  {p.productId ? ` • ${p.productId}` : ""}
-                </p>
-              </div>
-              <div className="hidden text-left sm:block">
-                <p className="font-semibold">{p.price?.toLocaleString("ar-EG")} ج.م</p>
-                <p className="text-xs text-muted-foreground">المخزون: {p.stock ?? 0}</p>
-              </div>
-              <div className="flex shrink-0 items-center">
-                <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                  <Pencil className="h-4 w-4" />
-                  <span className="sr-only">تعديل</span>
-                </Button>
-                <DeleteButton onConfirm={() => handleDelete(p)} itemLabel={p.name} disabled={isPending} />
-              </div>
-            </Card>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate font-medium">{p.name}</p>
+                    {p.isNew ? (
+                      <Badge variant="secondary" className="gap-1">
+                        <Sparkles className="h-3 w-3" /> جديد
+                      </Badge>
+                    ) : null}
+                    {p.isBestseller ? (
+                      <Badge variant="secondary" className="gap-1">
+                        <Star className="h-3 w-3" /> الأكثر مبيعاً
+                      </Badge>
+                    ) : null}
+                    {job ? <SaveBadge job={job} /> : null}
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {p.categoryName ?? "بدون قسم"}
+                    {p.brandName ? ` • ${p.brandName}` : ""}
+                    {p.productId ? ` • ${p.productId}` : ""}
+                  </p>
+                </div>
+                <div className="hidden text-left sm:block">
+                  <p className="font-semibold">{p.price?.toLocaleString("ar-EG")} ج.م</p>
+                  <p className="text-xs text-muted-foreground">المخزون: {p.stock ?? 0}</p>
+                </div>
+                <div className="flex shrink-0 items-center">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(row)} disabled={Boolean(busy && isPendingId(p._id))}>
+                    <Pencil className="h-4 w-4" />
+                    <span className="sr-only">تعديل</span>
+                  </Button>
+                  <DeleteButton onConfirm={() => handleDelete(p)} itemLabel={p.name} disabled={isPending || Boolean(job)} />
+                </div>
+                {job ? <SaveProblem job={job} onKeepMine={() => keepMine(job)} onTakeTheirs={() => takeTheirs(job)} /> : null}
+              </Card>
+            )
+          })}
         </div>
       )}
 
       <ProductDialog
         // الإصدار في المفتاح: فتح منتج بعد حفظه يبدأ نموذجاً جديداً بنسخته الحالية لا بحالة قديمة
-        key={`${editing?._id ?? "new"}:${editing?.version ?? 0}`}
+        key={`${editing?._id ?? "new"}:${editing?.version ?? 0}:${editingJob?.id ?? ""}`}
         open={open}
         onOpenChange={setOpen}
         product={editing}
+        base={editingBase}
+        replaceJob={editingJob}
+        instant={instant}
         categories={categories}
         brands={brands}
         sizeCharts={sizeCharts}
@@ -178,6 +241,9 @@ function ProductDialog({
   open,
   onOpenChange,
   product,
+  base,
+  replaceJob,
+  instant,
   categories,
   brands,
   sizeCharts,
@@ -185,6 +251,12 @@ function ProductDialog({
   open: boolean
   onOpenChange: (v: boolean) => void
   product: AdminProduct | null
+  /** نسخة الخادم الأصلية للمنتج (ليست المتفائلة): أساس المخزون ورقم النسخة. null للمنتج الجديد. */
+  base: AdminProduct | null
+  /** عملية حفظ فاشلة أو متعارضة يستبدلها هذا الحفظ. */
+  replaceJob: ProductJob | null
+  /** الحفظ الفوري: يُضاف الحفظ للطابور وتُغلق النافذة فوراً. */
+  instant: boolean
   categories: AdminCategory[]
   brands: AdminBrand[]
   sizeCharts: AdminSizeChart[]
@@ -207,7 +279,7 @@ function ProductDialog({
     Object.fromEntries((product?.variants ?? []).map((v) => [variantKey(v.color, v.size), String(v.stock)])),
   )
   // ما رآه المدير عند فتح النموذج، لتطبيق التغيير كفرق (لا يمسح خصم طلبات جرت أثناء التعديل).
-  const savedVariantStock = new Map((product?.variants ?? []).map((v) => [variantKey(v.color, v.size), v.stock]))
+  const savedVariantStock = new Map((base?.variants ?? []).map((v) => [variantKey(v.color, v.size), v.stock]))
   const [isPending, startTransition] = useTransition()
   const { upsertProduct } = useManageStore()
   // معرّف عملية الحفظ: يبقى نفسه إن أُعيد إرسال المحتوى نفسه (انقطع الرد بعد أن وصل الحفظ)، فلا يتكرر المنتج.
@@ -260,6 +332,15 @@ function ProductDialog({
     const problem = problemOf(() => parseProductForm(form))
     if (problem) return void toast.error(problem)
 
+    if (instant) {
+      // الحفظ الفوري: العملية تدخل الطابور (تُحفظ في المتصفح قبل الإرسال) وتُغلق النافذة فوراً؛ يتابع الطابور الرفع والحفظ.
+      const jobInput = buildProductJob(form, base, { categories, brands }, replaceJob && isPendingId(replaceJob.entityId) ? { entityId: replaceJob.entityId } : undefined)
+      if (replaceJob) discardJob(replaceJob)
+      getSaveQueue().enqueue(jobInput)
+      onOpenChange(false)
+      return
+    }
+
     // بصمة المحتوى قبل رفع الصور (ملفاتها ثابتة، ومفاتيحها تتغيّر مع كل رفع): محتوى جديد = معرّف عملية جديد.
     // الملف بالاسم والحجم فقط: المتصفح يضع لحقل الملف الفارغ وقت تعديل جديداً عند كل إرسال، فلا يصلح في البصمة.
     const fingerprint = JSON.stringify([...form.entries()].map(([k, v]) => [k, v instanceof File ? `${v.name}:${v.size}` : v]))
@@ -274,7 +355,7 @@ function ProductDialog({
           { name: "image", folder: "products", keyName: "imageKey" },
           { name: "newImages", folder: "products", keyName: "newImageKeys", multiple: true },
         ])
-        const result = await saveProduct(product?._id ?? null, form)
+        const result = await saveProduct(product && !isPendingId(product._id) ? product._id : null, form)
         if (result.status === "conflict") {
           if (result.current) upsertProduct(result.current)
           throw new Error("عدّل شخص آخر هذا المنتج بعد فتحك للنموذج، وحُدّثت القائمة بآخر نسخة. أغلق النافذة وافتح المنتج من جديد ثم كرّر تعديلك.")
@@ -316,7 +397,7 @@ function ProductDialog({
             <Field label="المخزون">
               <Input name="stock" type="number" min={0} defaultValue={product?.stock ?? 0} disabled={trackVariants} />
               {trackVariants ? <p className="text-xs text-muted-foreground">يُحسب من مخزون الألوان والمقاسات أدناه.</p> : null}
-            {product ? <input type="hidden" name="stockBase" value={product.stock ?? 0} /> : null}
+            {base ? <input type="hidden" name="stockBase" value={base.stock ?? 0} /> : null}
             </Field>
           </div>
 
@@ -647,4 +728,61 @@ function PaletteBackfill() {
       </Button>
     </div>
   )
+}
+
+/** شارة حالة الحفظ على عنصر القائمة. */
+function SaveBadge({ job }: { job: ProductJob }) {
+  const base = { "data-testid": "save-badge", "data-state": job.state } as const
+  if (job.state === "queued" || job.state === "running") {
+    return (
+      <Badge variant="outline" className="gap-1" {...base}>
+        <Loader2 className="h-3 w-3 animate-spin" /> جارٍ الحفظ…
+      </Badge>
+    )
+  }
+  if (job.state === "retrying" || (job.state === "failed" && job.offline)) {
+    return (
+      <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700 dark:text-amber-400" {...base}>
+        <WifiOff className="h-3 w-3" /> بانتظار الاتصال
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="destructive" className="gap-1" {...base}>
+      <AlertTriangle className="h-3 w-3" /> {job.state === "conflict" ? "تعارض" : "فشل الحفظ"}
+    </Badge>
+  )
+}
+
+/** تفاصيل ما يحتاج المدير: سبب الفشل مع «أعد المحاولة» و«تجاهل»، أو خيارا التعارض. التعديل من زر القلم. */
+function SaveProblem({ job, onKeepMine, onTakeTheirs }: { job: ProductJob; onKeepMine: () => void; onTakeTheirs: () => void }) {
+  if (job.state === "conflict") {
+    return (
+      <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 text-sm" data-testid="save-problem">
+        <p className="flex-1 text-destructive">عدّل شخص آخر هذا المنتج بعد فتحك للنموذج. اختر ما تريد:</p>
+        {(job.conflict as AdminProduct | null | undefined) ? (
+          <Button type="button" size="sm" variant="outline" onClick={onKeepMine}>
+            احتفظ بتعديلي
+          </Button>
+        ) : null}
+        <Button type="button" size="sm" variant="outline" onClick={onTakeTheirs}>
+          {job.conflict ? "خذ النسخة الجديدة" : "تجاهل تعديلي"}
+        </Button>
+      </div>
+    )
+  }
+  if (job.state === "failed") {
+    return (
+      <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 text-sm" data-testid="save-problem">
+        <p className="flex-1 text-destructive">{job.offline ? "تعذّر الاتصال بالخادم، وحفظك محفوظ في هذا المتصفح." : job.error}</p>
+        <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => getSaveQueue().retry(job.id)}>
+          <RotateCcw className="h-3.5 w-3.5" /> أعد المحاولة
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={() => discardJob(job)}>
+          <X className="h-3.5 w-3.5" /> تجاهل
+        </Button>
+      </div>
+    )
+  }
+  return null
 }
