@@ -6,17 +6,20 @@ import type { Category } from "@/lib/types"
 export function CategoryList({ categories }: { categories: Category[] }) {
   if (categories.length === 0) return null
   return (
-    <section id="categories" className="py-8" aria-label="الأقسام">
+    <section id="categories" className="bg-secondary/35 py-10 md:py-14" aria-label="الأقسام">
       <div className="mx-auto max-w-7xl px-4">
-        <h2 className="text-xl md:text-2xl font-bold text-foreground mb-5 text-center">الأقسام</h2>
-        <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="mb-6 text-center">
+          <span className="text-xs font-bold tracking-wide text-primary">تصفّحي بسهولة</span>
+          <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground md:text-3xl">الأقسام</h2>
+        </div>
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
           {categories.map((cat) => (
             <li key={cat.id}>
               <Link prefetch={false}
                 href={`/category/${cat.slug}`}
-                className="flex items-center gap-4 bg-card border border-border rounded-2xl p-3 hover:border-primary/40 hover:shadow-sm transition-all"
+                className="group flex items-center gap-4 rounded-2xl border border-border/70 bg-card p-3 shadow-[0_12px_35px_-30px_rgba(57,24,33,0.55)] transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_18px_40px_-26px_rgba(57,24,33,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-secondary shrink-0">
+                <div className="relative size-20 shrink-0 overflow-hidden rounded-2xl bg-secondary">
                   <SafeImage src={cat.image} alt={cat.name} fill sizes="64px" className="object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
