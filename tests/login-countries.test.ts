@@ -1,7 +1,5 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 
@@ -9,7 +7,8 @@ process.env.SESSION_SECRET = 'test-secret-with-more-than-16-chars'
 delete process.env.WHATSAPP_WORKER_URL
 delete process.env.WHATSAPP_WORKER_TOKEN
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const dbMock = vi.hoisted(() => ({ broken: false }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/db/client', () => ({
@@ -28,7 +27,7 @@ const post = (body: unknown) => new Request('http://x', { method: 'POST', header
 const setCountries = (codes: string[]) =>
   db.insert(s.siteSettings).values({ id: 1, loginCountries: codes }).onConflictDoUpdate({ target: s.siteSettings.id, set: { loginCountries: codes } })
 
-beforeAll(async () => { await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') }) })
+beforeAll(async () => { await testDb.migrate() })
 afterEach(async () => { dbMock.broken = false; await db.delete(s.siteSettings) })
 
 describe('which countries may log in', () => {

@@ -1,8 +1,6 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { maskPhone } from '@/lib/phone'
@@ -11,7 +9,8 @@ process.env.SESSION_SECRET = 'test-secret-with-more-than-16-chars'
 process.env.WHATSAPP_WORKER_TOKEN = 'w'.repeat(32)
 process.env.WHATSAPP_BOT_NUMBER = '+967 700 000 000'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const jar = vi.hoisted(() => new Map<string, string>())
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/headers', () => ({
@@ -43,7 +42,7 @@ const codeFrom = (text: string) => /\b(\d{6})\b/.exec(text.replace(/\d{2}:\d{2}:
 const wrongCode = (code: string) => (code === '000000' ? '111111' : '000000')
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
 })
 beforeEach(() => jar.clear())
 

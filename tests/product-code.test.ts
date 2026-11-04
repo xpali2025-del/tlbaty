@@ -1,19 +1,18 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { buildProductNumber } from '@/lib/product-number'
 import { canonicalCodeQuery, formatProductCode, isCategoryCode, isProductCode, suggestCategoryCode, toLatinDigits } from '@/lib/product-code'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 const { allocateProductCode, ensureCategoryCode } = await import('@/lib/product-code-db')
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
 })
 
 describe('code format', () => {

@@ -1,8 +1,6 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq, sql } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb, rowsOf } from './helpers/test-db'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 
@@ -10,7 +8,8 @@ process.env.SESSION_SECRET = 'test-secret-with-more-than-16-chars'
 delete process.env.WHATSAPP_WORKER_URL
 delete process.env.WHATSAPP_WORKER_TOKEN
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const jar = vi.hoisted(() => new Map<string, string>())
 
 vi.mock('@/lib/db/client', () => ({ db }))
@@ -52,7 +51,7 @@ const json = (body: unknown) =>
   new Request('http://localhost/api', { method: 'POST', headers: { 'x-forwarded-for': '9.9.9.9' }, body: JSON.stringify(body) })
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
 })
 beforeEach(() => jar.clear())
 afterEach(() => vi.unstubAllGlobals())
@@ -420,6 +419,6 @@ describe('auth API routes', () => {
 
   it('keeps the audit table queryable by ip index', async () => {
     const r = await db.execute(sql`select indexname from pg_indexes where schemaname = 'store' and indexname = 'auth_events_ip_idx'`)
-    expect(r.rows).toHaveLength(1)
+    expect(rowsOf(r)).toHaveLength(1)
   })
 })

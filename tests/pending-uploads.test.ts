@@ -1,9 +1,7 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { unwrapAll } from '@/lib/action-result'
@@ -12,7 +10,8 @@ import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog
 // رفع الصور عند الاختيار (المرحلة 2 من docs/admin-instant-save-plan.md): تتبّع ما رُفع ولم يُحفظ بعد،
 // ومطالبة الحفظ الناجح بمفاتيحه، وإلغاء النموذج، والتنظيف اليومي.
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const mocks = vi.hoisted(() => ({
   user: 'admin-a',
   seq: 0,
@@ -62,7 +61,7 @@ beforeAll(async () => {
   process.env.R2_SECRET_ACCESS_KEY = 'c'
   process.env.R2_BUCKET = 'd'
   process.env.R2_PUBLIC_URL = 'https://cdn.example.com'
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   await importCatalog(db, loadSeedData(path.resolve(__dirname, '../scripts/migration/data')), { resolveImage: async (p) => p })
 })
 beforeEach(async () => {

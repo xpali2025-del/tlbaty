@@ -1,8 +1,6 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { inArray } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
@@ -10,7 +8,8 @@ import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 process.env.R2_PUBLIC_URL = 'https://cdn.example.com/'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 // Next's cache primitives are passthroughs here: the tests exercise the queries, not Next's cache.
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
@@ -23,7 +22,7 @@ const seed = loadSeedData(path.resolve(__dirname, '../scripts/migration/data'))
 const bySlug = new Map(seed.products.map((p) => [p.slug, p]))
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   await importCatalog(db, seed, { resolveImage: async (p) => p })
 })
 

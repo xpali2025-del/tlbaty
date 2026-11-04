@@ -1,15 +1,14 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { normalizePermissions, ROLE_PRESETS, SCREENS } from '@/lib/permissions'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 type Actor = { username: string; isOwner: boolean; permissions: string[]; role: string }
 const state = vi.hoisted(() => ({ actor: null as null | Actor }))
 vi.mock('@/lib/db/client', () => ({ db }))
@@ -40,7 +39,7 @@ const owner = (): Actor => ({ username: 'odoo', isOwner: true, permissions: [...
 const manager = (): Actor => ({ username: 'mona', isOwner: false, permissions: [...ROLE_PRESETS.manager, 'users'], role: 'manager' })
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
 })
 beforeEach(async () => {
   state.actor = owner()

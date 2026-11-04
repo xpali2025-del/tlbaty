@@ -1,8 +1,6 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { dataHash, EMPTY_CUSTOMER_DATA, isEmptyData, mergeCustomerData, planSync, type CustomerData } from '@/lib/customer-data'
@@ -67,7 +65,8 @@ describe('planSync', () => {
 })
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const state = vi.hoisted(() => ({ session: null as null | { customer: { id: string; publicId: string }; sessionId: string } }))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined, set: () => {}, delete: () => {} }) }))
@@ -78,7 +77,7 @@ const { revokeOtherSessions } = await import('@/lib/otp/session')
 
 let customerId: string
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   const [c] = await db.insert(s.customers).values({ publicId: 'CUS_SYNC', phone: '967770000001' }).returning()
   customerId = c.id
 })

@@ -1,8 +1,6 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { planDistribution } from '@/lib/distribution'
@@ -45,7 +43,8 @@ describe('planDistribution', () => {
   })
 })
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const auth = vi.hoisted(() => vi.fn(async () => ({ username: 'm' })))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
@@ -57,7 +56,7 @@ let seq = 0
 const mk = (over: Partial<typeof s.orders.$inferInsert> = {}) =>
   db.insert(s.orders).values({ orderNumber: `ORD-D-${++seq}`, customerName: 'ع', phone: '7', subtotal: 1, total: 1, city: 'صنعاء', ...over }).returning().then((r) => r[0])
 
-beforeAll(async () => { await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') }) })
+beforeAll(async () => { await testDb.migrate() })
 beforeEach(async () => {
   vi.clearAllMocks()
   await db.delete(s.orders)

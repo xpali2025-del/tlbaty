@@ -1,13 +1,12 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { count, eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const proofs = vi.hoisted(() => ({
   put: vi.fn(async (_key: string, _body: Buffer) => {}),
   del: vi.fn(async (_key: string | null | undefined) => {}),
@@ -40,7 +39,7 @@ const cod = { method: 'cash_on_delivery' as const, account: null, senderName: ''
 const proof = { ciphertext: Buffer.from('cipher'), iv: 'aXY=', authTag: 'dGFn', keyVersion: '1', originalMimeType: 'image/png' as const, processedMimeType: 'image/webp', byteSize: 6 }
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   await importCatalog(db, seed, { resolveImage: async (p) => p })
   customerId = (await db.insert(s.customers).values({ publicId: 'CUS_ORD', phone: '967781234567' }).returning())[0].id
 })

@@ -1,12 +1,11 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq, sql } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb, rowsOf } from './helpers/test-db'
 import { beforeAll, describe, expect, it } from 'vitest'
 import * as s from '@/lib/db/store'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 
 // Postgres wraps driver errors; the constraint text is on the error or its cause.
 async function rejects(p: Promise<unknown>, pattern: RegExp) {
@@ -25,7 +24,7 @@ const baseOrder = (n: string) => ({
 })
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   categoryId = (await db.insert(s.categories).values({ name: 'ملابس', slug: 'clothes' }).returning())[0].id
   customerId = (await db.insert(s.customers).values({ publicId: 'C1', phone: '967771' }).returning())[0].id
 })
@@ -183,7 +182,7 @@ describe('notifications', () => {
 describe('migration', () => {
   it('creates every table in the store schema and nothing in public', async () => {
     const r = await db.execute(sql`select table_schema, count(*)::int as n from information_schema.tables where table_schema in ('public','store') group by 1 order by 1`)
-    const counts = Object.fromEntries((r.rows as { table_schema: string; n: number }[]).map((x) => [x.table_schema, x.n]))
+    const counts = Object.fromEntries(rowsOf<{ table_schema: string; n: number }>(r).map((x) => [x.table_schema, x.n]))
     expect(counts.public ?? 0).toBe(0)
     expect(counts.store).toBe(43)
   })

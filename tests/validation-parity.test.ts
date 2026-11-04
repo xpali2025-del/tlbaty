@@ -1,8 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { unwrapAll } from '@/lib/action-result'
@@ -17,7 +15,8 @@ import { parseUserForm } from '@/lib/validation/user'
 // المرحلة 3: قاعدة التحقق واحدة في المتصفح والخادم. لكل شاشة جدول مدخلات: المحلّل نفسه الذي يستدعيه النموذج
 // قبل رفع الصور، والإجراء الحقيقي في الخادم، يجب أن يتفقا في القبول والرفض وفي نص الرسالة حرفياً.
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
 vi.mock('@/lib/manage-auth', () => ({
@@ -33,7 +32,7 @@ const seed = loadSeedData(path.resolve(__dirname, '../scripts/migration/data'))
 
 let categoryId = ''
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   await importCatalog(db, seed, { resolveImage: async (p) => p })
   categoryId = (await db.select().from(s.categories))[0].id
 })
