@@ -18,6 +18,11 @@ import { uploadFormImages } from "@/lib/storage/upload-client"
 import { parseSettingsForm } from "@/lib/validation/settings"
 import { problemOf } from "@/lib/validation/form"
 import { OTP_CHANNELS } from "@/lib/otp/channel"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useSaveJobs } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 
 // صفحة إعدادات (Pattern 5): نموذج واحد وحفظ واحد، وأقسام مرتبة بحسب مهمة المدير،
 // مع قائمة أقسام لاصقة على الشاشات العريضة وقائمة منسدلة على الجوال. كل الأقسام تبقى في الصفحة
@@ -37,6 +42,8 @@ const anchor = (id: SectionId) => `settings-${id}`
 
 export function SettingsManager({ settings }: { settings: AdminSettings }) {
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  const saveJobs = useSaveJobs("settings") as readonly SaveJob<{ _id: string }>[]
   const [dirty, setDirty] = useState(false)
   const [active, setActive] = useState<SectionId>("identity")
   // نتجاهل رصد التمرير لحظة القفز اليدوي كي لا يومض التحديد بين الأقسام.
@@ -73,6 +80,13 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
     const form = new FormData(e.currentTarget)
     const problem = problemOf(() => parseSettingsForm(form))
     if (problem) return void toast.error(problem)
+    if (instant) {
+      // الحفظ الفوري: يعود الزر فوراً ويتابع الطابور الرفع والحفظ. حفظ سابق فاشل يستبدله هذا (النموذج يحمل آخر ما كتبه المدير).
+      const failed = saveJobs.find((j) => j.state === "failed" || j.state === "conflict") ?? null
+      enqueueScreenSave(SCREEN_SPECS.settings, form, { _id: settings?._id ?? "settings" }, failed)
+      setDirty(false)
+      return
+    }
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
@@ -93,6 +107,17 @@ export function SettingsManager({ settings }: { settings: AdminSettings }) {
         title="إعدادات الموقع"
         description="هوية المتجر وطرق التواصل والدفع وتسجيل الدخول — احفظ مرة واحدة لتطبيق كل التغييرات."
       />
+
+      <InstantSaveToggle />
+      {saveJobs.map((job) => (
+        <div key={job.id} data-testid="settings-save" data-save-state={job.state} className="mb-3 flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm">
+          <span>حفظ الإعدادات:</span>
+          <SaveBadge job={job} />
+          <div className="w-full empty:hidden">
+            <SaveProblem job={job} onTakeTheirs={() => discardJob(job)} />
+          </div>
+        </div>
+      ))}
 
       {/* جوال: قائمة منسدلة لاصقة بدل شريط جانبي */}
       <div className="sticky top-0 z-20 -mx-1 mb-4 bg-background/95 px-1 py-2 backdrop-blur lg:hidden">

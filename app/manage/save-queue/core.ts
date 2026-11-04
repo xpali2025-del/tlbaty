@@ -7,7 +7,8 @@
 // - الرفض (تحقق، صلاحية) والتعارض لا يُعادان تلقائياً: يُعرضان على المدير والعملية محفوظة كاملة.
 // - كل تغيّر في الحالة يُكتب في التخزين الدائم (IndexedDB) فتستمر العمليات بعد تحديث الصفحة أو انقطاع الإنترنت.
 
-export type JobState = "queued" | "running" | "retrying" | "failed" | "conflict"
+/** saved: نجح الحفظ ولا نسخة معادة من الخادم (شاشات تتحدّث قائمتها من إعادة رسم الصفحة)؛ تبقى العملية معروضة حتى تصل البيانات الجديدة. */
+export type JobState = "queued" | "running" | "retrying" | "failed" | "conflict" | "saved"
 
 export type JobEntry = [name: string, value: string | File]
 
@@ -36,14 +37,15 @@ export type SaveJob<T = unknown> = {
   createdAt: number
 }
 
-export type ExecResult<T> = { status: "saved"; item: T } | { status: "conflict"; current: T | null }
+/** `item` غائب = الحفظ نجح والقائمة تتحدّث من البيانات المعاد تحميلها (انظر notifyData). */
+export type ExecResult<T> = { status: "saved"; item?: T } | { status: "conflict"; current: T | null }
 
 export type ScreenExecutor<T = unknown> = {
   execute: (job: SaveJob<T>) => Promise<ExecResult<T>>
   /** بعد نجاح الحفظ: ينقل العمليات اللاحقة لنفس العنصر إلى نسخته الجديدة (وإلا ظهر تعارض كاذب). */
   rebase?: (job: SaveJob<T>, saved: T) => SaveJob<T>
-  /** نجح الحفظ: تُدرَج نسخة الخادم في القائمة. */
-  onSaved: (job: SaveJob<T>, saved: T) => void
+  /** نجح الحفظ: تُدرَج نسخة الخادم في القائمة (إن أعادها الخادم). */
+  onSaved: (job: SaveJob<T>, saved: T | undefined) => void
 }
 
 export interface JobStore {
@@ -78,6 +80,9 @@ const realTimers: Timers = {
 }
 
 export const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000]
+/** بعد وصول البيانات الجديدة تبقى العملية المحفوظة لحظة قصيرة ثم تزول، وإن لم تصل بيانات تزول بعد هذه المهلة. */
+export const SETTLE_AFTER_DATA_MS = 150
+export const SETTLE_TIMEOUT_MS = 4000
 export const MAX_PARALLEL = 3
 
 export type QueueOptions = {
@@ -102,6 +107,9 @@ export class SaveQueue {
   private backoff: number[]
   private maxParallel: number
   private loaded: Promise<void> | null = null
+  // عدّاد وصول بيانات جديدة لكل شاشة (تزيده اللوحة عند إعادة تحميل بيانات الشاشة)، وعدّاده حين بدأت كل عملية.
+  private dataTick: Record<string, number> = {}
+  private startTick = new Map<string, number>()
 
   constructor(private options: QueueOptions) {
     this.timers = options.timers ?? realTimers
@@ -161,7 +169,7 @@ export class SaveQueue {
   /** أعد المحاولة الآن (العملية الفاشلة أو المنتظرة). */
   retry(id: string) {
     const job = this.find(id)
-    if (!job || job.state === "running" || job.state === "queued") return
+    if (!job || job.state === "running" || job.state === "queued" || job.state === "saved") return
     this.clearRetryTimer(id)
     this.update(id, { state: "queued", attempts: 0, error: undefined, offline: undefined, nextRetryAt: undefined, conflict: undefined })
     this.pump()
@@ -196,6 +204,27 @@ export class SaveQueue {
     this.pump()
   }
 
+  /** وصلت بيانات جديدة لهذه الشاشة من الخادم: العمليات المحفوظة فيها (بلا نسخة معادة) تزول بعد لحظة. */
+  notifyData(screen: string) {
+    this.dataTick[screen] = (this.dataTick[screen] ?? 0) + 1
+    for (const job of this.jobs) {
+      if (job.screen === screen && job.state === "saved") this.scheduleSettle(job.id, SETTLE_AFTER_DATA_MS)
+    }
+  }
+
+  private scheduleSettle(id: string, ms: number) {
+    this.clearRetryTimer(id)
+    this.timersById.set(
+      id,
+      this.timers.setTimeout(() => {
+        this.timersById.delete(id)
+        this.jobs = this.jobs.filter((j) => j.id !== id)
+        this.startTick.delete(id)
+        this.emit()
+      }, ms),
+    )
+  }
+
   // ---------- التنفيذ ----------
 
   private find(id: string) {
@@ -221,7 +250,7 @@ export class SaveQueue {
     for (const job of this.jobs) {
       if (this.running.size >= this.maxParallel) return
       if (job.state !== "queued" || this.running.has(job.id)) continue
-      const blocked = this.jobs.some((other) => other !== job && other.entityId === job.entityId && other.screen === job.screen && this.jobs.indexOf(other) < this.jobs.indexOf(job))
+      const blocked = this.jobs.some((other) => other !== job && other.state !== "saved" && other.entityId === job.entityId && other.screen === job.screen && this.jobs.indexOf(other) < this.jobs.indexOf(job))
       if (blocked) continue
       void this.run(job.id)
     }
@@ -232,6 +261,7 @@ export class SaveQueue {
     if (!job) return
     const executor = this.options.executors[job.screen]
     this.running.add(id)
+    this.startTick.set(id, this.dataTick[job.screen] ?? 0)
     this.update(id, { state: "running", error: undefined })
     try {
       if (!executor) throw new Error(`لا منفّذ لشاشة ${job.screen}`)
@@ -253,7 +283,7 @@ export class SaveQueue {
     const job = this.find(id)
     if (!job) return
     // العمليات اللاحقة لنفس العنصر بُنيت فوق النسخة المتفائلة، فتنتقل إلى نسخة الخادم المحفوظة.
-    if (executor.rebase) {
+    if (executor.rebase && saved !== undefined) {
       this.jobs = this.jobs.map((other) => {
         if (other.id === id || other.screen !== job.screen || other.entityId !== job.entityId) return other
         const rebased = executor.rebase!(other, saved)
@@ -261,8 +291,16 @@ export class SaveQueue {
         return rebased
       })
     }
-    this.jobs = this.jobs.filter((j) => j.id !== id)
     void this.options.store.remove(id)
+    if (saved === undefined) {
+      // لا نسخة معادة: يبقى العنصر المتفائل معروضاً («تم الحفظ») إلى أن تصل بيانات الشاشة الجديدة.
+      this.jobs = this.jobs.map((j) => (j.id === id ? { ...j, state: "saved" as const, error: undefined, nextRetryAt: undefined } : j))
+      const arrived = (this.dataTick[job.screen] ?? 0) > (this.startTick.get(id) ?? 0)
+      this.scheduleSettle(id, arrived ? SETTLE_AFTER_DATA_MS : SETTLE_TIMEOUT_MS)
+    } else {
+      this.jobs = this.jobs.filter((j) => j.id !== id)
+      this.startTick.delete(id)
+    }
     executor.onSaved(job, saved)
     this.emit()
   }

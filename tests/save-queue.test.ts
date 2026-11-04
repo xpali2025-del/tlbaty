@@ -25,7 +25,7 @@ function setup(execute: (job: SaveJob<Item>) => Promise<ExecResult<Item>>, store
   const saved: Item[] = []
   const executor: ScreenExecutor<Item> = {
     execute,
-    onSaved: (_job, item) => void saved.push(item),
+    onSaved: (_job, item) => void (item && saved.push(item)),
     rebase: (job, item) => ({ ...job, entries: job.entries.map(([k, v]) => (k === 'expectedVersion' ? [k, String(item.version)] : [k, v])) as SaveJob['entries'] }),
   }
   const isTransient = (e: unknown) => e instanceof TypeError || (e instanceof Error && e.message === 'transient')
@@ -179,6 +179,62 @@ describe('save queue: failures', () => {
     await flush()
     second.queue.remove(other.id)
     expect(second.queue.getSnapshot()).toHaveLength(0)
+  })
+})
+
+describe('save queue: screens that refresh their list from reloaded data', () => {
+  const noItem = async (): Promise<ExecResult<Item>> => ({ status: 'saved' })
+
+  it('keeps the saved job shown until the new data arrives, then drops it a moment later', async () => {
+    const { queue, store } = setup(noItem)
+    const job = queue.enqueue(input())
+    await flush()
+    expect(state(queue, job.id)).toBe('saved')
+    expect(store.jobs.size).toBe(0) // nothing to resume after a reload: it is saved
+    queue.notifyData('products')
+    expect(state(queue, job.id)).toBe('saved')
+    await vi.advanceTimersByTimeAsync(200)
+    expect(queue.getSnapshot()).toHaveLength(0)
+  })
+
+  it('drops it right after saving when the data already arrived during the save', async () => {
+    let release: () => void = () => {}
+    const { queue } = setup(() => new Promise((resolve) => (release = () => resolve({ status: 'saved' }))))
+    const job = queue.enqueue(input())
+    await flush()
+    queue.notifyData('products') // the reloaded page came back before the action reply
+    release()
+    await flush()
+    expect(state(queue, job.id)).toBe('saved')
+    await vi.advanceTimersByTimeAsync(200)
+    expect(queue.getSnapshot()).toHaveLength(0)
+  })
+
+  it('does not wait forever if no data ever arrives', async () => {
+    const { queue } = setup(noItem)
+    queue.enqueue(input())
+    await flush()
+    await vi.advanceTimersByTimeAsync(4100)
+    expect(queue.getSnapshot()).toHaveLength(0)
+  })
+
+  it('a saved job does not hold back the next save of the same item', async () => {
+    const seen: string[] = []
+    const { queue } = setup(async (j) => (seen.push(j.id), { status: 'saved' as const }))
+    const a = queue.enqueue(input({ entityId: 'A' }))
+    const b = queue.enqueue(input({ entityId: 'A' }))
+    await flush()
+    await flush()
+    expect(seen).toEqual([a.id, b.id])
+  })
+
+  it('a screen without data of its own for another screen does not settle it', async () => {
+    const { queue } = setup(noItem)
+    const job = queue.enqueue(input())
+    await flush()
+    queue.notifyData('categories')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(state(queue, job.id)).toBe('saved')
   })
 })
 

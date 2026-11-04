@@ -22,11 +22,19 @@ import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 import { parseSlideForm } from "@/lib/validation/catalog"
 import { problemOf } from "@/lib/validation/form"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useInstantRows } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 
 export function SlidesManager({ slides }: { slides: AdminSlide[] }) {
   const [editing, setEditing] = useState<AdminSlide | null>(null)
+  const [editingJob, setEditingJob] = useState<SaveJob<AdminSlide> | null>(null)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  const rows = useInstantRows("slides", slides)
 
   function handleDelete(s: AdminSlide) {
     startTransition(async () => {
@@ -44,12 +52,13 @@ export function SlidesManager({ slides }: { slides: AdminSlide[] }) {
       <SectionHeader
         title="السلايدر الرئيسي"
         description="شرائح الواجهة الرئيسية للمتجر."
-        onAdd={() => { setEditing(null); setOpen(true) }}
+        onAdd={() => { setEditing(null); setEditingJob(null); setOpen(true) }}
         addLabel="سلايد جديد"
       />
+      <InstantSaveToggle />
       <div className="grid gap-3">
-        {slides.map((s) => (
-          <Card key={s._id} className="flex items-center gap-4 p-3">
+        {rows.map(({ item: s, job }) => (
+          <Card key={s._id} data-testid="item-row" data-save-state={job?.state ?? "saved"} className={`flex flex-wrap items-center gap-4 p-3 ${job?.state === "failed" || job?.state === "conflict" ? "border-destructive" : ""}`}>
             <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-muted">
               {s.image ? (
                 <Image src={s.image || "/placeholder.svg"} alt={s.title} fill className="object-cover" unoptimized />
@@ -60,21 +69,30 @@ export function SlidesManager({ slides }: { slides: AdminSlide[] }) {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{s.title}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="truncate font-medium">{s.title}</p>
+                {job ? <SaveBadge job={job} /> : null}
+              </div>
               {s.subtitle ? <p className="truncate text-xs text-muted-foreground">{s.subtitle}</p> : null}
               {s.href ? <p className="truncate text-xs text-muted-foreground">{s.href}</p> : null}
             </div>
             <div className="flex shrink-0">
-              <Button variant="ghost" size="icon" onClick={() => { setEditing(s); setOpen(true) }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={Boolean(job && s._id.startsWith("pending-") && job.state !== "failed" && job.state !== "conflict")}
+                onClick={() => { setEditing(s); setEditingJob(job && (job.state === "failed" || job.state === "conflict") ? job : null); setOpen(true) }}
+              >
                 <Pencil className="h-4 w-4" />
                 <span className="sr-only">تعديل</span>
               </Button>
-              <DeleteButton onConfirm={() => handleDelete(s)} itemLabel={s.title} disabled={isPending} />
+              <DeleteButton onConfirm={() => handleDelete(s)} itemLabel={s.title} disabled={isPending || Boolean(job)} />
             </div>
+            {job ? <SaveProblem job={job} onTakeTheirs={() => discardJob(job)} /> : null}
           </Card>
         ))}
       </div>
-      <SlideDialog key={editing?._id ?? "new"} open={open} onOpenChange={setOpen} slide={editing} />
+      <SlideDialog key={`${editing?._id ?? "new"}:${editingJob?.id ?? ""}`} open={open} onOpenChange={setOpen} slide={editing} replaceJob={editingJob} instant={instant} />
     </div>
   )
 }
@@ -83,10 +101,14 @@ function SlideDialog({
   open,
   onOpenChange,
   slide,
+  replaceJob,
+  instant,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   slide: AdminSlide | null
+  replaceJob: SaveJob<AdminSlide> | null
+  instant: boolean
 }) {
   const [isPending, startTransition] = useTransition()
 
@@ -95,12 +117,17 @@ function SlideDialog({
     const form = new FormData(e.currentTarget)
     const problem = problemOf(() => parseSlideForm(form))
     if (problem) return void toast.error(problem)
+    if (instant) {
+      enqueueScreenSave(SCREEN_SPECS.slides, form, slide, replaceJob)
+      onOpenChange(false)
+      return
+    }
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
           { name: "image", folder: "slides", keyName: "imageKey" },
         ])
-        await saveSlide(slide?._id ?? null, form)
+        await saveSlide(slide && !slide._id.startsWith("pending-") ? slide._id : null, form)
         toast.success(slide ? "تم تحديث السلايد" : "تمت إضافة السلايد")
         onOpenChange(false)
       } catch (err) {

@@ -4,9 +4,10 @@
 // - الرقم التسلسلي لكل قسم يزيد فقط ولا يُعاد استخدامه بعد الحذف، فيبقى الرمز ثابتاً لمنتجه.
 // - نقل المنتج لقسم آخر لا يغيّر رمزه (الرمز هوية، لا تصنيف).
 
-const CODE_RE = /^[A-Z]{2,4}[0-9]?$/
+// الرقم الاختياري في الآخر حتى خانتين: suggestCategoryCode يولّد CT10 … CT99 للسلاج العربي بعد استنفاد CT2 … CT9
+const CODE_RE = /^[A-Z]{2,4}[0-9]{0,2}$/
 /** رمز منتج كامل: حروف القسم ثم شرطة ثم رقم (3 خانات على الأقل). */
-const PRODUCT_CODE_RE = /^([A-Z]{2,4}[0-9]?)-(\d{3,})$/
+const PRODUCT_CODE_RE = /^([A-Z]{2,4}[0-9]{0,2})-(\d{3,})$/
 
 export function isCategoryCode(value: unknown): value is string {
   return typeof value === "string" && CODE_RE.test(value)

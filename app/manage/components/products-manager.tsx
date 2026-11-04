@@ -5,7 +5,7 @@ import { validateSizeChart, type SizeChart } from "@/lib/size-chart"
 import { VariantStockEditor, variantCombos, variantKey } from "./variant-stock-editor"
 import { useMemo, useRef, useState, useTransition } from "react"
 import Image from "next/image"
-import { AlertTriangle, Loader2, Pencil, PackageX, RotateCcw, Star, Sparkles, WifiOff, X } from "lucide-react"
+import { Pencil, PackageX, Star, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,7 +38,8 @@ import { parseProductForm } from "@/lib/validation/product"
 import { problemOf } from "@/lib/validation/form"
 import { getSaveQueue, discardJob, useSaveJobs } from "../save-queue/queue"
 import { buildProductJob, isPendingId, PRODUCT_SCREEN, type ProductJob } from "../save-queue/product-job"
-import { setInstantSave, useInstantSave } from "../save-queue/instant-save"
+import { useInstantSave } from "../save-queue/instant-save"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
 
 export function ProductsManager({
   products,
@@ -143,10 +144,7 @@ export function ProductsManager({
 
       <PaletteBackfill />
 
-      <label className="mb-3 flex w-fit items-center gap-2 text-xs text-muted-foreground">
-        <Switch checked={instant} onCheckedChange={setInstantSave} data-testid="instant-save-toggle" />
-        الحفظ الفوري: تُغلق النافذة عند الضغط ويُكمل الحفظ في الخلفية
-      </label>
+      <InstantSaveToggle />
 
       {filtered.length === 0 ? (
         <EmptyState label="لا توجد منتجات مطابقة." />
@@ -728,61 +726,4 @@ function PaletteBackfill() {
       </Button>
     </div>
   )
-}
-
-/** شارة حالة الحفظ على عنصر القائمة. */
-function SaveBadge({ job }: { job: ProductJob }) {
-  const base = { "data-testid": "save-badge", "data-state": job.state } as const
-  if (job.state === "queued" || job.state === "running") {
-    return (
-      <Badge variant="outline" className="gap-1" {...base}>
-        <Loader2 className="h-3 w-3 animate-spin" /> جارٍ الحفظ…
-      </Badge>
-    )
-  }
-  if (job.state === "retrying" || (job.state === "failed" && job.offline)) {
-    return (
-      <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700 dark:text-amber-400" {...base}>
-        <WifiOff className="h-3 w-3" /> بانتظار الاتصال
-      </Badge>
-    )
-  }
-  return (
-    <Badge variant="destructive" className="gap-1" {...base}>
-      <AlertTriangle className="h-3 w-3" /> {job.state === "conflict" ? "تعارض" : "فشل الحفظ"}
-    </Badge>
-  )
-}
-
-/** تفاصيل ما يحتاج المدير: سبب الفشل مع «أعد المحاولة» و«تجاهل»، أو خيارا التعارض. التعديل من زر القلم. */
-function SaveProblem({ job, onKeepMine, onTakeTheirs }: { job: ProductJob; onKeepMine: () => void; onTakeTheirs: () => void }) {
-  if (job.state === "conflict") {
-    return (
-      <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 text-sm" data-testid="save-problem">
-        <p className="flex-1 text-destructive">عدّل شخص آخر هذا المنتج بعد فتحك للنموذج. اختر ما تريد:</p>
-        {(job.conflict as AdminProduct | null | undefined) ? (
-          <Button type="button" size="sm" variant="outline" onClick={onKeepMine}>
-            احتفظ بتعديلي
-          </Button>
-        ) : null}
-        <Button type="button" size="sm" variant="outline" onClick={onTakeTheirs}>
-          {job.conflict ? "خذ النسخة الجديدة" : "تجاهل تعديلي"}
-        </Button>
-      </div>
-    )
-  }
-  if (job.state === "failed") {
-    return (
-      <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 text-sm" data-testid="save-problem">
-        <p className="flex-1 text-destructive">{job.offline ? "تعذّر الاتصال بالخادم، وحفظك محفوظ في هذا المتصفح." : job.error}</p>
-        <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => getSaveQueue().retry(job.id)}>
-          <RotateCcw className="h-3.5 w-3.5" /> أعد المحاولة
-        </Button>
-        <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={() => discardJob(job)}>
-          <X className="h-3.5 w-3.5" /> تجاهل
-        </Button>
-      </div>
-    )
-  }
-  return null
 }

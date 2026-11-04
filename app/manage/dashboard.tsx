@@ -30,7 +30,7 @@ import type { Screen } from "@/lib/permissions"
 import type { ManageData } from "./page"
 import { AFFECTS, DATA_KEYS, SCREEN_DATA, TAB_PARAM, type DataKey } from "./screen-data"
 import { ManageStoreProvider, type ManageStoreActions } from "./manage-store"
-import { setProductSavedHandler, useSaveQueueLifecycle } from "./save-queue/queue"
+import { notifyScreenData, setProductSavedHandler, useSaveQueueLifecycle } from "./save-queue/queue"
 import { SaveStatusBar } from "./save-queue/status-bar"
 import type { AdminProduct } from "@/lib/admin"
 import { Button } from "@/components/ui/button"
@@ -162,6 +162,11 @@ export function Dashboard({ data: incoming, loaded, afterAction, initialTab, cur
     { id: "settings", label: "إعدادات الموقع", icon: Settings },
   ] as { id: TabId; label: string; icon: typeof Package; count?: number }[]).filter((item) => permissions.includes(item.id))
   const [tab, setTab] = useState<TabId>(initialTab ?? nav[0]?.id ?? "orders")
+  // وصلت بيانات جديدة للشاشة المفتوحة (رد حفظ أو تحديث): عمليات الحفظ التي تنتظر ظهورها فيها تزول من العرض.
+  useEffect(() => {
+    notifyScreenData(tab)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- تتبّع وصول البيانات لا تبديل الشاشة
+  }, [received])
 
   // الرابط يحمل الشاشة المفتوحة، فيعرف الخادم بعد أي حفظ أي بيانات يعيد تحميلها (وتبقى الشاشة بعد إعادة التحميل).
   const syncUrl = (screen: TabId) => {
@@ -271,7 +276,7 @@ export function Dashboard({ data: incoming, loaded, afterAction, initialTab, cur
 
         {/* المحتوى */}
         <main className="min-w-0 flex-1 p-4 lg:p-6">
-          <SaveStatusBar onShowProblems={() => openTab("products")} />
+          <SaveStatusBar onShowProblems={(screen) => (nav.some((n) => n.id === screen) ? openTab(screen as TabId) : undefined)} />
           {nav.length === 0 && <p className="text-sm text-muted-foreground">لا توجد شاشات مسموحة لحسابك. تواصل مع مدير النظام.</p>}
           {tab === "orders" && (
             <OrdersManager

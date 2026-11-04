@@ -31,11 +31,19 @@ import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
 import { parseReviewForm } from "@/lib/validation/catalog"
 import { problemOf } from "@/lib/validation/form"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useInstantRows } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 
 export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
   const [editing, setEditing] = useState<AdminReview | null>(null)
+  const [editingJob, setEditingJob] = useState<SaveJob<AdminReview> | null>(null)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  const rows = useInstantRows("reviews", reviews)
 
   function handleDelete(r: AdminReview) {
     startTransition(async () => {
@@ -53,12 +61,13 @@ export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
       <SectionHeader
         title="آراء العملاء"
         description="التقييمات المعروضة في الصفحة الرئيسية."
-        onAdd={() => { setEditing(null); setOpen(true) }}
+        onAdd={() => { setEditing(null); setEditingJob(null); setOpen(true) }}
         addLabel="تقييم جديد"
       />
+      <InstantSaveToggle />
       <div className="grid gap-3 sm:grid-cols-2">
-        {reviews.map((r) => (
-          <Card key={r._id} className="flex gap-3 p-3">
+        {rows.map(({ item: r, job }) => (
+          <Card key={r._id} data-testid="item-row" data-save-state={job?.state ?? "saved"} className={`flex flex-wrap gap-3 p-3 ${job?.state === "failed" || job?.state === "conflict" ? "border-destructive" : ""}`}>
             <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-muted">
               {r.avatar ? (
                 <Image src={r.avatar || "/placeholder.svg"} alt={r.name} fill className="object-cover" unoptimized />
@@ -71,21 +80,28 @@ export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate font-medium">{r.name}</p>
+                {job ? <SaveBadge job={job} /> : null}
                 <Stars value={r.rating} />
               </div>
               <p className="line-clamp-2 text-xs text-muted-foreground">{r.comment}</p>
             </div>
             <div className="flex shrink-0 flex-col">
-              <Button variant="ghost" size="icon" onClick={() => { setEditing(r); setOpen(true) }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={Boolean(job && r._id.startsWith("pending-") && job.state !== "failed" && job.state !== "conflict")}
+                onClick={() => { setEditing(r); setEditingJob(job && (job.state === "failed" || job.state === "conflict") ? job : null); setOpen(true) }}
+              >
                 <Pencil className="h-4 w-4" />
                 <span className="sr-only">تعديل</span>
               </Button>
-              <DeleteButton onConfirm={() => handleDelete(r)} itemLabel={r.name} disabled={isPending} />
+              <DeleteButton onConfirm={() => handleDelete(r)} itemLabel={r.name} disabled={isPending || Boolean(job)} />
             </div>
+            {job ? <div className="w-full"><SaveProblem job={job} onTakeTheirs={() => discardJob(job)} /></div> : null}
           </Card>
         ))}
       </div>
-      <ReviewDialog key={editing?._id ?? "new"} open={open} onOpenChange={setOpen} review={editing} />
+      <ReviewDialog key={`${editing?._id ?? "new"}:${editingJob?.id ?? ""}`} open={open} onOpenChange={setOpen} review={editing} replaceJob={editingJob} instant={instant} />
     </div>
   )
 }
@@ -107,10 +123,14 @@ function ReviewDialog({
   open,
   onOpenChange,
   review,
+  replaceJob,
+  instant,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   review: AdminReview | null
+  replaceJob: SaveJob<AdminReview> | null
+  instant: boolean
 }) {
   const [rating, setRating] = useState(String(review?.rating ?? 5))
   const [isPending, startTransition] = useTransition()
@@ -121,12 +141,17 @@ function ReviewDialog({
     form.set("rating", rating)
     const problem = problemOf(() => parseReviewForm(form))
     if (problem) return void toast.error(problem)
+    if (instant) {
+      enqueueScreenSave(SCREEN_SPECS.reviews, form, review, replaceJob)
+      onOpenChange(false)
+      return
+    }
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
           { name: "avatar", folder: "reviews", keyName: "avatarKey" },
         ])
-        await saveReview(review?._id ?? null, form)
+        await saveReview(review && !review._id.startsWith("pending-") ? review._id : null, form)
         toast.success(review ? "تم تحديث التقييم" : "تمت إضافة التقييم")
         onOpenChange(false)
       } catch (err) {

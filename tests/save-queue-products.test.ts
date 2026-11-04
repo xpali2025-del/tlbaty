@@ -5,7 +5,8 @@ import { ImageUploadError } from '@/lib/storage/upload-transport'
 
 vi.mock('@/app/manage/client-actions', () => ({ saveProduct: vi.fn() }))
 const { isTransientSaveError } = await import('@/app/manage/save-queue/errors')
-const { buildProductJob, formEntries, optimisticProduct, rebaseProductJob, isPendingId } = await import('@/app/manage/save-queue/product-job')
+const { buildProductJob, optimisticProduct, rebaseProductJob, isPendingId } = await import('@/app/manage/save-queue/product-job')
+const { formEntries } = await import('@/app/manage/save-queue/job-runtime')
 
 const category = { _id: '11111111-1111-4111-8111-111111111111', name: 'فساتين', slug: 'dresses', subcategories: [] } as unknown as AdminCategory
 const brand = { _id: '22222222-2222-4222-8222-222222222222', name: 'نايك' } as unknown as AdminBrand

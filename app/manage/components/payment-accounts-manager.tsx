@@ -39,6 +39,11 @@ import {
 } from "../client-actions"
 import { DeleteButton, ImageField, SectionHeader } from "./shared"
 import { uploadFormImages } from "@/lib/storage/upload-client"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useInstantRows } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 
 function formatDate(iso?: string): string {
   if (!iso) return "-"
@@ -63,16 +68,17 @@ async function copyText(value: string) {
 export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAccount[] }) {
   const [search, setSearch] = useState("")
   const [editing, setEditing] = useState<AdminPaymentAccount | null>(null)
+  const [editingJob, setEditingJob] = useState<SaveJob<AdminPaymentAccount> | null>(null)
   const [open, setOpen] = useState(false)
   const [previewing, setPreviewing] = useState<AdminPaymentAccount | null>(null)
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  // الحسابات من الخادم، وفوقها ما يُحفظ الآن (المعدَّل بتعديله، والجديد بشارة حالته).
+  const overlay = useInstantRows("payment-accounts", accounts)
+  const jobOf = new Map(overlay.map((row) => [row.item._id, row.job]))
 
-  const sorted = useMemo(
-    () =>
-      [...accounts].sort(
-        (a, b) => a.sortOrder - b.sortOrder || a.providerName.localeCompare(b.providerName, "ar"),
-      ),
-    [accounts],
+  const sorted = [...overlay.map((row) => row.item)].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.providerName.localeCompare(b.providerName, "ar"),
   )
 
   const visible = useMemo(() => {
@@ -116,6 +122,7 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
         description="حسابات استقبال الحوالات التي تظهر للعميل عند اختيار الدفع عبر حساب دفع. الحساب المعطّل لا يظهر للعملاء ولا يؤثر على الطلبات السابقة."
         onAdd={() => {
           setEditing(null)
+          setEditingJob(null)
           setOpen(true)
         }}
         addLabel="حساب جديد"
@@ -123,6 +130,8 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
         onSearchChange={setSearch}
         searchPlaceholder="ابحث بالمزوّد أو صاحب الحساب أو رقم الحساب..."
       />
+
+      <InstantSaveToggle />
 
       {visible.length === 0 ? (
         <Card className="flex flex-col items-center gap-2 p-10 text-center">
@@ -134,10 +143,14 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          {visible.map((account, i) => (
+          {visible.map((account, i) => {
+            const job = jobOf.get(account._id)
+            return (
             <Card
               key={account._id}
-              className={cn("flex flex-col gap-3 p-4 sm:flex-row sm:items-center", isPending && "opacity-60")}
+              data-testid="item-row"
+              data-save-state={job?.state ?? "saved"}
+              className={cn("flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center", isPending && "opacity-60", (job?.state === "failed" || job?.state === "conflict") && "border-destructive")}
             >
               <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted">
                 {account.image ? (
@@ -152,6 +165,7 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-bold">{account.providerName}</p>
+                  {job ? <SaveBadge job={job} /> : null}
                   {account.accountDisplayName ? (
                     <span className="text-xs text-muted-foreground">{account.accountDisplayName}</span>
                   ) : null}
@@ -185,7 +199,7 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
                     size="icon"
                     className="h-7 w-7"
                     aria-label="تحريك للأعلى"
-                    disabled={isPending || i === 0}
+                    disabled={isPending || i === 0 || Boolean(job)}
                     onClick={() => move(account, -1)}
                   >
                     <ArrowUp className="h-3.5 w-3.5" />
@@ -195,7 +209,7 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
                     size="icon"
                     className="h-7 w-7"
                     aria-label="تحريك للأسفل"
-                    disabled={isPending || i === visible.length - 1}
+                    disabled={isPending || i === visible.length - 1 || Boolean(job)}
                     onClick={() => move(account, 1)}
                   >
                     <ArrowDown className="h-3.5 w-3.5" />
@@ -224,8 +238,10 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
                   variant="ghost"
                   size="icon"
                   aria-label="تعديل"
+                  disabled={Boolean(job && account._id.startsWith("pending-") && job.state !== "failed" && job.state !== "conflict")}
                   onClick={() => {
                     setEditing(account)
+                    setEditingJob(job && (job.state === "failed" || job.state === "conflict") ? job : null)
                     setOpen(true)
                   }}
                 >
@@ -235,7 +251,7 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
                 <div className="flex items-center gap-1.5 ps-1">
                   <Switch
                     checked={account.isActive}
-                    disabled={isPending}
+                    disabled={isPending || Boolean(job)}
                     aria-label={account.isActive ? "تعطيل الحساب" : "تفعيل الحساب"}
                     onCheckedChange={(checked) =>
                       run(
@@ -251,11 +267,13 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
                     run(() => deletePaymentAccount(account._id), "تم حذف الحساب")
                   }
                   itemLabel={`${account.providerName} — ${account.accountNumber ?? ""}`}
-                  disabled={isPending}
+                  disabled={isPending || Boolean(job)}
                 />
               </div>
+              {job ? <div className="w-full"><SaveProblem job={job} onTakeTheirs={() => discardJob(job)} /></div> : null}
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -265,10 +283,12 @@ export function PaymentAccountsManager({ accounts }: { accounts: AdminPaymentAcc
       </p>
 
       <PaymentAccountDialog
-        key={editing?._id ?? "new"}
+        key={`${editing?._id ?? "new"}:${editingJob?.id ?? ""}`}
         open={open}
         onOpenChange={setOpen}
         account={editing}
+        replaceJob={editingJob}
+        instant={instant}
       />
 
       <PreviewDialog account={previewing} onClose={() => setPreviewing(null)} />
@@ -280,10 +300,14 @@ function PaymentAccountDialog({
   open,
   onOpenChange,
   account,
+  replaceJob,
+  instant,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   account: AdminPaymentAccount | null
+  replaceJob: SaveJob<AdminPaymentAccount> | null
+  instant: boolean
 }) {
   const [isActive, setIsActive] = useState(account?.isActive ?? true)
   const [isPending, startTransition] = useTransition()
@@ -292,10 +316,22 @@ function PaymentAccountDialog({
     e.preventDefault()
     const form = new FormData(e.currentTarget)
     form.set("isActive", isActive ? "true" : "false")
+    if (instant) {
+      let problem: string | null = null
+      try {
+        SCREEN_SPECS["payment-accounts"].optimistic(form, account, "check", () => undefined)
+      } catch (err) {
+        problem = err instanceof Error ? err.message : "مدخلات غير صالحة"
+      }
+      if (problem) return void toast.error(problem)
+      enqueueScreenSave(SCREEN_SPECS["payment-accounts"], form, account, replaceJob)
+      onOpenChange(false)
+      return
+    }
     startTransition(async () => {
       try {
         await uploadFormImages(form, [{ name: "image", folder: "payment-accounts", keyName: "imageKey" }])
-        await savePaymentAccount(account?._id ?? null, form)
+        await savePaymentAccount(account && !account._id.startsWith("pending-") ? account._id : null, form)
         toast.success(account ? "تم تحديث الحساب" : "تمت إضافة الحساب")
         onOpenChange(false)
       } catch (err) {

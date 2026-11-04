@@ -24,11 +24,19 @@ import { DeleteButton, ImageField, SectionHeader, SlugField, TagInput } from "./
 import { uploadFormImages } from "@/lib/storage/upload-client"
 import { parseBrandForm } from "@/lib/validation/catalog"
 import { problemOf } from "@/lib/validation/form"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useInstantRows } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 
 export function BrandsManager({ brands }: { brands: AdminBrand[] }) {
   const [editing, setEditing] = useState<AdminBrand | null>(null)
+  const [editingJob, setEditingJob] = useState<SaveJob<AdminBrand> | null>(null)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  const rows = useInstantRows("brands", brands)
 
   function handleDelete(b: AdminBrand) {
     startTransition(async () => {
@@ -46,12 +54,13 @@ export function BrandsManager({ brands }: { brands: AdminBrand[] }) {
       <SectionHeader
         title="البراندات"
         description="أدر العلامات التجارية المعروضة في المتجر."
-        onAdd={() => { setEditing(null); setOpen(true) }}
+        onAdd={() => { setEditing(null); setEditingJob(null); setOpen(true) }}
         addLabel="براند جديد"
       />
+      <InstantSaveToggle />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {brands.map((b) => (
-          <Card key={b._id} className="flex items-center gap-3 p-3">
+        {rows.map(({ item: b, job }) => (
+          <Card key={b._id} data-testid="item-row" data-save-state={job?.state ?? "saved"} className={`flex flex-wrap items-center gap-3 p-3 ${job?.state === "failed" || job?.state === "conflict" ? "border-destructive" : ""}`}>
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted">
               {b.image ? (
                 <Image src={b.image || "/placeholder.svg"} alt={b.name} fill className="object-contain p-1" unoptimized />
@@ -65,20 +74,27 @@ export function BrandsManager({ brands }: { brands: AdminBrand[] }) {
               <div className="flex items-center gap-1.5">
                 <p className="truncate font-medium">{b.name}</p>
                 {b.featured ? <Star className="h-3.5 w-3.5 fill-primary text-primary" /> : null}
+                {job ? <SaveBadge job={job} /> : null}
               </div>
               <p className="text-xs text-muted-foreground">{b.productCount} منتج</p>
             </div>
             <div className="flex shrink-0">
-              <Button variant="ghost" size="icon" onClick={() => { setEditing(b); setOpen(true) }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={Boolean(job && b._id.startsWith("pending-") && job.state !== "failed" && job.state !== "conflict")}
+                onClick={() => { setEditing(b); setEditingJob(job && (job.state === "failed" || job.state === "conflict") ? job : null); setOpen(true) }}
+              >
                 <Pencil className="h-4 w-4" />
                 <span className="sr-only">تعديل</span>
               </Button>
-              <DeleteButton onConfirm={() => handleDelete(b)} itemLabel={b.name} disabled={isPending} />
+              <DeleteButton onConfirm={() => handleDelete(b)} itemLabel={b.name} disabled={isPending || Boolean(job)} />
             </div>
+            {job ? <SaveProblem job={job} onTakeTheirs={() => discardJob(job)} /> : null}
           </Card>
         ))}
       </div>
-      <BrandDialog key={editing?._id ?? "new"} open={open} onOpenChange={setOpen} brand={editing} />
+      <BrandDialog key={`${editing?._id ?? "new"}:${editingJob?.id ?? ""}`} open={open} onOpenChange={setOpen} brand={editing} replaceJob={editingJob} instant={instant} />
     </div>
   )
 }
@@ -87,10 +103,14 @@ function BrandDialog({
   open,
   onOpenChange,
   brand,
+  replaceJob,
+  instant,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   brand: AdminBrand | null
+  replaceJob: SaveJob<AdminBrand> | null
+  instant: boolean
 }) {
   const [featured, setFeatured] = useState(brand?.featured ?? false)
   const [keywords, setKeywords] = useState<string[]>(brand?.keywords ?? [])
@@ -103,12 +123,17 @@ function BrandDialog({
     form.set("keywords", JSON.stringify(keywords))
     const problem = problemOf(() => parseBrandForm(form))
     if (problem) return void toast.error(problem)
+    if (instant) {
+      enqueueScreenSave(SCREEN_SPECS.brands, form, brand, replaceJob)
+      onOpenChange(false)
+      return
+    }
     startTransition(async () => {
       try {
         await uploadFormImages(form, [
           { name: "image", folder: "brands", keyName: "imageKey" },
         ])
-        await saveBrand(brand?._id ?? null, form)
+        await saveBrand(brand && !brand._id.startsWith("pending-") ? brand._id : null, form)
         toast.success(brand ? "تم تحديث البراند" : "تمت إضافة البراند")
         onOpenChange(false)
       } catch (err) {

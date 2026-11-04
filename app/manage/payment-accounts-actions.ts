@@ -8,6 +8,7 @@ import { db } from "@/lib/db/client"
 import { paymentAccounts } from "@/lib/db/store"
 import { assertManagePermission } from "@/lib/manage-auth"
 import { newImageKey, removeObjects, uuidParam } from "@/lib/manage-helpers"
+import { createOnce, parseRequestId } from "@/lib/save-request"
 
 function str(form: FormData, key: string, max = 300): string | undefined {
   const value = form.get(key)
@@ -62,7 +63,7 @@ async function savePaymentAccountImpl(id: string | null, form: FormData) {
     await db.update(paymentAccounts).set({ ...values, ...(imageKey ? { imageKey } : {}) }).where(eq(paymentAccounts.id, accountId))
     if (imageKey && existing.imageKey !== imageKey) oldImage = existing.imageKey
   } else {
-    await db.insert(paymentAccounts).values({ ...values, imageKey: imageKey ?? null })
+    await createOnce(parseRequestId(str(form, "requestId")), "payment-accounts", (tx, rowId) => tx.insert(paymentAccounts).values({ id: rowId, ...values, imageKey: imageKey ?? null }).then(() => {}))
   }
 
   revalidatePaymentAccounts()

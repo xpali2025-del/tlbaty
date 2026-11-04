@@ -28,6 +28,11 @@ import { problemOf } from "@/lib/validation/form"
 import { PreUpload, discardPreUpload, markSubmitted, releasePreUpload } from "@/lib/storage/preupload-registry"
 import { AD_PLACEMENTS, MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, normalizePlacements } from "@/lib/ads"
 import { extractVideoPoster, uploadAdVideo } from "@/lib/storage/video-client"
+import { useInstantSave } from "../save-queue/instant-save"
+import { enqueueScreenSave, SCREEN_SPECS } from "../save-queue/screens"
+import { discardJob, useInstantRows } from "../save-queue/queue"
+import { InstantSaveToggle, SaveBadge, SaveProblem } from "../save-queue/ui"
+import type { SaveJob } from "../save-queue/core"
 
 function placementSummary(placements: string[]) {
   if (!placements.length) return "كل الأماكن"
@@ -41,8 +46,11 @@ function dateSummary(a: AdminAd) {
 
 export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: AdminCategory[] }) {
   const [editing, setEditing] = useState<AdminAd | null>(null)
+  const [editingJob, setEditingJob] = useState<SaveJob<AdminAd> | null>(null)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const instant = useInstantSave()
+  const rows = useInstantRows("ads", ads)
 
   function handleDelete(a: AdminAd) {
     startTransition(async () => {
@@ -73,24 +81,26 @@ export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: Ad
         description="لافتات إعلانية تظهر بين المنتجات — تُحفظ مباشرة."
         onAdd={() => {
           setEditing(null)
+          setEditingJob(null)
           setOpen(true)
         }}
         addLabel="إعلان جديد"
       />
+      <InstantSaveToggle />
 
-      {ads.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
           <Megaphone className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">لا توجد إعلانات بعد.</p>
         </div>
       ) : (
         <div className="grid gap-3">
-          {ads.map((a) => {
+          {rows.map(({ item: a, job }) => {
             const targetNames = a.categoryIds
               .map((id) => categories.find((c) => c._id === id)?.name)
               .filter(Boolean)
             return (
-              <Card key={a._id} className="flex items-center gap-4 p-3">
+              <Card key={a._id} data-testid="item-row" data-save-state={job?.state ?? "saved"} className={`flex flex-wrap items-center gap-4 p-3 ${job?.state === "failed" || job?.state === "conflict" ? "border-destructive" : ""}`}>
                 <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-muted">
                   {a.image ? (
                     <Image src={a.image || "/placeholder.svg"} alt={a.title} fill className="object-cover" unoptimized />
@@ -103,6 +113,7 @@ export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: Ad
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate font-medium">{a.title}</p>
+                    {job ? <SaveBadge job={job} /> : null}
                     <Badge variant={a.active === false ? "outline" : "secondary"}>
                       {a.active === false ? "متوقف" : "مفعّل"}
                     </Badge>
@@ -126,22 +137,25 @@ export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: Ad
                   <Switch
                     checked={a.active !== false}
                     onCheckedChange={(v) => handleToggle(a, v)}
-                    disabled={isPending}
+                    disabled={isPending || Boolean(job)}
                     aria-label="تفعيل الإعلان"
                   />
                   <Button
                     variant="ghost"
                     size="icon"
+                    disabled={Boolean(job && a._id.startsWith("pending-") && job.state !== "failed" && job.state !== "conflict")}
                     onClick={() => {
                       setEditing(a)
+                      setEditingJob(job && (job.state === "failed" || job.state === "conflict") ? job : null)
                       setOpen(true)
                     }}
                   >
                     <Pencil className="h-4 w-4" />
                     <span className="sr-only">تعديل</span>
                   </Button>
-                  <DeleteButton onConfirm={() => handleDelete(a)} itemLabel={a.title} disabled={isPending} />
+                  <DeleteButton onConfirm={() => handleDelete(a)} itemLabel={a.title} disabled={isPending || Boolean(job)} />
                 </div>
+                {job ? <div className="w-full"><SaveProblem job={job} onTakeTheirs={() => discardJob(job)} /></div> : null}
               </Card>
             )
           })}
@@ -149,11 +163,13 @@ export function AdsManager({ ads, categories }: { ads: AdminAd[]; categories: Ad
       )}
 
       <AdDialog
-        key={editing?._id ?? "new"}
+        key={`${editing?._id ?? "new"}:${editingJob?.id ?? ""}`}
         open={open}
         onOpenChange={setOpen}
         ad={editing}
         categories={categories}
+        replaceJob={editingJob}
+        instant={instant}
       />
     </div>
   )
@@ -164,11 +180,15 @@ function AdDialog({
   onOpenChange: setOpenState,
   ad,
   categories,
+  replaceJob,
+  instant,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   ad: AdminAd | null
   categories: AdminCategory[]
+  replaceJob: SaveJob<AdminAd> | null
+  instant: boolean
 }) {
   const [active, setActive] = useState(ad?.active !== false)
   const [categoryIds, setCategoryIds] = useState<string[]>(ad?.categoryIds ?? [])
@@ -246,6 +266,22 @@ function AdDialog({
 
     const problem = problemOf(() => parseAdForm(form))
     if (problem) return void toast.error(problem)
+
+    if (instant) {
+      // الحفظ الفوري: يُسلَّم الفيديو ورفعه المسبق وغلافه للطابور (يرفع ما بقي ويحفظ)، وتُغلق النافذة فوراً.
+      if (kind === "video" && !videoFile && !ad?.videoUrl) return void toast.error("اختر ملف الفيديو (MP4)")
+      let extra: { videoPre: PreUpload | null; posterPromise: Promise<PreUpload | null> | null } | undefined
+      if (kind === "video" && videoFile) {
+        form.set("video", videoFile)
+        const pre = videoRef.current?.file === videoFile ? videoRef.current : null
+        extra = { videoPre: pre, posterPromise: posterRef.current?.file === videoFile ? posterRef.current.promise : null }
+        videoRef.current = null // صارت ملكاً للطابور: لا يلغيها إغلاق النافذة
+        posterRef.current = null
+      }
+      enqueueScreenSave(SCREEN_SPECS.ads, form, ad, replaceJob, extra)
+      onOpenChange(false)
+      return
+    }
     startTransition(async () => {
       try {
         if (kind === "video") {
@@ -273,7 +309,7 @@ function AdDialog({
         await uploadFormImages(form, [
           { name: "image", folder: "ads", keyName: "imageKey" },
         ])
-        await saveAd(ad?._id ?? null, form)
+        await saveAd(ad && !ad._id.startsWith("pending-") ? ad._id : null, form)
         toast.success(ad ? "تم تحديث الإعلان" : "تمت إضافة الإعلان")
         onOpenChange(false)
       } catch (err) {
