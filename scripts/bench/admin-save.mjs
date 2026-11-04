@@ -28,6 +28,7 @@ const FIXTURES = process.env.FIXTURES || "/tmp/claude-0/perf/fixtures"
 const ROUNDS = Number(process.env.ROUNDS || 10)
 const WARMUP = Number(process.env.WARMUP || 1)
 const ONLY = (process.env.ONLY || "").split(",").filter(Boolean)
+const SAVE_TIMEOUT = Number(process.env.SAVE_TIMEOUT_MS || 120000)
 const OUT = process.env.OUT || "/tmp/claude-0/perf/admin-save-results.json"
 const VIEWPORT = { width: 390, height: 844 }
 
@@ -202,10 +203,12 @@ async function throttle(page) {
   )
 }
 
+let lastEvents = []
 async function measure(page, scenario, run) {
   await scenario.prepare(page, run)
   await sleep(400) // استقرار الواجهة بعد اختيار الملفات، لا يُحسب
   const events = []
+  lastEvents = events
   let t0 = 0
   const onReq = (req) => {
     const url = new URL(req.url())
@@ -227,7 +230,7 @@ async function measure(page, scenario, run) {
   await counter(true)
   t0 = Date.now()
   await page.getByRole("button", { name: SAVE }).click()
-  if (scenario.done.dialog) await page.waitForSelector("[role=dialog]", { state: "hidden", timeout: 120000 })
+  if (scenario.done.dialog) await page.waitForSelector("[role=dialog]", { state: "hidden", timeout: SAVE_TIMEOUT })
   else {
     // الإعدادات بلا نافذة: يعود المدير حين يرجع الزر من «جارٍ الحفظ…» إلى «حفظ التغييرات»
     // (عدّاد الرسائل لا ينفع: تعرض الواجهة رسالة واحدة فقط وتستبدل القديمة)
@@ -265,6 +268,16 @@ async function measure(page, scenario, run) {
   const errors = []
   page.on("pageerror", (e) => errors.push(e.message))
 
+  // رسائل الواجهة (toast) تختفي بعد ثوانٍ: نسجّلها لنعرف سبب أي فشل
+  await page.addInitScript(() => {
+    window.__toasts = []
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) {
+        const t = n.textContent?.trim()
+        if (t && t.length < 300 && /[\u0600-\u06FF]/.test(t) && (n.getAttribute?.("role") === "status" || n.matches?.("li,[data-sonner-toast],[data-radix-toast-announce-exclude]"))) window.__toasts.push(t)
+      }
+    }).observe(document, { childList: true, subtree: true })
+  })
   await page.goto(BASE + "/manage/login")
   await page.fill("#username", process.env.MANAGE_USERNAME)
   await page.fill("#password", process.env.MANAGE_PASSWORD)
@@ -283,7 +296,14 @@ async function measure(page, scenario, run) {
         if (i >= WARMUP) runs.push(r)
         process.stdout.write(`${sc.id} #${i}${i < WARMUP ? " (warmup)" : ""}: A=${r.A} B=${r.B} U=${r.U} PRE=${r.PRE} SV=${r.SV} Q=${r.Q}\n`)
       } catch (e) {
-        process.stdout.write(`${sc.id} #${i}: FAILED ${e.message.split("\n")[0]}\n`)
+        const seen = await page.evaluate(() => window.__toasts?.slice(-5)).catch(() => null)
+        const state = await page
+          .evaluate(() => ({
+            buttons: [...document.querySelectorAll("[role=dialog] button")].map((b) => b.textContent.trim() + (b.disabled ? "(disabled)" : "")).slice(-3),
+            alerts: [...document.querySelectorAll("[role=alert],[role=status],[data-sonner-toast]")].map((n) => n.textContent.trim()).slice(0, 4),
+          }))
+          .catch(() => null)
+        process.stdout.write(`${sc.id} #${i}: FAILED ${e.message.split("\n")[0]} | messages: ${JSON.stringify(seen)} | state: ${JSON.stringify(state)} | requests: ${JSON.stringify(lastEvents.map((x) => [x.kind, x.start, x.end]))}\n`)
         await page.screenshot({ path: path.join(path.dirname(OUT), `fail-${sc.id}-${i}.png`) }).catch(() => {})
         // نحاول استعادة اللوحة لتكملة بقية التكرارات
         await page.goto(BASE + "/manage").catch(() => {})

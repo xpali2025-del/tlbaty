@@ -98,20 +98,29 @@ export function Dashboard({ data: incoming, loaded, afterAction, initialTab, cur
   const [, startRefresh] = useTransition()
   const [received, setReceived] = useState(incoming)
   const [store, setStore] = useState(() => merge(null, incoming, loaded, afterAction))
+  // عدد التعديلات المحلية (عنصر محفوظ أُدرج من رد الحفظ)، ورقمه حين بدأ آخر تحديث خلفي (null = لا تحديث جارٍ).
+  const [mutations, setMutations] = useState(0)
+  const [refreshStartedAt, setRefreshStartedAt] = useState<number | null>(null)
   if (incoming !== received) {
     setReceived(incoming)
-    setStore((prev) => merge(prev, incoming, loaded, afterAction))
+    // رد تحديث بدأ قبل حفظ محلي قرأ الخادم فيه نسخة أقدم مما في المتصفح: لو دُمج لاستبدل العنصر المحفوظ بنسخته القديمة
+    // (تبدو القائمة كأن الحفظ ضاع، ويُرفض التعديل التالي بتعارض كاذب). يُهمل، وتبقى البيانات معلَّمة قديمة فتُحدَّث لاحقاً.
+    const fromRefresh = !afterAction && refreshStartedAt !== null
+    if (fromRefresh) setRefreshStartedAt(null)
+    if (!(fromRefresh && refreshStartedAt !== mutations)) setStore((prev) => merge(prev, incoming, loaded, afterAction))
   }
   const props = store.data
   const actions = useMemo<ManageStoreActions>(
     () => ({
-      upsertProduct: (item) =>
+      upsertProduct: (item) => {
+        setMutations((n) => n + 1)
         setStore((prev) => {
           const stale = new Set(prev.stale)
           stale.delete("products")
           for (const key of AFFECTS.products ?? []) stale.add(key)
           return { data: { ...prev.data, products: upsertProductInList(prev.data.products, item) }, stale }
-        }),
+        })
+      },
     }),
     [],
   )
@@ -167,7 +176,10 @@ export function Dashboard({ data: incoming, loaded, afterAction, initialTab, cur
     setTab(next)
     syncUrl(next)
     // بيانات تغيّرت منذ تحميلها (حفظ في شاشة أخرى): تُحدَّث في الخلفية وتبقى المعروضة حتى تصل.
-    if (SCREEN_DATA[next].some((key) => store.stale.has(key))) startRefresh(() => router.refresh())
+    if (SCREEN_DATA[next].some((key) => store.stale.has(key))) {
+      setRefreshStartedAt(mutations)
+      startRefresh(() => router.refresh())
+    }
   }
 
   if (incomplete) return <p className="p-6 text-sm text-muted-foreground">جارٍ تحميل اللوحة…</p>

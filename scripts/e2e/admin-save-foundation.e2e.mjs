@@ -126,6 +126,37 @@ const save = (page) => page.getByRole("button", { name: "حفظ التغييرا
   await page2.waitForTimeout(300)
   ok((await page2.locator("main").innerText()).includes(ar(8001)), "قائمة الثاني تحدّثت بآخر نسخة (8001)")
 
+  // ---------- 5) تحديث خلفي بطيء يصل بعد حفظ جديد: لا يستبدل المحفوظ بنسخته القديمة ----------
+  // حفظ يعلّم شاشات أخرى قديمة، ففتح المنتجات يبدأ تحديثاً؛ نؤخّر رده 3 ثوانٍ ونحفظ قبل وصوله.
+  await openFirstProduct(page)
+  const slug3 = await page.locator("[role=dialog] input[name=slug]").inputValue()
+  await page.locator("[role=dialog] input[name=price]").fill("9001")
+  await save(page)
+  await page.waitForSelector("[role=dialog]", { state: "hidden", timeout: 30000 })
+  await page.route(
+    (url) => url.searchParams.has("_rsc"),
+    async (route) => {
+      await sleep(3000)
+      await route.continue()
+    },
+  )
+  await page.click("nav >> text=المنتجات") // يبدأ التحديث (مؤخَّر)
+  await page.locator("button:has(span.sr-only:text('تعديل'))").first().click()
+  await page.waitForSelector("[role=dialog]")
+  await page.locator("[role=dialog] input[name=price]").fill("9002")
+  await save(page)
+  await page.waitForSelector("[role=dialog]", { state: "hidden", timeout: 30000 })
+  await page.waitForTimeout(4500) // وصل رد التحديث القديم الآن
+  ok((await page.locator("main").innerText()).includes(ar(9002)), "بعد وصول التحديث القديم ما زالت القائمة تعرض آخر حفظ (9002)")
+  ok(Number(sql(`select price from store.products where slug='${slug3}'`)) === 9002, "القاعدة: 9002")
+  await page.locator("button:has(span.sr-only:text('تعديل'))").first().click()
+  await page.waitForSelector("[role=dialog]")
+  await page.locator("[role=dialog] input[name=price]").fill("9003")
+  await save(page)
+  await page.waitForSelector("[role=dialog]", { state: "hidden", timeout: 30000 })
+  ok(Number(sql(`select price from store.products where slug='${slug3}'`)) === 9003, "التعديل التالي نجح بلا تعارض كاذب (9003)")
+  await page.unroute((url) => url.searchParams.has("_rsc")).catch(() => {})
+
   ok(errors.length === 0, `لا أخطاء في الصفحة ${errors.join(";")}`)
   await browser.close()
   sql(`delete from store.products where name like 'e2e مكرر %'`)
