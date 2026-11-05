@@ -154,7 +154,7 @@ function orderBy(sort: SearchParams["sort"]) {
   }
 }
 
-export async function searchProducts(params: SearchParams): Promise<SearchResult> {
+async function searchProductsFresh(params: SearchParams): Promise<SearchResult> {
   const limit = Math.min(Math.max(params.limit ?? SEARCH_PAGE_SIZE, 1), 120)
   const empty: SearchResult = { items: [], total: 0, limit }
   if (!isDbConfigured()) return empty
@@ -202,6 +202,21 @@ export async function searchProducts(params: SearchParams): Promise<SearchResult
     limit,
     matchedCode: exactNumbers[0],
   }
+}
+
+/**
+ * نتائج الفلاتر (بلا نص بحث حر) تُخزَّن في Data Cache بوسوم المنتجات والأقسام والماركات وتُبطَل بالإدارة والطلبات كبقية القراءات:
+ * صفحة «المنتجات» هي الأكثر زيارة، فتصير بلا استعلامات للقاعدة بعد أول زائر لكل تركيبة فلاتر.
+ * النص الحر لا يُخزَّن (مفاتيحه غير محدودة).
+ */
+export function searchProducts(params: SearchParams): Promise<SearchResult> {
+  if (params.q) return searchProductsFresh(params)
+  return dbCached<SearchResult>({
+    keyParts: ["search", "results", JSON.stringify(params)],
+    tags: [CACHE_TAGS.products, CACHE_TAGS.categoryReferences, CACHE_TAGS.brandReferences],
+    fallback: { items: [], total: 0, limit: Math.min(Math.max(params.limit ?? SEARCH_PAGE_SIZE, 1), 120) },
+    load: () => searchProductsFresh(params),
+  })
 }
 
 /** درجة الصلة: كلمة كاملة في الاسم > جزء من الاسم > في بقية النص، مع أفضلية للمتوفر. */
