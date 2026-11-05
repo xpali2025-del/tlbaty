@@ -53,8 +53,9 @@ export function MobileNav() {
             <li key={item.href} className="flex-1">
               <Link
                 href={item.href}
-                // «المنتجات» صفحة ديناميكية (فلاتر الرابط): جلب كامل مسبق فيكون الانتقال إليها فورياً (الباقي ثابت يُجلب مسبقاً تلقائياً)
-                prefetch={item.href === "/categories" ? true : undefined}
+                // «المنتجات» و«الإعدادات» صفحتان ديناميكيتان (فلاتر الرابط، وحساب العميل): جلب كامل مسبق فيكون الانتقال إليهما فورياً
+                // (الباقي ثابت يُجلب مسبقاً تلقائياً). ذاكرة التنقل تُبطَل بـ router.refresh() بعد الدخول والخروج وإنشاء الطلب.
+                prefetch={item.href === "/categories" || item.href === "/account" ? true : undefined}
                 className={`flex flex-col items-center gap-1 py-1.5 transition-colors ${
                   isActive ? "text-primary" : "text-primary/70 hover:text-primary"
                 }`}
