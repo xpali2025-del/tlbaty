@@ -80,7 +80,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.10",
     "@tailwindcss/postcss": "^4.2.0",
-    "@types/node": "^22",
+    "@types/node": "^26",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
