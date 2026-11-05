@@ -126,3 +126,12 @@
     font-size: 16px;
   }
 }
+
+@keyframes nav-progress {
+  from {
+    width: 0;
+  }
+  to {
+    width: 80%;
+  }
+}

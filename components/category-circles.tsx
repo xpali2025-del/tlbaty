@@ -13,8 +13,7 @@ export function CategoryCircles({ categories }: { categories: Category[] }) {
             <span className="text-xs font-bold tracking-wide text-primary">اكتشفي مجموعتنا</span>
             <h2 className="text-xl font-bold tracking-tight text-foreground md:text-3xl">الأقسام الرئيسية</h2>
           </div>
-          <Link prefetch={false}
-            href="/shop"
+          <Link href="/shop"
             className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full bg-secondary px-4 text-sm font-bold text-secondary-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             عرض الكل
@@ -23,8 +22,7 @@ export function CategoryCircles({ categories }: { categories: Category[] }) {
         </div>
         <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-3 md:gap-4">
           {categories.map((cat) => (
-            <Link prefetch={false}
-              key={cat.id}
+            <Link key={cat.id}
               href={`/category/${cat.slug}`}
               className="group flex w-[7.25rem] shrink-0 flex-col gap-2 rounded-[1.4rem] border border-border/70 bg-card p-2 shadow-[0_12px_30px_-28px_rgba(57,24,33,0.55)] transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-[8.5rem]"
             >

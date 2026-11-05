@@ -62,3 +62,6 @@ FIXTURES=/tmp/fixtures ROUNDS=10 WARMUP=1 OUT=/tmp/results.json node scripts/ben
 - `storefront.mjs`: زمن صفحات المتجر (`PATHS` لتحديدها).
 - تشغيل الخادم بمكتبة بعينها: `DB_DRIVER=pg` (الافتراضي postgres.js). اختبارات الحزمة على Postgres حقيقي: `TEST_DB_DRIVER=pg|postgres TEST_DATABASE_URL=postgresql://USER:PASS@HOST:5432/postgres pnpm vitest run`.
 - ملاحظة: كابح تسجيل الدخول في الذاكرة (8 محاولات لكل اسم مستخدم): أعد تشغيل الخادم قبل كل تشغيل لفحوص المتصفح.
+
+## تنقل واجهة العميل
+`navigation.mjs`: زمن الانتقال بين شاشات المتجر (فوري وبعد خمول ثانيتين) على جوال بتأخير شبكة `NET_LATENCY_MS` (الافتراضي 40). الشرح والنتائج في `docs/storefront-navigation.md`. شغّل الخادم عبر وسيط التأخير ليحاكي بُعد القاعدة (انظر الخطوات أعلاه).

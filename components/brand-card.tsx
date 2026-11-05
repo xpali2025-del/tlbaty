@@ -4,8 +4,7 @@ import type { Brand } from "@/lib/types"
 
 export function BrandCard({ brand }: { brand: Brand }) {
   return (
-    <Link prefetch={false}
-      href={`/brand/${brand.slug}`}
+    <Link href={`/brand/${brand.slug}`}
       className="group block overflow-hidden rounded-2xl border border-border bg-card transition-all hover:border-primary/40 hover:shadow-lg"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">

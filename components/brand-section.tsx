@@ -25,8 +25,7 @@ export function BrandSection({
             <span className="text-xs font-bold tracking-wide text-primary">علامات مختارة</span>
             <h2 className="text-xl font-bold tracking-tight text-foreground md:text-3xl">{title}</h2>
           </div>
-          <Link prefetch={false}
-            href={viewAllHref}
+          <Link href={viewAllHref}
             className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full bg-secondary px-4 text-sm font-bold text-secondary-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             عرض الكل
