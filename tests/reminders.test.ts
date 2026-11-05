@@ -1,15 +1,13 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq, sql } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { DEFAULT_REMINDER_RULES, renderReminderText, validateRule, describeDiscount } from '@/lib/marketing/rules'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
@@ -38,7 +36,7 @@ const setRule = (kind: 'cart' | 'wishlist', over: Partial<typeof s.reminderRules
 
 let inStock: string
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   const [cat] = await db.insert(s.categories).values({ name: 'ملابس', slug: 'clothes' }).returning()
   const mk = (num: string, stock: number) => db.insert(s.products).values({ productNumber: num, name: num, slug: num.toLowerCase(), categoryId: cat.id, price: 100, stock, description: 'وصف المنتج الطويل' })
   await mk('RM-IN', 9)

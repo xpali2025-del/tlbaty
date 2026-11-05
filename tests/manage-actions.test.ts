@@ -1,16 +1,15 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq, sql } from 'drizzle-orm'
 import type { PgTable } from 'drizzle-orm/pg-core'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { CACHE_TAGS } from '@/lib/cache-tags'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
 import { unwrapAll } from '@/lib/action-result'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const mocks = vi.hoisted(() => ({
   revalidateTag: vi.fn(),
   revalidatePath: vi.fn(),
@@ -45,7 +44,7 @@ let categoryId: string
 let brandId: string
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   await importCatalog(db, seed, { resolveImage: async (p) => p })
   const cat = (await rows(s.categories)).find((c) => c.slug === 'accessories')!
   categoryId = cat.id

@@ -1,15 +1,14 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq, sql } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const auth = vi.hoisted(() => vi.fn(async (_s?: string) => {}))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
@@ -49,7 +48,7 @@ const topupReq = (customerId: string, over: Partial<Parameters<typeof requestTop
 const code = async (p: Promise<unknown>) => (await p.then(() => null, (e: unknown) => e)) as InstanceType<typeof WalletError> | null
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   await importCatalog(db, seed, { resolveImage: async (p) => p })
 })
 beforeEach(async () => { vi.clearAllMocks(); await db.update(s.products).set({ stock: 100 }) })

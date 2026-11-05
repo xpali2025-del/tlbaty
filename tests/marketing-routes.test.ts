@@ -1,15 +1,13 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { DEFAULT_REMINDER_RULES } from '@/lib/marketing/rules'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 process.env.CRON_SECRET = 'c'.repeat(32)
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const session = vi.hoisted(() => ({ customerId: null as string | null }))
 const auth = vi.hoisted(() => vi.fn(async (_s?: string) => {}))
 vi.mock('@/lib/db/client', () => ({ db }))
@@ -26,7 +24,7 @@ const { getAdminMarketing } = await import('@/lib/admin-marketing')
 let a: string
 let b: string
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   a = (await db.insert(s.customers).values({ publicId: 'MR_A', phone: '967770000301', marketingOptIn: true }).returning())[0].id
   b = (await db.insert(s.customers).values({ publicId: 'MR_B', phone: '967770000302', marketingOptIn: true }).returning())[0].id
 })

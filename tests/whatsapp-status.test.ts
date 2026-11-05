@@ -1,17 +1,15 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 const { checkWorker, getWhatsappStatus } = await import('@/lib/whatsapp-status')
 
 const reply = (body: unknown, ok = true) => (async () => ({ ok, json: async () => body })) as unknown as typeof fetch
 
-beforeAll(async () => { await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') }) })
+beforeAll(async () => { await testDb.migrate() })
 
 describe('checkWorker', () => {
   it('reports unconfigured, ready, not ready and unreachable', async () => {

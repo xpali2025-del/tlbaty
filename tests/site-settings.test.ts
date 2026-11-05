@@ -1,14 +1,12 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { SITE_CONFIG } from '@/lib/site'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
@@ -29,7 +27,7 @@ const form = (f: Record<string, string>) => {
 }
 const both = { codEnabled: 'true', transferEnabled: 'true' }
 
-beforeAll(async () => { await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') }) })
+beforeAll(async () => { await testDb.migrate() })
 beforeEach(async () => { await db.delete(s.siteSettings) })
 
 describe('mergeSiteConfig', () => {

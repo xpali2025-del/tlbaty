@@ -1,12 +1,10 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 
 const { getAdminOrdersPage, getAdminOrderStats, EMPTY_ORDER_STATS } = await import('@/lib/admin-orders')
@@ -24,7 +22,7 @@ async function mk(over: Partial<typeof s.orders.$inferInsert> & { orderNumber: s
 }
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   c1 = (await db.insert(s.customers).values({ publicId: 'CUS_ONE', phone: '967781111111' }).returning())[0]
   const cs = await db.insert(s.couriers).values([{ name: 'أحمد المندوب', phone: '700' }, { name: 'بدر', status: 'suspended' }]).returning()
   ;[courierA, courierB] = cs

@@ -1,12 +1,10 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const session = vi.hoisted(() => ({ customerId: null as string | null }))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('@/lib/otp/session', () => ({
@@ -21,7 +19,7 @@ const row = async (id: string) => (await db.select().from(s.customers).where(eq(
 let a: string
 let b: string
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   a = (await db.insert(s.customers).values({ publicId: 'MK_A', phone: '967770000201' }).returning())[0].id
   b = (await db.insert(s.customers).values({ publicId: 'MK_B', phone: '967770000202' }).returning())[0].id
 })

@@ -1,15 +1,13 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { COMMON_SIZE_CHARTS, type SizeChart } from '@/lib/size-chart'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const auth = vi.hoisted(() => vi.fn(async (_s?: string) => {}))
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
@@ -35,7 +33,7 @@ const productForm = (slug: string, guide?: object) =>
   form({ name: `منتج ${slug}`, categoryId, price: '100', slug, sizes: JSON.stringify(['M', 'L']), ...(guide ? { sizeGuide: JSON.stringify(guide) } : {}) })
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   categoryId = (await db.insert(s.categories).values({ name: 'ملابس', slug: 'clothes' }).returning())[0].id
 })
 

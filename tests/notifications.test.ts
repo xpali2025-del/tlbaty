@@ -1,11 +1,9 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const mocks = vi.hoisted(() => ({
   revalidateTag: vi.fn(),
   revalidatePath: vi.fn(),
@@ -32,7 +30,7 @@ const iso = (ms: number) => new Date(Date.now() + ms).toISOString()
 const HOUR = 3_600_000
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
 })
 beforeEach(async () => {
   vi.clearAllMocks()

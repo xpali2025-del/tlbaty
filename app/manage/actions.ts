@@ -123,25 +123,14 @@ async function saveProductImpl(id: string | null, form: FormData): Promise<SaveP
   const mainKey = newImageKey(form, "imageKey")
   const addedKeys = newImageKeys(form, "newImageKeys")
   const keptRefs = json<string[]>(form, "keptImages", [])
-  // قراءات التحقق مستقلة: تُرسل معاً (كل نداء للقاعدة ذهاب وإياب كامل، وعبر الـ pooler اثنان).
-  const [[category], [sub], [brand], [chart]] = await Promise.all([
-    db.select({ name: categories.name, slug: categories.slug }).from(categories).where(eq(categories.id, categoryId)).limit(1),
-    subSlug
-      ? db
-          .select({ id: subcategories.id, name: subcategories.name, slug: subcategories.slug })
-          .from(subcategories)
-          .where(and(eq(subcategories.categoryId, categoryId), eq(subcategories.slug, subSlug)))
-          .limit(1)
-      : Promise.resolve([]),
-    brandId ? db.select({ name: brands.name }).from(brands).where(eq(brands.id, brandId)).limit(1) : Promise.resolve([]),
-    sizeChartId ? db.select({ id: sizeCharts.id }).from(sizeCharts).where(eq(sizeCharts.id, sizeChartId)).limit(1) : Promise.resolve([]),
-  ])
-  if (!category) throw new Error("القسم غير موجود")
-  if (brandId && !brand) throw new Error("البراند غير موجود")
-  if (sizeChartId && !chart) throw new Error("جدول المقاسات المختار غير موجود")
-  const subcategoryId = sub?.id ?? null
-
-  const base = {
+  // نتائج قراءات التحقق (القسم والقسم الفرعي والبراند وجدول المقاسات): تُقرأ داخل المعاملة مع قراءتَي القفل، فتمر الست في
+  // رحلة واحدة إلى القاعدة (على اتصال المعاملة نفسه، لا اتصالات أخرى من المجمّع، فلا تعليق إن امتلأ المجمّع).
+  type RefRows = [{ name: string; slug: string }[], { id: string; name: string; slug: string }[], { name: string }[], { id: string }[]]
+  let category!: RefRows[0][number]
+  let sub: RefRows[1][number] | undefined
+  let brand: RefRows[2][number] | undefined
+  let base!: ReturnType<typeof makeBase>
+  const makeBase = (subcategoryId: string | null) => ({
     name,
     slug,
     description: parsed.fields.description,
@@ -163,7 +152,7 @@ async function saveProductImpl(id: string | null, form: FormData): Promise<SaveP
     customSizeChart,
     keywords: parsed.fields.keywords,
     updatedAt: new Date(),
-  }
+  })
 
   const removed: (string | null)[] = []
   const nextVariants = trackVariants ? parsed.variants : null
@@ -192,23 +181,46 @@ async function saveProductImpl(id: string | null, form: FormData): Promise<SaveP
       let sameColors = false
       // المتغيّرات تُقفل قبل المنتج، بنفس ترتيب إنشاء الطلب (متغيّرات ← منتج) فلا يتعارض الحفظ مع طلب متزامن.
       // القراءتان تُرسلان معاً (تُنفَّذان في الخادم بترتيب الإرسال نفسه) فتوفّران ذهاباً وإياباً.
-      const [lockedVariants, [existing]] = productId
-        ? await Promise.all([
-            tx.select().from(productVariants).where(eq(productVariants.productId, productId)).for("update"),
-            tx
-              .select({
-                tags: products.tags,
-                mainImageKey: products.mainImageKey,
-                productNumber: products.productNumber,
-                version: products.version,
-                imageKeys: sql<string[]>`coalesce((select array_agg(${productImages.imageKey} order by ${productImages.sortOrder}, ${productImages.id}) from ${productImages} where ${productImages.productId} = ${productId}), '{}')`,
-                colors: sql<{ name: string; hex: string }[]>`coalesce((select json_agg(json_build_object('name', ${productColors.name}, 'hex', ${productColors.hex}) order by ${productColors.sortOrder}, ${productColors.id}) from ${productColors} where ${productColors.productId} = ${productId}), '[]')`,
-              })
-              .from(products)
-              .where(eq(products.id, productId))
-              .for("update"),
-          ])
-        : [[], []]
+      const refReads = Promise.all([
+        tx.select({ name: categories.name, slug: categories.slug }).from(categories).where(eq(categories.id, categoryId)).limit(1),
+        subSlug
+          ? tx
+              .select({ id: subcategories.id, name: subcategories.name, slug: subcategories.slug })
+              .from(subcategories)
+              .where(and(eq(subcategories.categoryId, categoryId), eq(subcategories.slug, subSlug)))
+              .limit(1)
+          : Promise.resolve([]),
+        brandId ? tx.select({ name: brands.name }).from(brands).where(eq(brands.id, brandId)).limit(1) : Promise.resolve([]),
+        sizeChartId ? tx.select({ id: sizeCharts.id }).from(sizeCharts).where(eq(sizeCharts.id, sizeChartId)).limit(1) : Promise.resolve([]),
+      ])
+      const [refs, [lockedVariants, [existing]]] = await Promise.all([
+        refReads,
+        productId
+          ? Promise.all([
+              tx.select().from(productVariants).where(eq(productVariants.productId, productId)).for("update"),
+              tx
+                .select({
+                  tags: products.tags,
+                  mainImageKey: products.mainImageKey,
+                  productNumber: products.productNumber,
+                  version: products.version,
+                  imageKeys: sql<string[]>`coalesce((select array_agg(${productImages.imageKey} order by ${productImages.sortOrder}, ${productImages.id}) from ${productImages} where ${productImages.productId} = ${productId}), '{}')`,
+                  colors: sql<{ name: string; hex: string }[]>`coalesce((select json_agg(json_build_object('name', ${productColors.name}, 'hex', ${productColors.hex}) order by ${productColors.sortOrder}, ${productColors.id}) from ${productColors} where ${productColors.productId} = ${productId}), '[]')`,
+                })
+                .from(products)
+                .where(eq(products.id, productId))
+                .for("update"),
+            ])
+          : Promise.resolve([[], []] as [never[], never[]]),
+      ])
+      const [[c], [s], [b], [chart]] = refs as RefRows
+      if (!c) throw new Error("القسم غير موجود")
+      if (brandId && !b) throw new Error("البراند غير موجود")
+      if (sizeChartId && !chart) throw new Error("جدول المقاسات المختار غير موجود")
+      category = c
+      sub = s
+      brand = b
+      base = makeBase(s?.id ?? null)
       const applied = applyVariantStock(lockedVariants, nextVariants)
       const stock = applied?.total ?? null
       let row: typeof products.$inferSelect

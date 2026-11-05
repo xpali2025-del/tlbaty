@@ -1,15 +1,13 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { availableFor, colorInStock, firstAvailable, isVariantTracked, lowStockMessage, normalizeVariantKey, sizeInStock } from '@/lib/variant-stock'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: () => unknown) => fn, revalidateTag: vi.fn(), revalidatePath: vi.fn() }))
 vi.mock('@/lib/manage-auth', () => ({ assertManagePermission: async () => {}, assertManageAuthenticated: async () => {}, getManageUsername: () => 'odoo', getManageSessionUser: async () => 'مدير' }))
@@ -39,7 +37,7 @@ const reset = async (rows: [string, string, number][]) => {
 }
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   const [cat] = await db.insert(s.categories).values({ name: 'ملابس', slug: 'clothes' }).returning()
   const [p] = await db.insert(s.products).values({ productNumber: 'VAR-001', name: 'قميص', slug: 'shirt', categoryId: cat.id, price: 100, description: 'وصف المنتج الطويل' }).returning()
   productId = p.id

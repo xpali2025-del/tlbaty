@@ -1,8 +1,6 @@
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { count, eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { importCatalog, loadSeedData } from '../scripts/migration/import-catalog'
@@ -11,7 +9,8 @@ process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
 process.env.PAYMENT_PROOF_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64')
 Object.assign(process.env, { R2_ACCOUNT_ID: 'a', R2_ACCESS_KEY_ID: 'b', R2_SECRET_ACCESS_KEY: 'c', R2_PROOFS_BUCKET: 'proofs' })
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const m = vi.hoisted(() => ({
   customer: null as null | { id: string; publicId: string; phone: string },
   put: vi.fn(async (_k: string, _b: Buffer) => {}),
@@ -51,7 +50,7 @@ const stored = async (id: string) => (await db.select().from(s.orders).where(eq(
 const orderCount = async () => (await db.select({ n: count() }).from(s.orders))[0].n
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
   await importCatalog(db, seed, { resolveImage: async (p) => p })
   const [c] = await db.insert(s.customers).values({ publicId: 'CUS_RT', phone: '967781234567' }).returning()
   m.customer = { id: c.id, publicId: c.publicId, phone: c.phone }

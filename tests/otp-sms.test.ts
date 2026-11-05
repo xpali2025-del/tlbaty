@@ -1,11 +1,9 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 vi.mock('@/lib/db/client', () => ({ db }))
 
 const { smsProvider, buildSmsText, isSmsConfigured } = await import('@/lib/otp/providers/sms')
@@ -32,7 +30,7 @@ async function setChannel(otpChannel: 'whatsapp' | 'sms' | 'whatsapp_sms') {
 }
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
 })
 beforeEach(() => {
   vi.stubEnv('SMS_GATE_USERNAME', 'user')

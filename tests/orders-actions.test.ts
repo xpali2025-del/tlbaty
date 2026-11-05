@@ -1,14 +1,12 @@
-import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/pglite'
-import { migrate } from 'drizzle-orm/pglite/migrator'
+import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'
 import { unwrapAll } from '@/lib/action-result'
 
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test'
-const db = drizzle(new PGlite())
+const testDb = await openTestDb()
+const db = testDb.db
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(async () => {}),
   deletePaymentProof: vi.fn(async (_k: string) => {}),
@@ -29,7 +27,7 @@ const get = async (id: string) => (await db.select().from(s.orders).where(eq(s.o
 const UNKNOWN = '00000000-0000-4000-8000-000000000000'
 
 beforeAll(async () => {
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, '../drizzle') })
+  await testDb.migrate()
 })
 beforeEach(() => vi.clearAllMocks())
 
