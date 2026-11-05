@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import type { SaveJob } from "./core"
 import { setInstantSave, useInstantSave } from "./instant-save"
+import { isUnexplainedError } from "./errors"
 import { discardJob, getSaveQueue } from "./queue"
 
 // واجهة الحفظ الفوري المشتركة بين الشاشات: شارة الحالة على العنصر، تفاصيل المشكلة، ومفتاح الرجوع.
@@ -24,6 +25,13 @@ export function SaveBadge({ job }: { job: SaveJob }) {
     return (
       <Badge variant="outline" className="gap-1 border-green-600 text-green-700 dark:text-green-400" {...base}>
         <Check className="h-3 w-3" /> تم الحفظ
+      </Badge>
+    )
+  }
+  if (job.state === "retrying" && job.errorKind === "server") {
+    return (
+      <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700 dark:text-amber-400" {...base}>
+        <Loader2 className="h-3 w-3 animate-spin" /> إعادة المحاولة…
       </Badge>
     )
   }
@@ -60,10 +68,26 @@ export function SaveProblem({ job, onKeepMine, onTakeTheirs }: { job: SaveJob; o
       </div>
     )
   }
+  // ينتظر محاولة أخرى: نعرض آخر خطأ فعلي ليعرف المدير هل هو انقطاع حقيقي أم شيء آخر
+  if (job.state === "retrying") {
+    return job.error ? (
+      <p className="w-full border-t pt-2 text-xs text-muted-foreground" data-testid="save-last-error">
+        آخر خطأ: {job.error}
+      </p>
+    ) : null
+  }
   if (job.state === "failed") {
     return (
       <div className="flex w-full flex-wrap items-center gap-2 border-t pt-2 text-sm" data-testid="save-problem">
-        <p className="flex-1 text-destructive">{job.offline ? "تعذّر الاتصال بالخادم، وحفظك محفوظ في هذا المتصفح." : job.error}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-destructive">{job.offline ? "تعذّر إرسال الحفظ، وهو محفوظ في هذا المتصفح." : job.error}</p>
+          {job.offline && job.error ? <p className="text-xs text-muted-foreground">آخر خطأ: {job.error}</p> : null}
+          {!job.offline && isUnexplainedError(job.error) ? (
+            <p className="text-xs text-muted-foreground">
+              السبب غير واضح من الخادم. حدّث الصفحة (قد يكون هناك إصدار جديد)، وتأكد من اكتمال ترحيلات قاعدة البيانات في /api/diagnose، ثم أعد المحاولة.
+            </p>
+          ) : null}
+        </div>
         <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => getSaveQueue().retry(job.id)}>
           <RotateCcw className="h-3.5 w-3.5" /> أعد المحاولة
         </Button>

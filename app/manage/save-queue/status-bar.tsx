@@ -20,7 +20,10 @@ export function SaveStatusBar({ onShowProblems }: { onShowProblems: (screen: str
       )}
       {waiting.length > 0 && (
         <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400" data-testid="save-status-waiting">
-          <WifiOff className="h-4 w-4" /> انقطع الاتصال، {waiting.length} بانتظار الإرسال (لن يضيع شيء)
+          <WifiOff className="h-4 w-4" />{" "}
+          {waiting.every((j) => j.errorKind === "server")
+            ? `تعذّر إرسال ${waiting.length}، تُعاد المحاولة تلقائياً (لن يضيع شيء)`
+            : `انقطع الاتصال، ${waiting.length} بانتظار الإرسال (لن يضيع شيء)`}
         </span>
       )}
       {problems.length > 0 && (

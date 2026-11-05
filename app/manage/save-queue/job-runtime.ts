@@ -1,5 +1,5 @@
 import { registerPreUpload, releasePreUpload, type PreUpload } from "@/lib/storage/preupload-registry"
-import type { JobEntry } from "./core"
+import type { JobEntry, SaveJob } from "./core"
 
 // ما تشترك فيه كل شاشات الحفظ الفوري: ما يبقى في الذاكرة لكل عملية، وتحويل النموذج إلى حقول وإعادته.
 
@@ -63,4 +63,35 @@ export function releaseLive(jobId: string) {
   releasePreUpload(entry.extra?.videoPre)
   void entry.extra?.posterPromise?.then((poster) => releasePreUpload(poster))
   for (const url of entry.previews) URL.revokeObjectURL(url)
+}
+
+/**
+ * عملية محمَّلة من جلسة سابقة (بعد تحديث الصفحة) تحمل في عنصرها المتفائل روابط معاينة blob: لم تعد صالحة (تظهر صورة مكسورة).
+ * تُستبدل بروابط جديدة من الملفات المحفوظة في العملية نفسها (وبلا ملف: تُحذف فتظهر الأيقونة الافتراضية).
+ */
+export function restoreJobPreviews<T>(job: SaveJob<T>): SaveJob<T> {
+  const item = JSON.parse(JSON.stringify(job.optimistic ?? null)) as Record<string, unknown> | null
+  if (!item || typeof item !== "object") return job
+  const filesOf = (...names: string[]) => job.entries.filter(([n, v]) => names.includes(n) && typeof v !== "string").map(([, v]) => v as File)
+  const [main] = filesOf("image", "avatar", "logo")
+  const gallery = filesOf("newImages")
+  const urls: string[] = []
+  const make = (file?: File) => {
+    if (!file) return undefined
+    const url = URL.createObjectURL(file)
+    urls.push(url)
+    return url
+  }
+  const isBlob = (v: unknown): v is string => typeof v === "string" && v.startsWith("blob:")
+  for (const key of ["image", "avatar"]) if (isBlob(item[key])) item[key] = make(main)
+  if (Array.isArray(item.images)) {
+    let next = 0
+    item.images = (item.images as { url?: unknown }[]).flatMap((img) => {
+      if (!isBlob(img?.url)) return [img]
+      const url = make(gallery[next++])
+      return url ? [{ ...img, url }] : []
+    })
+  }
+  if (urls.length) live.set(job.id, { pres: [], previews: urls })
+  return { ...job, optimistic: item as T }
 }
