@@ -26,8 +26,10 @@ export type SaveJob<T = unknown> = {
   optimistic: T
   state: JobState
   attempts: number
-  /** آخر خطأ، ليراه المدير على العنصر الأحمر. */
+  /** آخر خطأ، ليراه المدير على العنصر (الأحمر، أو المنتظر للمحاولة). */
   error?: string
+  /** نوع آخر خطأ مؤقت: network = انقطاع اتصال أو رفع، server = خطأ من الخادم (قاعدة بيانات، إصدار قديم للصفحة…). */
+  errorKind?: "network" | "server"
   /** الفشل سببه الاتصال (يُستأنف تلقائياً عند عودته). */
   offline?: boolean
   /** وقت المحاولة التالية حين تكون الحالة retrying. */
@@ -39,6 +41,8 @@ export type SaveJob<T = unknown> = {
 
 /** `item` غائب = الحفظ نجح والقائمة تتحدّث من البيانات المعاد تحميلها (انظر notifyData). */
 export type ExecResult<T> = { status: "saved"; item?: T } | { status: "conflict"; current: T | null }
+
+export type ErrorKind = "network" | "server" | "permanent"
 
 export type ScreenExecutor<T = unknown> = {
   execute: (job: SaveJob<T>) => Promise<ExecResult<T>>
@@ -88,8 +92,15 @@ export const MAX_PARALLEL = 3
 export type QueueOptions = {
   store: JobStore
   executors: Record<string, ScreenExecutor<unknown>>
-  /** هل هذا الخطأ مؤقت (شبكة/خادم) فيُعاد، أم نهائي فيُعرض؟ */
-  isTransient: (error: unknown) => boolean
+  /**
+   * تصنيف الخطأ: network (انقطاع: يُعاد بلا حد حتى يعود الاتصال)، server (خطأ تقني من الخادم: يُعاد مرتين فقط ثم يُعرض بسببه،
+   * فلا يبدو الخلل الدائم «انقطاع اتصال»)، permanent (رفض: يُعرض فوراً).
+   */
+  classify: (error: unknown) => ErrorKind
+  /** عدد إعادات الأخطاء التقنية من الخادم قبل عرضها (الافتراضي 2). */
+  serverRetries?: number
+  /** يُطبَّق على كل عملية محمَّلة من الجلسة السابقة (مثلاً: روابط معاينة الصور لم تعد صالحة). */
+  restore?: (job: SaveJob) => SaveJob
   timers?: Timers
   backoff?: number[]
   maxParallel?: number
@@ -147,7 +158,8 @@ export class SaveQueue {
         if (known.has(job.id)) continue
         // ما كان يعمل أو ينتظر محاولة عند إغلاق الصفحة يعود للطابور. الفاشل بسبب الاتصال يُجرَّب ثانية. الرفض والتعارض يبقيان للمدير.
         const restart = job.state === "running" || job.state === "retrying" || (job.state === "failed" && job.offline)
-        this.jobs.push(restart ? { ...job, state: "queued", attempts: 0, nextRetryAt: undefined } : job)
+        const next = restart ? { ...job, state: "queued" as const, attempts: 0, nextRetryAt: undefined } : job
+        this.jobs.push(this.options.restore ? this.options.restore(next) : next)
       }
       this.emit()
       this.pump()
@@ -309,18 +321,24 @@ export class SaveQueue {
     const job = this.find(id)
     if (!job) return
     const message = error instanceof Error ? error.message : "تعذّر الحفظ"
-    if (!this.options.isTransient(error)) {
-      this.update(id, { state: "failed", error: message, offline: false })
+    const kind = this.options.classify(error)
+    if (kind === "permanent") {
+      this.update(id, { state: "failed", error: message, offline: false, errorKind: undefined })
       return
     }
     const attempts = job.attempts + 1
+    if (kind === "server" && attempts > (this.options.serverRetries ?? 2)) {
+      // خطأ تقني متكرر من الخادم ليس انقطاع اتصال: يُعرض بسببه مع «أعد المحاولة» بدل أن يبدو أنه ينتظر الاتصال.
+      this.update(id, { state: "failed", attempts, error: message, offline: false, errorKind: "server" })
+      return
+    }
     if (attempts > this.backoff.length) {
       // استُنفد التباعد: تنتظر العملية عودة الاتصال أو ضغطة «أعد المحاولة».
-      this.update(id, { state: "failed", attempts, error: message, offline: true })
+      this.update(id, { state: "failed", attempts, error: message, offline: true, errorKind: "network" })
       return
     }
     const delay = this.backoff[attempts - 1]
-    this.update(id, { state: "retrying", attempts, error: message, nextRetryAt: this.timers.now() + delay })
+    this.update(id, { state: "retrying", attempts, error: message, errorKind: kind, nextRetryAt: this.timers.now() + delay })
     this.timersById.set(
       id,
       this.timers.setTimeout(() => {

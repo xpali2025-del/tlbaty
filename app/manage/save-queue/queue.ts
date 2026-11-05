@@ -3,9 +3,9 @@
 import { useEffect, useSyncExternalStore } from "react"
 import type { AdminProduct } from "@/lib/admin"
 import { MemoryJobStore, SaveQueue, type SaveJob } from "./core"
-import { isTransientSaveError } from "./errors"
+import { classifySaveError } from "./errors"
 import { IndexedDbJobStore } from "./idb-store"
-import { releaseLive } from "./job-runtime"
+import { releaseLive, restoreJobPreviews } from "./job-runtime"
 import { PRODUCT_SCREEN, productExecutor } from "./product-job"
 import { SCREEN_SPECS, screenExecutor, type ScreenSpec } from "./screens"
 
@@ -24,7 +24,8 @@ export function getSaveQueue(): SaveQueue {
         [PRODUCT_SCREEN]: productExecutor((item) => productSaved(item)) as never,
         ...Object.fromEntries(Object.values(SCREEN_SPECS).map((spec) => [spec.screen, screenExecutor(spec as unknown as ScreenSpec<{ _id: string }>)])),
       },
-      isTransient: isTransientSaveError,
+      classify: classifySaveError,
+      restore: restoreJobPreviews,
     })
     if (typeof window !== "undefined") window.addEventListener("online", () => queue?.online())
   }

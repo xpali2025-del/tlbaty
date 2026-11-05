@@ -28,8 +28,8 @@ function setup(execute: (job: SaveJob<Item>) => Promise<ExecResult<Item>>, store
     onSaved: (_job, item) => void (item && saved.push(item)),
     rebase: (job, item) => ({ ...job, entries: job.entries.map(([k, v]) => (k === 'expectedVersion' ? [k, String(item.version)] : [k, v])) as SaveJob['entries'] }),
   }
-  const isTransient = (e: unknown) => e instanceof TypeError || (e instanceof Error && e.message === 'transient')
-  const queue = new SaveQueue({ store, executors: { products: executor as ScreenExecutor<unknown> }, isTransient })
+  const classify = (e: unknown): 'network' | 'server' | 'permanent' => (e instanceof TypeError ? 'network' : e instanceof Error && e.message === 'server' ? 'server' : 'permanent')
+  const queue = new SaveQueue({ store, executors: { products: executor as ScreenExecutor<unknown> }, classify })
   return { queue, saved, store }
 }
 
@@ -179,6 +179,41 @@ describe('save queue: failures', () => {
     await flush()
     second.queue.remove(other.id)
     expect(second.queue.getSnapshot()).toHaveLength(0)
+  })
+})
+
+describe('save queue: server errors are not shown as a lost connection', () => {
+  it('retries a technical server error twice, then shows it as a failure with its cause (not "waiting for the connection")', async () => {
+    const execute = vi.fn(async (): Promise<ExecResult<Item>> => {
+      throw new Error('server')
+    })
+    const { queue } = setup(execute)
+    const job = queue.enqueue(input())
+    await flush()
+    expect(queue.getSnapshot()[0]).toMatchObject({ state: 'retrying', errorKind: 'server' })
+    await vi.advanceTimersByTimeAsync(1000)
+    await flush()
+    await vi.advanceTimersByTimeAsync(2000)
+    await flush()
+    expect(execute).toHaveBeenCalledTimes(3) // the first try and two retries
+    const failed = queue.getSnapshot().find((j) => j.id === job.id)!
+    expect(failed).toMatchObject({ state: 'failed', offline: false, errorKind: 'server', error: 'server' })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(execute).toHaveBeenCalledTimes(3) // not retried on its own after that
+  })
+
+  it('a connection failure still waits without a limit for the connection to return', async () => {
+    const execute = vi.fn(async (): Promise<ExecResult<Item>> => {
+      throw new TypeError('Failed to fetch')
+    })
+    const { queue } = setup(execute)
+    queue.enqueue(input())
+    await flush()
+    for (const wait of [1000, 2000, 4000, 8000, 16000]) {
+      await vi.advanceTimersByTimeAsync(wait)
+      await flush()
+    }
+    expect(queue.getSnapshot()[0]).toMatchObject({ state: 'failed', offline: true, errorKind: 'network' })
   })
 })
 

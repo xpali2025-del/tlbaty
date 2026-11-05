@@ -4,9 +4,9 @@ import { GENERIC_ACTION_ERROR } from '@/lib/action-result'
 import { ImageUploadError } from '@/lib/storage/upload-transport'
 
 vi.mock('@/app/manage/client-actions', () => ({ saveProduct: vi.fn() }))
-const { isTransientSaveError } = await import('@/app/manage/save-queue/errors')
+const { classifySaveError, isUnexplainedError } = await import('@/app/manage/save-queue/errors')
 const { buildProductJob, optimisticProduct, rebaseProductJob, isPendingId } = await import('@/app/manage/save-queue/product-job')
-const { formEntries } = await import('@/app/manage/save-queue/job-runtime')
+const { formEntries, restoreJobPreviews, releaseLive } = await import('@/app/manage/save-queue/job-runtime')
 
 const category = { _id: '11111111-1111-4111-8111-111111111111', name: 'فساتين', slug: 'dresses', subcategories: [] } as unknown as AdminCategory
 const brand = { _id: '22222222-2222-4222-8222-222222222222', name: 'نايك' } as unknown as AdminBrand
@@ -21,18 +21,49 @@ const formOf = (fields: Record<string, string | File | File[]>) => {
 }
 const base = { name: 'جديد', categoryId: category._id, price: '12.5', slug: 'new-one' }
 
-describe('which errors are retried', () => {
-  it('retries connection, timeout, storage 5xx and the generic server error; shows everything else', () => {
-    expect(isTransientSaveError(new TypeError('Failed to fetch'))).toBe(true)
-    expect(isTransientSaveError(new ImageUploadError('network', 'x'))).toBe(true)
-    expect(isTransientSaveError(new ImageUploadError('timeout', 'x'))).toBe(true)
-    expect(isTransientSaveError(new ImageUploadError('http', 'x', 503))).toBe(true)
-    expect(isTransientSaveError(new ImageUploadError('http', 'x', 429))).toBe(true)
-    expect(isTransientSaveError(new ImageUploadError('http', 'x', 403))).toBe(false)
-    expect(isTransientSaveError(new Error('An unexpected response was received from the server.'))).toBe(true)
-    expect(isTransientSaveError(new Error(GENERIC_ACTION_ERROR))).toBe(true)
-    expect(isTransientSaveError(new Error('اسم المنتج مطلوب'))).toBe(false)
-    expect(isTransientSaveError(new Error('القسم غير موجود'))).toBe(false)
+describe('how a save error is classified', () => {
+  it('connection and upload-from-browser failures wait for the connection; technical server errors are retried twice then shown; everything we say in Arabic is shown at once', () => {
+    expect(classifySaveError(new TypeError('Failed to fetch'))).toBe('network')
+    expect(classifySaveError(new ImageUploadError('network', 'x'))).toBe('network')
+    expect(classifySaveError(new ImageUploadError('timeout', 'x'))).toBe('network')
+    expect(classifySaveError(new ImageUploadError('http', 'x', 503))).toBe('server')
+    expect(classifySaveError(new ImageUploadError('http', 'x', 429))).toBe('server')
+    expect(classifySaveError(new ImageUploadError('http', 'x', 403))).toBe('permanent')
+    expect(classifySaveError(new Error('An unexpected response was received from the server.'))).toBe('server')
+    expect(classifySaveError(new Error(GENERIC_ACTION_ERROR))).toBe('server')
+    expect(classifySaveError(new Error('اسم المنتج مطلوب'))).toBe('permanent')
+    expect(classifySaveError(new Error('القسم غير موجود'))).toBe('permanent')
+  })
+
+  it('knows which messages explain nothing, so the screen adds a hint', () => {
+    expect(isUnexplainedError(GENERIC_ACTION_ERROR)).toBe(true)
+    expect(isUnexplainedError('Failed to find Server Action "abc"')).toBe(true)
+    expect(isUnexplainedError(undefined)).toBe(true)
+    expect(isUnexplainedError('هذا الرابط (slug) مستخدم لمنتج آخر')).toBe(false)
+  })
+})
+
+describe('previews after a reload', () => {
+  it('replaces dead blob: links of a restored operation with fresh ones from its saved files, and drops those without a file', () => {
+    const file = new File([new Uint8Array(4)], 'a.webp', { type: 'image/webp', lastModified: 1 })
+    const gallery = new File([new Uint8Array(4)], 'g.webp', { type: 'image/webp', lastModified: 2 })
+    const job = {
+      id: 'j1', screen: 'products', entityId: 'e', label: 'x', requestId: 'r', state: 'queued', attempts: 0, createdAt: 1,
+      entries: [['image', file], ['newImages', gallery], ['name', 'x']],
+      optimistic: { _id: 'e', image: 'blob:https://old/dead-main', images: [{ ref: 'products/k.webp', url: 'https://cdn/k.webp' }, { ref: 'preview:1', url: 'blob:https://old/dead-1' }, { ref: 'preview:2', url: 'blob:https://old/dead-2' }] },
+    } as never
+    const restored = restoreJobPreviews(job) as { optimistic: { image?: string; images: { url: string }[] } }
+    expect(restored.optimistic.image).toMatch(/^blob:/)
+    expect(restored.optimistic.image).not.toContain('dead')
+    expect(restored.optimistic.images.map((i) => i.url)[0]).toBe('https://cdn/k.webp') // a saved image is untouched
+    expect(restored.optimistic.images).toHaveLength(2) // the second preview had no file left: removed, not shown broken
+    expect(restored.optimistic.images[1].url).toMatch(/^blob:/)
+    releaseLive('j1')
+  })
+
+  it('an operation without previews is returned unchanged', () => {
+    const job = { id: 'j2', screen: 'brands', entityId: 'e', label: 'x', requestId: 'r', state: 'queued', attempts: 0, createdAt: 1, entries: [], optimistic: { _id: 'e', name: 'x', image: 'https://cdn/a.webp' } } as never
+    expect((restoreJobPreviews(job) as { optimistic: { image: string } }).optimistic.image).toBe('https://cdn/a.webp')
   })
 })
 
