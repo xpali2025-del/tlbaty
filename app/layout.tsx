@@ -11,6 +11,7 @@ import { getCurrencySettings } from "@/lib/data"
 import { getSiteConfig, toPublicSiteConfig, type SiteConfig } from "@/lib/site-config"
 import { SiteConfigProvider } from "@/components/site-config-provider"
 import { CustomerSync } from "@/components/customer-sync"
+import { NavProgress } from "@/components/nav-progress"
 import "./globals.css"
 
 // صفحات المتجر ثابتة وتُحدَّث عند الطلب (ISR): كل قراءة للقاعدة مخزَّنة بوسوم (lib/db-cache.ts) وتُبطَل من لوحة الإدارة
@@ -209,6 +210,7 @@ export default async function RootLayout({
           <CartProvider>
             <WishlistProvider>
               <NotificationsProvider>
+                <NavProgress />
                 {children}
                 <CustomerSync />
                 <Toaster />
