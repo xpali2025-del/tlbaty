@@ -166,7 +166,7 @@ export function AdVideo({
   return (
     <div className={`relative col-span-full ${className ?? ""}`}>
       {href ? (
-        <Link prefetch={false} href={href} aria-label={title} className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <Link href={href} aria-label={title} className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {frame}
         </Link>
       ) : (

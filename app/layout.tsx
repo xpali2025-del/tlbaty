@@ -13,9 +13,10 @@ import { SiteConfigProvider } from "@/components/site-config-provider"
 import { CustomerSync } from "@/components/customer-sync"
 import "./globals.css"
 
-// إعدادات المتجر تُقرأ من قاعدة البيانات، لذلك يجب ألا يحاول Next.js توليد
-// التخطيط أو صفحة 404 أثناء البناء قبل توفر مخطط قاعدة البيانات كاملاً.
-export const dynamic = "force-dynamic"
+// صفحات المتجر ثابتة وتُحدَّث عند الطلب (ISR): كل قراءة للقاعدة مخزَّنة بوسوم (lib/db-cache.ts) وتُبطَل من لوحة الإدارة
+// (revalidateStore). فتُخدم الصفحة من الكاش القريب من العميل بلا رسم على الخادم، وتُجلب مسبقاً كاملة فيكون التنقل فورياً.
+// كانت هنا force-dynamic (تحايلاً على بناء قاعدة غير جاهزة): تجعل كل صفحة، حتى الثابتة، تُرسم على الخادم عند كل تنقل.
+// البناء الآن آمن بلا ذلك: خطأ القاعدة وقت البناء يجعل الصفحة ديناميكية لا يفشل البناء ولا يخبز بيانات فارغة (dbCached).
 
 const tajawal = Tajawal({
   subsets: ["arabic", "latin"],

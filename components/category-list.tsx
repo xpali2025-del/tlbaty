@@ -15,8 +15,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
           {categories.map((cat) => (
             <li key={cat.id}>
-              <Link prefetch={false}
-                href={`/category/${cat.slug}`}
+              <Link href={`/category/${cat.slug}`}
                 className="group flex items-center gap-4 rounded-2xl border border-border/70 bg-card p-3 shadow-[0_12px_35px_-30px_rgba(57,24,33,0.55)] transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_18px_40px_-26px_rgba(57,24,33,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="relative size-20 shrink-0 overflow-hidden rounded-2xl bg-secondary">

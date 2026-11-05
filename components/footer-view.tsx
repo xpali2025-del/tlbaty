@@ -81,8 +81,7 @@ export function FooterView({ categories }: { categories: FooterLink[] }) {
             <ul className="text-sm">
               {categories.map((link) => (
                 <li key={link.href}>
-                  <Link prefetch={false}
-                    href={link.href}
+                  <Link href={link.href}
                     className="inline-flex min-h-11 min-w-11 items-center -mx-2 px-2 text-footer-foreground/80 hover:text-footer-foreground hover:underline underline-offset-4 transition-colors"
                   >
                     {link.label}
@@ -98,8 +97,7 @@ export function FooterView({ categories }: { categories: FooterLink[] }) {
             <ul className="text-sm">
               {FOOTER_LINKS.important.map((link) => (
                 <li key={`${link.label}-${link.href}`}>
-                  <Link prefetch={false}
-                    href={link.href}
+                  <Link href={link.href}
                     className="inline-flex min-h-11 min-w-11 items-center -mx-2 px-2 text-footer-foreground/80 hover:text-footer-foreground hover:underline underline-offset-4 transition-colors"
                   >
                     {link.label}

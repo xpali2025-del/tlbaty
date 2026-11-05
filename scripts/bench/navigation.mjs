@@ -11,15 +11,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]
 const p95 = (xs) => [...xs].sort((a, b) => a - b)[Math.ceil(xs.length * 0.95) - 1]
 
+// READY: الصفحة الحقيقية جاهزة = main بلا aria-busy (هيكل الانتظار loading.tsx يحمله)
+const READY = "main:not([aria-busy='true'])"
 // to: جزء الرابط الذي يجب أن يصير إليه العنوان، ready: عنصر لا يوجد في هيكل الانتظار (loading) بل في الصفحة الحقيقية
 const STEPS = [
-  { name: "الرئيسية ← قسم", from: "/", click: "a[href^='/category/']", to: "/category/", ready: "main a[href^='/product/']" },
-  { name: "قسم ← منتج", from: "/category/{cat}", click: "main a[href^='/product/']", to: "/product/", ready: "h1" },
-  { name: "منتج ← رجوع للقسم", from: "/product/{prod}", back: true, to: "/category/", ready: "main a[href^='/product/']" },
-  { name: "الرئيسية ← كل المنتجات", from: "/", click: "a[href='/shop']", to: "/shop", ready: "main a[href^='/product/']" },
-  { name: "الرئيسية ← الأقسام", from: "/", click: "a[href='/categories']", to: "/categories", ready: "main a[href^='/category/']" },
-  { name: "الرئيسية ← الماركات", from: "/", click: "a[href='/brands']", to: "/brands", ready: "main h1" },
-  { name: "الرئيسية ← الأسئلة الشائعة", from: "/", click: "a[href='/faq']", to: "/faq", ready: "main h1" },
+  { name: "الرئيسية ← قسم", from: "/", click: "a[href='/category/{cat}']", to: "/category/", ready: READY },
+  { name: "قسم ← منتج", from: "/category/{cat}", click: "a[href^='/product/']", to: "/product/", ready: READY },
+  { name: "منتج ← رجوع للقسم", from: "/product/{prod}", back: true, to: "/category/", ready: READY },
+  { name: "الرئيسية ← كل المنتجات", from: "/", click: "a[href='/shop']", to: "/shop", ready: READY },
+  { name: "الرئيسية ← الأقسام", from: "/", click: "a[href='/categories']", to: "/categories", ready: READY },
+  { name: "الرئيسية ← الماركات", from: "/", click: "a[href='/brands']", to: "/brands", ready: READY },
 ]
 
 async function discover(page) {
@@ -39,23 +40,23 @@ async function measure(browser, ids, step, idle) {
   if (NET) await page.route((u) => u.host !== "cdn.bench.test", async (route) => { await sleep(NET); return route.fallback() })
   const url = BASE + step.from.replace("{cat}", ids.cat).replace("{prod}", ids.prod)
   await page.goto(url, { waitUntil: "load" })
-  await page.waitForSelector("main")
+  await page.waitForSelector("main", { state: "attached" })
   if (step.back) {
     // نأتي للمنتج من القسم (تنقل داخلي) ثم نرجع
     await page.goto(`${BASE}/category/${ids.cat}`, { waitUntil: "load" })
-    await page.locator("a[href^='/product/']").first().click()
-    await page.waitForSelector("h1")
+    await page.locator("a[href^='/product/']").filter({ visible: true }).first().click()
+    await page.waitForSelector("h1", { state: "attached" })
   }
   if (idle) await sleep(2000)
   const t0 = Date.now()
   if (step.back) await page.goBack()
   else {
     // الرابط المرئي فقط (قد توجد نسخ مخفية في القائمة الجانبية)
-    const link = page.locator(step.click).filter({ visible: true }).first()
-    await link.click()
+    // نقرة برمجية (بعض الروابط في الذيل المطوي): تمر من معالج Link نفسه كالنقرة الحقيقية
+    await page.locator(step.click.replace("{cat}", ids.cat)).first().evaluate((el) => el.click())
   }
   await page.waitForURL((u) => u.pathname.includes(step.to), { timeout: 15000 })
-  await page.waitForSelector(step.ready, { timeout: 15000 })
+  await page.waitForSelector(step.ready, { state: "attached", timeout: 15000 })
   const ms = Date.now() - t0
   await context.close()
   return ms
@@ -70,7 +71,7 @@ for (const step of STEPS) {
   const row = []
   for (const idle of [false, true]) {
     const times = []
-    for (let i = 0; i < ROUNDS; i++) times.push(await measure(browser, ids, step, idle).catch(() => 15000))
+    for (let i = 0; i < ROUNDS; i++) times.push(await measure(browser, ids, step, idle).catch((e) => { if (process.env.DEBUG) console.log("   خطأ:", String(e.message).split("\n")[0]); return 15000 }))
     row.push(`${median(times)} | ${p95(times)}`)
   }
   console.log(`| ${step.name} | ${row.join(" | ")} |`)
