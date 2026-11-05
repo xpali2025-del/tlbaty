@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@/lib/db/store'

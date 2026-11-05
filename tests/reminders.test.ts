@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { eq, sql } from 'drizzle-orm'
 import { openTestDb } from './helpers/test-db'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
