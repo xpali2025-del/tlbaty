@@ -56,3 +56,9 @@ FIXTURES=/tmp/fixtures ROUNDS=10 WARMUP=1 OUT=/tmp/results.json node scripts/ben
 فيديو الإعلان يحتاج `ad-test.mp4` في مجلد الصور: `ffmpeg -f lavfi -i testsrc=size=1200x600:rate=10 -t 3 -c:v libvpx-vp9 -b:v 300k -an $FIXTURES/ad-test.mp4`
 (متصفح Chromium المرفق لا يفك H.264، ويفك VP9 داخل MP4).
 سكربت القياس `admin-save.mjs` ينتظر الآن انتهاء الرفع المسبق قبل الضغط على «حفظ» (يقيس ما يلي الحفظ لمن اختار صوره قبله).
+
+## مكتبة الاتصال بقاعدة البيانات (المرحلة 6)
+- `db-driver.mjs`: مقارنة postgres.js وnode-postgres مباشرة عبر وسيط التأخير.
+- `storefront.mjs`: زمن صفحات المتجر (`PATHS` لتحديدها).
+- تشغيل الخادم بمكتبة بعينها: `DB_DRIVER=pg` (الافتراضي postgres.js). اختبارات الحزمة على Postgres حقيقي: `TEST_DB_DRIVER=pg|postgres TEST_DATABASE_URL=postgresql://USER:PASS@HOST:5432/postgres pnpm vitest run`.
+- ملاحظة: كابح تسجيل الدخول في الذاكرة (8 محاولات لكل اسم مستخدم): أعد تشغيل الخادم قبل كل تشغيل لفحوص المتصفح.
