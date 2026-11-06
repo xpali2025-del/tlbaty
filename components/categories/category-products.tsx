@@ -91,7 +91,7 @@ export function CategoryProducts({
           <p className="text-muted-foreground">لا توجد منتجات في هذا القسم حالياً</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-5">
+        <div className="grid grid-cols-2 gap-3 pb-7 md:grid-cols-3 md:gap-5 md:pb-0 lg:grid-cols-4">
           {gridItems.map((entry, i) =>
             entry.type === "ad" ? (
               <AdBanner key={`ad-${entry.value.id}-${i}`} ad={entry.value} />

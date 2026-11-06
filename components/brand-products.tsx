@@ -80,7 +80,7 @@ export function BrandProducts({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 pb-7 md:grid-cols-3 md:gap-5 md:pb-0 lg:grid-cols-4">
         {results.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}

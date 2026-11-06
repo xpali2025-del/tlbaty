@@ -33,7 +33,7 @@ export function ProductSection({
             <ArrowLeft className="size-4" aria-hidden="true" />
           </Link>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 md:gap-6">
+        <div className="grid grid-cols-2 gap-3 pb-7 sm:gap-4 md:grid-cols-3 md:gap-6 md:pb-0">
           {products.slice(0, limit).map(toCardProduct).map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
