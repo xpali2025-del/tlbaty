@@ -10,12 +10,15 @@ export const paymentStatus = store.enum('payment_status', [
 ])
 export const discountType = store.enum('discount_type', ['percent', 'fixed'])
 export const courierStatus = store.enum('courier_status', ['active', 'suspended'])
-export const customerStatus = store.enum('customer_status', ['active', 'blocked'])
+export const customerStatus = store.enum('customer_status', ['active', 'blocked', 'deleted'])
 export const manageUserRole = store.enum('manage_user_role', ['admin', 'manager', 'editor', 'operator'])
-export const otpPurpose = store.enum('otp_purpose', ['login', 'change_phone'])
+export const otpPurpose = store.enum('otp_purpose', ['login', 'change_phone', 'delete_account'])
 export const authEventType = store.enum('auth_event_type', [
   'otp_sent', 'otp_resent', 'otp_verified', 'otp_failed', 'otp_expired', 'rate_limited',
   'account_created', 'login', 'logout', 'logout_all', 'phone_changed',
+  'profile_completed', 'password_set', 'password_login', 'password_failed',
+  'puk_requested', 'puk_issued', 'puk_used', 'puk_failed', 'puk_revoked',
+  'deletion_requested', 'deletion_cancelled', 'account_deleted',
 ])
 export const notificationStatus = store.enum('notification_status', ['draft', 'published', 'archived'])
 export const notificationPriority = store.enum('notification_priority', ['normal', 'important'])

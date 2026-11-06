@@ -1,9 +1,8 @@
 import "server-only"
-import { db } from "@/lib/db/client"
-import { siteSettings } from "@/lib/db/store"
-import { OTP_PROVIDER } from "./config"
-import { DEFAULT_OTP_CHANNEL, isOtpChannel, type OtpChannel } from "./channel"
+import { getActiveMethod, legacyChannelFor } from "@/lib/auth/methods"
+import type { OtpChannel } from "./channel"
 import { smsProvider } from "./providers/sms"
+import { testSinkPath, testSinkProvider } from "./providers/test-sink"
 import { whatsappProvider } from "./providers/whatsapp"
 
 // نمط المزوّد: بقية المشروع تستدعي sendOtp فقط ولا تعرف المزوّد الفعلي.
@@ -38,28 +37,34 @@ export interface OtpProvider {
 const FALLBACK_WHATSAPP_TIMEOUT_MS = 8_000
 
 /**
- * قناة الإرسال المختارة في الإعدادات (تُقرأ من القاعدة بلا كاش فتسري فوراً).
- * إن تعذّرت القراءة نرجع لمتغير OTP_PROVIDER ثم واتساب، حتى لا يتعطل الدخول بسبب الإعداد.
+ * القناة القديمة المقابلة للطريقة الفعّالة (تبقى مصدّرة لمن يستوردها). المصدر الفعلي هو login_method
+ * (lib/auth/methods)، ويبقى otp_channel مزامَناً معه في القاعدة.
  */
 export async function getOtpChannel(): Promise<OtpChannel> {
-  try {
-    const [row] = await db.select({ c: siteSettings.otpChannel }).from(siteSettings).limit(1)
-    if (isOtpChannel(row?.c)) return row.c
-  } catch (error) {
-    // القاعدة غير متاحة: نكمل بالافتراضي لكن نسجّل السبب كي لا يمرّ تجاهل الإعداد بصمت.
-    console.error("[otp] channel setting unreadable, using default:", error instanceof Error ? error.message : error)
-  }
-  return isOtpChannel(OTP_PROVIDER) ? OTP_PROVIDER : DEFAULT_OTP_CHANNEL
+  return legacyChannelFor(await getActiveMethod())
 }
 
-/** يرسل الرمز حسب القناة المختارة؛ في وضع «واتساب ثم SMS» يجرّب SMS إن فشل واتساب. */
+/** يرسل الرمز حسب طريقة الدخول الفعّالة؛ في «واتساب ثم SMS» يجرّب SMS إن فشل واتساب. */
 export async function sendOtp(input: SendOtpInput): Promise<SendOtpResult> {
-  const channel = await getOtpChannel()
-  if (channel === "sms") return smsProvider.send(input)
-  if (channel !== "whatsapp_sms") return whatsappProvider.send(input)
-  const first = await whatsappProvider.send({ ...input, timeoutMs: FALLBACK_WHATSAPP_TIMEOUT_MS })
-  if (first.ok) return first
-  // نُبقي سبب فشل واتساب في السجل (لا الرمز) كي لا يخفي الرجوع إلى SMS انقطاعاً متكرراً.
-  console.error(`[otp] whatsapp failed (${first.errorCode ?? "unknown"}), falling back to sms`)
-  return smsProvider.send(input)
+  // مصرف الاختبارات (لا يعمل على Vercel ولا بلا متغيره) يسبق أي مزوّد حقيقي
+  if (testSinkPath()) return testSinkProvider.send(input)
+  const method = await getActiveMethod()
+  switch (method) {
+    case "sms":
+      return smsProvider.send(input)
+    case "wa_web_sms": {
+      const first = await whatsappProvider.send({ ...input, timeoutMs: FALLBACK_WHATSAPP_TIMEOUT_MS })
+      if (first.ok) return first
+      // نُبقي سبب فشل واتساب في السجل (لا الرمز) كي لا يخفي الرجوع إلى SMS انقطاعاً متكرراً.
+      console.error(`[otp] whatsapp failed (${first.errorCode ?? "unknown"}), falling back to sms`)
+      return smsProvider.send(input)
+    }
+    case "wa_cloud":
+      throw new Error("wa_cloud not implemented")
+    case "puk":
+      // وضع PUK لا يرسل رموزاً: الدخول بكلمة المرور ورمز يصدره المدير
+      return { ok: false, provider: "none", errorCode: "METHOD_DISABLED" }
+    default: // wa_web و wa_chat: عامل واتساب
+      return whatsappProvider.send(input)
+  }
 }

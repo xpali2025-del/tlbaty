@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, index, integer, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, index, integer, jsonb, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { pk, store } from './common'
 import { authEventType, customerStatus, otpPurpose } from './enums'
 
@@ -16,9 +16,24 @@ export const customers = store.table('customers', {
   /** Customer agreed to receive promotional messages (cart/wishlist reminders, offers). Off by default; changed only by the customer. */
   marketingOptIn: boolean('marketing_opt_in').notNull().default(false),
   marketingOptInUpdatedAt: at('marketing_opt_in_updated_at'),
+  /** الاسم الثلاثي بعد توحيده؛ null للعملاء القدامى حتى يكملوا ملفهم. */
+  fullName: text('full_name'),
+  /** اختياري بحروف صغيرة؛ غير فريد ولا يُستعمل للدخول. */
+  email: text('email'),
+  /** وضع PUK فقط: `scrypt$1$N$r$p$salt$hash`. */
+  passwordHash: text('password_hash'),
+  passwordSetAt: at('password_set_at'),
+  profileCompletedAt: at('profile_completed_at'),
+  /** بداية مهلة الحذف؛ الدخول خلالها يلغيه. */
+  deletionRequestedAt: at('deletion_requested_at'),
+  /** صف الحساب المحذوف (شاهد) بعد التنفيذ؛ لا يُحذف الصف لأن سجل المحفظة لا يُحذف. */
+  deletedAt: at('deleted_at'),
   createdAt: at('created_at').notNull().defaultNow(),
   lastLoginAt: at('last_login_at'),
-})
+}, (t) => [
+  check('customers_full_name_len', sql`${t.fullName} is null or char_length(${t.fullName}) between 5 and 80`),
+  check('customers_email_len', sql`${t.email} is null or char_length(${t.email}) <= 254`),
+])
 
 export const customerPhoneHistory = store.table('customer_phone_history', {
   id: pk(),
@@ -113,3 +128,47 @@ export const customerData = store.table('customer_data', {
   data: jsonb('data').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   updatedAt: at('updated_at').notNull().defaultNow(),
 })
+
+/** طلبات PUK (العميل يطلب والمدير يعالج الطابور). */
+export const pukRequests = store.table('puk_requests', {
+  id: pk(),
+  phone: text('phone').notNull(),
+  /** يُعطى في الطلبات الأولى. */
+  fullName: text('full_name'),
+  purpose: text('purpose').notNull(),
+  status: text('status').notNull().default('pending'),
+  ip: text('ip'),
+  userAgent: text('user_agent'),
+  createdAt: at('created_at').notNull().defaultNow(),
+  handledAt: at('handled_at'),
+  handledBy: text('handled_by'),
+}, (t) => [
+  index('puk_requests_pending_idx').on(t.createdAt.desc()).where(sql`${t.status} = 'pending'`),
+  index('puk_requests_phone_idx').on(t.phone, t.createdAt.desc()),
+  check('puk_requests_purpose_valid', sql`${t.purpose} in ('first_setup', 'recovery')`),
+  check('puk_requests_status_valid', sql`${t.status} in ('pending', 'issued', 'rejected', 'expired')`),
+])
+
+/** رموز PUK: يُخزَّن تجزئة مفتاحية فقط ويراها المدير مرة واحدة. */
+export const pukCodes = store.table('puk_codes', {
+  id: pk(),
+  phone: text('phone').notNull(),
+  purpose: text('purpose').notNull(),
+  /** HMAC-SHA256(PUK_PEPPER, phone || ':' || code). */
+  codeHash: text('code_hash').notNull(),
+  requestId: uuid('request_id').references(() => pukRequests.id, { onDelete: 'set null' }),
+  attempts: integer('attempts').notNull().default(0),
+  expiresAt: at('expires_at').notNull(),
+  usedAt: at('used_at'),
+  revokedAt: at('revoked_at'),
+  /** تجزئة رمز الإعداد المؤقت بعد نجاح PUK في أول إعداد (المرحلة 4). */
+  setupTokenHash: text('setup_token_hash'),
+  setupTokenExpiresAt: at('setup_token_expires_at'),
+  createdBy: text('created_by').notNull(),
+  createdAt: at('created_at').notNull().defaultNow(),
+}, (t) => [
+  // رمز حي واحد على الأكثر لكل هاتف: إنشاء جديد يُبطل القديم في المعاملة نفسها
+  uniqueIndex('puk_codes_one_live_idx').on(t.phone).where(sql`${t.usedAt} is null and ${t.revokedAt} is null`),
+  check('puk_codes_purpose_valid', sql`${t.purpose} in ('first_setup', 'recovery')`),
+  check('puk_codes_attempts_nonneg', sql`${t.attempts} >= 0`),
+])

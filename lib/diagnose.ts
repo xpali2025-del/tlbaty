@@ -79,11 +79,25 @@ const RULES: Rule[] = [
   { name: "WHATSAPP_WORKER_TOKEN", group: "رمز التحقق (لاحقاً)", required: false, purpose: "توكن عامل واتساب" },
   { name: "SMS_GATE_USERNAME", group: "رمز التحقق (لاحقاً)", required: false, purpose: "حساب SMS Gateway for Android" },
   { name: "SMS_GATE_PASSWORD", group: "رمز التحقق (لاحقاً)", required: false, purpose: "كلمة مرور SMS Gateway" },
+  {
+    name: "PUK_PEPPER",
+    group: "رمز التحقق (لاحقاً)",
+    required: false,
+    purpose: "سر تجزئة رموز PUK (32 بايت على الأقل، hex أو Base64). لا تغيّره بعد إصدار رموز",
+    validate: (v) => (pepperBytes(v) >= 32 ? null : "أقل من 32 بايت: ولّده بـ openssl rand -base64 32"),
+  },
 ]
+
+/** طول السر بالبايت: hex إن كان كله أرقاماً سداسية عشرية بطول زوجي، وإلا Base64. */
+export function pepperBytes(value: string): number {
+  const v = value.trim()
+  if (/^[0-9a-f]+$/i.test(v) && v.length % 2 === 0) return v.length / 2
+  return Buffer.from(v, "base64").byteLength
+}
 
 /** حالة كل متغير يقرؤه الموقع. */
 export function checkEnv(env: Env): EnvCheck[] {
-  return RULES.map((rule) => {
+  const checks: EnvCheck[] = RULES.map((rule) => {
     const aliasValue = rule.alias ? env[`${rule.name}_2`]?.trim() : undefined
     const value = aliasValue || env[rule.name]?.trim()
     const fromAlias = Boolean(aliasValue)
@@ -96,6 +110,11 @@ export function checkEnv(env: Env): EnvCheck[] {
       ? { name: rule.name, group: rule.group, status: "invalid", note: problem + aliasNote, fromAlias }
       : { name: rule.name, group: rule.group, status: "ok", note: rule.purpose + aliasNote, fromAlias }
   })
+  // مصرف رموز الاختبار يكتب الرمز على القرص: صف أحمر إن كان فعّالاً (لا يعمل على Vercel أصلاً).
+  if (env.OTP_TEST_SINK?.trim() && !env.VERCEL) {
+    checks.push({ name: "OTP_TEST_SINK", group: "رمز التحقق (لاحقاً)", status: "invalid", note: "مصرف رموز الاختبار فعّال: الرموز تُكتب على القرص بدل إرسالها. عطّله خارج الاختبارات" })
+  }
+  return checks
 }
 
 // منطقة Supabase (من اسم مضيف الـ pooler) ← أقرب منطقة دوال في Vercel.

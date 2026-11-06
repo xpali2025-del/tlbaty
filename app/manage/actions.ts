@@ -36,6 +36,7 @@ import { productsMissingPalette, refreshProductPalette } from "@/lib/product-pal
 import { normalizePermissions } from "@/lib/permissions"
 import { allocateProductCode, ensureCategoryCode } from "@/lib/product-code-db"
 import { isSmsConfigured } from "@/lib/otp/providers/sms"
+import { channelForLegacy } from "@/lib/auth/methods/keys"
 import {
   englishSlug,
   json,
@@ -702,7 +703,12 @@ async function saveSettingsImpl(_id: string | null, form: FormData) {
   if (parsedSettings.otpChannel === "sms" && process.env.NODE_ENV === "production" && !isSmsConfigured()) {
     throw new Error("اضبط SMS_GATE_USERNAME و SMS_GATE_PASSWORD في إعدادات الاستضافة أولاً، ثم اختر SMS")
   }
-  const values = { ...parsedSettings, updatedAt: new Date() }
+  // otp_channel ما زال ما تُرسله الشاشة؛ نكتب الطريقة المقابلة معه فيبقيان متطابقين (المرحلة 5 تستبدل الشاشة بمحدد الطريقة).
+  const values = {
+    ...parsedSettings,
+    ...(parsedSettings.otpChannel ? { loginMethod: channelForLegacy(parsedSettings.otpChannel) } : {}),
+    updatedAt: new Date(),
+  }
 
   const [existing] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1)
   const set = { ...values, ...(logoKey ? { logoKey } : {}) }

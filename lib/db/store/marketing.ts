@@ -149,10 +149,18 @@ export const siteSettings = store.table('site_settings', {
   loginCountries: text('login_countries').array().notNull().default(sql`'{967}'::text[]`),
   /** How login/change-phone codes are delivered: whatsapp, sms, or whatsapp with sms fallback. */
   otpChannel: text('otp_channel').notNull().default('whatsapp'),
+  /** طريقة دخول العملاء الفعّالة (lib/auth/methods). تحل محل otp_channel الذي يبقى مزامَناً (مشغّل في القاعدة) لإصدار واحد. */
+  loginMethod: text('login_method').notNull().default('wa_web'),
+  /** وضع PUK: صلاحية الرمز بالساعات وعدد المحاولات. */
+  pukTtlHours: integer('puk_ttl_hours').notNull().default(72),
+  pukMaxAttempts: integer('puk_max_attempts').notNull().default(5),
   copyright: text('copyright'),
   updatedAt: timestamps().updatedAt,
 }, (t) => [
   check('site_settings_otp_channel_valid', sql`${t.otpChannel} in ('whatsapp', 'sms', 'whatsapp_sms')`),
+  check('site_settings_login_method_valid', sql`${t.loginMethod} in ('wa_cloud', 'wa_web', 'sms', 'wa_web_sms', 'wa_chat', 'puk')`),
+  check('site_settings_puk_ttl_range', sql`${t.pukTtlHours} between 1 and 720`),
+  check('site_settings_puk_attempts_range', sql`${t.pukMaxAttempts} between 1 and 20`),
   check('site_settings_singleton', sql`${t.id} = 1`),
   check('site_settings_login_bot_number_format', sql`${t.loginBotNumber} is null or ${t.loginBotNumber} ~ '^[0-9]{8,15}$'`),
   check('site_settings_login_countries_nonempty', sql`cardinality(${t.loginCountries}) >= 1`),
