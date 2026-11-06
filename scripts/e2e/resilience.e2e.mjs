@@ -121,7 +121,8 @@ async function login(context) {
 
 const dialog = (page) => page.locator("[role=dialog]")
 const submit = (page) => page.getByRole("button", { name: "حفظ التغييرات" })
-const row = (page, text) => page.locator(ROW, { hasText: text })
+// الصف الحقيقي للعنصر: يستثنى صف أحمر فاشل بالاسم نفسه (محاولة مكرّرة مرفوضة عمداً تظهر بجانب الأصلي)
+const row = (page, text) => page.locator(ROW.split(",").map((x) => `${x.trim()}:not([data-save-state=failed])`).join(", "), { hasText: text })
 const stateOf = (page, text) => row(page, text).first().getAttribute("data-save-state")
 
 async function gotoScreen(page, s) {
@@ -232,7 +233,7 @@ async function editOp(page, name) {
   // نكتفي بعنصر استقر في القائمة (الإنشاء القديم اكتمل)
   const r = row(page, rowKey(s, target.label)).first()
   const settled = await page.waitForFunction(([sel, t]) => {
-    const el = [...document.querySelectorAll(sel)].find((e) => e.textContent.includes(t))
+    const el = [...document.querySelectorAll(sel)].find((e) => e.textContent.includes(t) && e.getAttribute("data-save-state") !== "failed")
     return el && el.getAttribute("data-save-state") === "saved"
   }, [ROW, rowKey(s, target.label)], { timeout: 25000 }).then(() => true, () => false)
   if (!settled) return false
