@@ -25,8 +25,7 @@ export function Header() {
       <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-3 px-4 lg:hidden">
         <Logo className="min-w-0 max-w-[112px] shrink [&_img]:max-h-11 [&_img]:max-w-full" />
 
-        <div className="flex shrink-0 items-center gap-2" aria-label="أدوات الترويسة">
-          <CurrencyIconMenu appearance="label" align="start" />
+        <div className="flex shrink-0 items-center gap-2" aria-label="البحث والإشعارات">
           <Link
             href="/search"
             className="flex size-11 items-center justify-center rounded-full bg-[#fff3f6] text-black transition-colors hover:bg-[#ffe7ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
