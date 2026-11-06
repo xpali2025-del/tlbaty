@@ -24,7 +24,10 @@ export function ProductCard({ product }: { product: Product; compact?: boolean }
   const { isInWishlist, toggleItem } = useWishlist()
   const { toast } = useToast()
   const saved = isInWishlist(product.id)
-  const hasOptions = product.colors.length > 0 || product.sizes.length > 0
+  const availableSizes = product.sizes.length > 0
+    ? product.sizes
+    : [...new Set((product.variantStock ?? []).map((variant) => variant.size).filter(Boolean))]
+  const hasOptions = product.colors.length > 0 || availableSizes.length > 0
   const optionItem: WishlistItem = {
     id: product.id,
     slug: product.slug,
@@ -33,7 +36,7 @@ export function ProductCard({ product }: { product: Product; compact?: boolean }
     oldPrice: product.oldPrice,
     image: product.image,
     colors: product.colors,
-    sizes: product.sizes,
+    sizes: availableSizes,
   }
 
   const handleWishlist = () => {
@@ -111,7 +114,7 @@ export function ProductCard({ product }: { product: Product; compact?: boolean }
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
-              className={`grid min-h-4 min-w-0 items-center gap-1 text-start text-[10px] text-muted-foreground ${product.colors.length > 0 && product.sizes.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}
+              className={`grid min-h-4 min-w-0 items-center gap-1 text-start text-[10px] text-muted-foreground ${product.colors.length > 0 && availableSizes.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}
               aria-label="عرض خيارات اللون والمقاس"
             >
               {product.colors.length > 0 && (
@@ -123,8 +126,8 @@ export function ProductCard({ product }: { product: Product; compact?: boolean }
                   {product.colors.length > 3 && <span className="shrink-0">+{product.colors.length - 3}</span>}
                 </span>
               )}
-              {product.sizes.length > 0 && (
-                <span className="min-w-0 truncate whitespace-nowrap">مقاس: {product.sizes.slice(0, 2).join("، ")}{product.sizes.length > 2 ? ` +${product.sizes.length - 2}` : ""}</span>
+              {availableSizes.length > 0 && (
+                <span className="min-w-0 truncate whitespace-nowrap">مقاس: {availableSizes.slice(0, 2).join("، ")}{availableSizes.length > 2 ? ` +${availableSizes.length - 2}` : ""}</span>
               )}
             </button>
           )}
