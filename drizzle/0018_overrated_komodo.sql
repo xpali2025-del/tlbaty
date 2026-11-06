@@ -1,0 +1,1 @@
+ALTER TABLE "store"."orders" ADD COLUMN "detached_at" timestamp with time zone;

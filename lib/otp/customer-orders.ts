@@ -1,11 +1,11 @@
 import "server-only"
-import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { isDbConfigured } from "@/lib/db-cache"
 import { orderItems, orderStatusHistory, orders } from "@/lib/db/store"
 
-// طلبات العميل المسجَّل. الملكية: الطلب المرتبط بحسابه، أو الطلب القديم بلا حساب
-// المطابق لهاتفه (طلبات سابقة لإنشاء الحسابات). لا يُعاد أي طلب لا يخص صاحب الجلسة.
+// طلبات العميل المسجَّل. الملكية: الطلب المرتبط بحسابه، أو طلب ضيف قديم (بلا حساب) يطابق هاتفه
+// وسبق إنشاء حسابه ولم يُفصل. لا يُعاد أي طلب لا يخص صاحب الجلسة.
 
 export type CustomerOrderSummary = {
   orderNumber: string
@@ -58,12 +58,23 @@ export type CustomerOrderDetail = {
   statusTimeline: Array<{ status: string; changedAt: string }>
 }
 
-export type OrderOwner = { id: string; phone: string }
+export type OrderOwner = { id: string; phone: string; createdAt: Date }
 
 const MAX_ORDER_NUMBER_LENGTH = 40
 
+// الشروط: (1) طلب مرتبط بحسابه؛ أو (2) طلب ضيف قبل وجود الحساب فقط (طلبات سبقت الحسابات)، لم يُفصل بالحذف،
+// ويطابق هاتفه. شرط التاريخ يمنع صاحب رقم جديد من رؤية طلبات من كان يملك الرقم قبله، وشرط الفصل يغلق الباب
+// نفسه بعد حذف الحساب.
 const owns = (owner: OrderOwner) =>
-  or(eq(orders.customerId, owner.id), and(isNull(orders.customerId), eq(orders.customerPhoneNormalized, owner.phone)))
+  or(
+    eq(orders.customerId, owner.id),
+    and(
+      isNull(orders.customerId),
+      isNull(orders.detachedAt),
+      eq(orders.customerPhoneNormalized, owner.phone),
+      lt(orders.createdAt, owner.createdAt),
+    ),
+  )
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null)
 
