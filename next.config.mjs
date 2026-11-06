@@ -8,9 +8,11 @@ const nextConfig = {
   // صفحة الفحص تطبّق ترحيلات القاعدة من ملفات drizzle/ وقت التشغيل، فيجب أن تُرفق مع الدالة.
   outputFileTracingIncludes: { '/api/diagnose': ['./drizzle/**/*'] },
   images: {
-    // IMAGE_RESIZING=cloudflare: الصور تُصغَّر عبر Cloudflare Image Resizing على نطاق R2 (lib/image-loader.ts).
-    // بدونه تُخدَم الصور كما هي (لا تحسين من Next لأن الصور على R2 لا على Vercel).
-    ...(resizing ? { loader: 'custom', loaderFile: './lib/image-loader.ts' } : { unoptimized: true }),
+    // نستخدم Cloudflare Image Resizing عند تفعيله، وإلا نترك Next/Vercel يحسّن صور R2 تلقائياً.
+    // تعطيل التحسين كان يرسل الصور الأصلية الكبيرة إلى الجوال ويؤخر ظهور أول محتوى عدة ثوانٍ.
+    ...(resizing ? { loader: 'custom', loaderFile: './lib/image-loader.ts' } : {}),
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 2678400,
     remotePatterns: [
       ...(r2Url ? [{ protocol: r2Url.protocol.replace(':', ''), hostname: r2Url.hostname }] : []),
     ],
