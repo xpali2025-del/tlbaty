@@ -183,6 +183,6 @@ describe('migration', () => {
     const r = await db.execute(sql`select table_schema, count(*)::int as n from information_schema.tables where table_schema in ('public','store') group by 1 order by 1`)
     const counts = Object.fromEntries(rowsOf<{ table_schema: string; n: number }>(r).map((x) => [x.table_schema, x.n]))
     expect(counts.public ?? 0).toBe(0)
-    expect(counts.store).toBe(43)
+    expect(counts.store).toBe(45)
   })
 })

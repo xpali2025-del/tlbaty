@@ -47,6 +47,21 @@ describe('checkEnv', () => {
     }
   })
 
+  it('checks PUK_PEPPER length (hex or base64, at least 32 bytes) and is optional when absent', () => {
+    expect(byName({}).PUK_PEPPER.status).toBe('optional')
+    expect(byName({ PUK_PEPPER: Buffer.alloc(32, 1).toString('base64') }).PUK_PEPPER.status).toBe('ok')
+    expect(byName({ PUK_PEPPER: 'ab'.repeat(32) }).PUK_PEPPER.status).toBe('ok')
+    expect(byName({ PUK_PEPPER: Buffer.alloc(16, 1).toString('base64') }).PUK_PEPPER.status).toBe('invalid')
+    expect(byName({ PUK_PEPPER: 'ab'.repeat(8) }).PUK_PEPPER.status).toBe('invalid')
+    expect(byName({ PUK_PEPPER: 'secretvalue' }).PUK_PEPPER.note).not.toContain('secretvalue')
+  })
+
+  it('shows a red row only while the OTP test sink is active (never on Vercel)', () => {
+    expect(byName({}).OTP_TEST_SINK).toBeUndefined()
+    expect(byName({ OTP_TEST_SINK: '/tmp/codes.json' }).OTP_TEST_SINK.status).toBe('invalid')
+    expect(byName({ OTP_TEST_SINK: '/tmp/codes.json', VERCEL: '1' }).OTP_TEST_SINK).toBeUndefined()
+  })
+
   it('reads NAME_2 first, like the app does, and says so', () => {
     const r = byName({ DATABASE_URL: 'postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres', DATABASE_URL_2: GOOD_DB })
     expect(r.DATABASE_URL.status).toBe('ok')
