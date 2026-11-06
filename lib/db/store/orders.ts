@@ -73,6 +73,9 @@ export const orders = store.table('orders', {
   paymentAdminNote: text('payment_admin_note'),
   duplicateTransferReference: boolean('duplicate_transfer_reference').notNull().default(false),
 
+  // يُضبط عند فصل الطلب عن هاتفه (حذف الحساب): لا يُعرض بعدها لأي حساب يطابق الرقم
+  detachedAt: at('detached_at'),
+
   createdAt: at('created_at').notNull().defaultNow(),
   updatedAt: at('updated_at').notNull().defaultNow(),
 }, (t) => [
