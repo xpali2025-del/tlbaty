@@ -196,8 +196,9 @@ async function createOp(page, context, name, disruption, reject) {
   const l = label(name === "coupons" ? "E2E" : "r")
   let finalLabel = l
   if (reject) {
-    // اسم/كود مكرر لعنصر موجود فيرفضه الخادم بعد إغلاق النافذة
-    const existing = (() => { const c = expected.filter((e) => e.screen === name && e.kind === "saved" && !e.edited && seq - e.createdAt > 8 && dbCount(s, e.label) === 1); return c.length ? pick(c) : null })()
+    // اسم/كود مكرر لعنصر موجود فيرفضه الخادم بعد إغلاق النافذة. التفرّد على الرابط (slug) المشتق من الاسم عند الإنشاء،
+    // فنستثني ما أُعيدت تسميته (اسمه الحالي لا يطابق رابطه فيُقبل اسم مكرر بحق)
+    const existing = (() => { const c = expected.filter((e) => e.screen === name && e.kind === "saved" && !e.edited && !e.editOf && seq - e.createdAt > 8 && dbCount(s, e.label) === 1); return c.length ? pick(c) : null })()
     if (!existing) return null
     finalLabel = existing.label
   }
@@ -220,7 +221,7 @@ async function createOp(page, context, name, disruption, reject) {
     await sleep(between(500, 2500))
     await context.setOffline(false)
   }
-  expected.push({ screen: name, label: finalLabel, kind: reject ? "rejected" : "saved", disruption, createdAt: seq, newLabel: reject ? l : undefined, withImage: Boolean(withImage) && !reject })
+  expected.push({ screen: name, label: finalLabel, kind: reject ? "rejected" : "saved", of: reject ? expected.find((e) => e.screen === name && e.label === finalLabel && e.kind !== "rejected") : undefined, disruption, createdAt: seq, newLabel: reject ? l : undefined, withImage: Boolean(withImage) && !reject })
   return finalLabel
 }
 
@@ -393,7 +394,9 @@ async function settingsOp(page, context, disruption) {
     } else if (e.kind === "rejected") {
       rejected++
       const n = dbCount(s, e.label)
-      if (n !== 1) note(`رفض: «${e.label}» عددها ${n} (المتوقع 1، الأصلي فقط)`)
+      // الأصل أُعيدت تسميته بعد المحاولة المرفوضة: غيابه طبيعي، والمهم ألا يوجد أكثر من واحد
+      const renamedAfter = e.of && (e.of.edited || e.of.kind === "replaced")
+      if (renamedAfter ? n > 1 : n !== 1) note(`رفض: «${e.label}» عددها ${n} (المتوقع 1، الأصلي فقط)`)
     } else if (e.kind === "settings") {
       // آخر قيمة تغلب (العمليات على الصف نفسه بالترتيب)
     } else if (e.kind === "price-check") {
