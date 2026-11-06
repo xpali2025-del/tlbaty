@@ -121,7 +121,8 @@ async function login(context) {
 
 const dialog = (page) => page.locator("[role=dialog]")
 const submit = (page) => page.getByRole("button", { name: "حفظ التغييرات" })
-const row = (page, text) => page.locator(ROW, { hasText: text })
+// الصف الحقيقي للعنصر: يستثنى صف أحمر فاشل بالاسم نفسه (محاولة مكرّرة مرفوضة عمداً تظهر بجانب الأصلي)
+const row = (page, text) => page.locator(ROW.split(",").map((x) => `${x.trim()}:not([data-save-state=failed])`).join(", "), { hasText: text })
 const stateOf = (page, text) => row(page, text).first().getAttribute("data-save-state")
 
 async function gotoScreen(page, s) {
@@ -195,8 +196,9 @@ async function createOp(page, context, name, disruption, reject) {
   const l = label(name === "coupons" ? "E2E" : "r")
   let finalLabel = l
   if (reject) {
-    // اسم/كود مكرر لعنصر موجود فيرفضه الخادم بعد إغلاق النافذة
-    const existing = (() => { const c = expected.filter((e) => e.screen === name && e.kind === "saved" && !e.edited && seq - e.createdAt > 8 && dbCount(s, e.label) === 1); return c.length ? pick(c) : null })()
+    // اسم/كود مكرر لعنصر موجود فيرفضه الخادم بعد إغلاق النافذة. التفرّد على الرابط (slug) المشتق من الاسم عند الإنشاء،
+    // فنستثني ما أُعيدت تسميته (اسمه الحالي لا يطابق رابطه فيُقبل اسم مكرر بحق)
+    const existing = (() => { const c = expected.filter((e) => e.screen === name && e.kind === "saved" && !e.edited && !e.editOf && seq - e.createdAt > 8 && dbCount(s, e.label) === 1); return c.length ? pick(c) : null })()
     if (!existing) return null
     finalLabel = existing.label
   }
@@ -219,7 +221,7 @@ async function createOp(page, context, name, disruption, reject) {
     await sleep(between(500, 2500))
     await context.setOffline(false)
   }
-  expected.push({ screen: name, label: finalLabel, kind: reject ? "rejected" : "saved", disruption, createdAt: seq, newLabel: reject ? l : undefined, withImage: Boolean(withImage) && !reject })
+  expected.push({ screen: name, label: finalLabel, kind: reject ? "rejected" : "saved", of: reject ? expected.find((e) => e.screen === name && e.label === finalLabel && e.kind !== "rejected") : undefined, disruption, createdAt: seq, newLabel: reject ? l : undefined, withImage: Boolean(withImage) && !reject })
   return finalLabel
 }
 
@@ -232,7 +234,7 @@ async function editOp(page, name) {
   // نكتفي بعنصر استقر في القائمة (الإنشاء القديم اكتمل)
   const r = row(page, rowKey(s, target.label)).first()
   const settled = await page.waitForFunction(([sel, t]) => {
-    const el = [...document.querySelectorAll(sel)].find((e) => e.textContent.includes(t))
+    const el = [...document.querySelectorAll(sel)].find((e) => e.textContent.includes(t) && e.getAttribute("data-save-state") !== "failed")
     return el && el.getAttribute("data-save-state") === "saved"
   }, [ROW, rowKey(s, target.label)], { timeout: 25000 }).then(() => true, () => false)
   if (!settled) return false
@@ -270,7 +272,14 @@ async function conflictOp(pageA, pageB, context) {
   await submit(pageA).click()
   await dialog(pageA).waitFor({ state: "hidden", timeout: 4000 })
   const savedA = await waitDbPrice(target.label, priceA)
-  if (!savedA) return note(`تعارض ${target.label}: حفظ التبويب الأول لم يصل`) && false
+  if (!savedA) {
+    const jobs = await pageA.evaluate(() => new Promise((res) => { const r = indexedDB.open("tajline-save-queue"); r.onsuccess = () => { const g = r.result.transaction("jobs").objectStore("jobs").getAll(); g.onsuccess = () => res(g.result.map((j) => ({ state: j.state, screen: j.screen, label: j.label, error: j.error }))) } })).catch(() => [])
+    const badge = await row(pageA, target.label).first().getAttribute("data-save-state").catch(() => "؟")
+    const dbRow = sql(`select price, version from store.products where name='${target.label}'`)
+    console.log(`   تشخيص: صف=${badge} قاعدة=${dbRow} طابور=${JSON.stringify(jobs.filter((j) => j.screen === "products").slice(-5))} تاريخ ${JSON.stringify(expected.filter((e) => e.label === target.label || e.editOf === target.label))}`)
+    note(`تعارض ${target.label}: حفظ التبويب الأول لم يصل`)
+    return false
+  }
   await dialog(pageB).locator("input[name=price]").fill(priceB)
   await submit(pageB).click()
   await dialog(pageB).waitFor({ state: "hidden", timeout: 4000 })
@@ -385,10 +394,16 @@ async function settingsOp(page, context, disruption) {
     } else if (e.kind === "rejected") {
       rejected++
       const n = dbCount(s, e.label)
-      if (n !== 1) note(`رفض: «${e.label}» عددها ${n} (المتوقع 1، الأصلي فقط)`)
+      // الأصل أُعيدت تسميته بعد المحاولة المرفوضة: غيابه طبيعي، والمهم ألا يوجد أكثر من واحد
+      const renamedAfter = e.of && (e.of.edited || e.of.kind === "replaced")
+      if (renamedAfter ? n > 1 : n !== 1) note(`رفض: «${e.label}» عددها ${n} (المتوقع 1، الأصلي فقط)`)
     } else if (e.kind === "settings") {
       // آخر قيمة تغلب (العمليات على الصف نفسه بالترتيب)
     } else if (e.kind === "price-check") {
+      // آخر قرار فقط (قرار لاحق على المنتج نفسه يغلب)، وما أُعيدت تسميته بعدها يُتحقَّق منه باسمه الجديد في التعديل
+      const later = expected.some((x, i) => i > expected.indexOf(e) && x.kind === "price-check" && x.label === e.label)
+      const renamed = expected.some((x) => x.editOf === e.label)
+      if (later || renamed) continue
       if (!sql(`select price from store.products where name='${e.label}'`).startsWith(e.price)) note(`تعارض: سعر «${e.label}» ليس ${e.price} كما اختار المدير`)
     }
   }
