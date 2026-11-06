@@ -36,6 +36,18 @@ describe('code format', () => {
     expect(suggestCategoryCode('عطور', new Set(['CT']))).toBe('CT2')
     expect(suggestCategoryCode('a', new Set())).toBe('CT')
   })
+  it('does not run out after CT99: falls back to three-letter codes that pass the same validation', () => {
+    const taken = new Set<string>(['CT', ...Array.from({ length: 98 }, (_, i) => `CT${i + 2}`)])
+    const code = suggestCategoryCode('عطور', taken)
+    expect(code).toBe('AAA')
+    expect(isCategoryCode(code)).toBe(true)
+    taken.add(code)
+    expect(suggestCategoryCode('عطور', taken)).toBe('AAB')
+    // كل الاحتمالات الـ17576 مأخوذة فقط: خطأ واضح بدل رمز مكرر
+    const all = new Set<string>(taken)
+    for (let i = 0; i < 26 ** 3; i++) all.add(String.fromCharCode(65 + Math.floor(i / 676), 65 + (Math.floor(i / 26) % 26), 65 + (i % 26)))
+    expect(() => suggestCategoryCode('عطور', all)).toThrow('تعذّر توليد رمز قسم فريد')
+  })
   it('turns what customers type into the canonical code', () => {
     for (const q of ['dr12', 'DR 12', 'dr-012', ' Dr_0012 ', 'دr١٢'.replace('د', 'D')]) expect(canonicalCodeQuery(q)).toBe('DR-012')
     expect(canonicalCodeQuery('dress')).toBeNull()

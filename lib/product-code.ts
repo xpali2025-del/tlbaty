@@ -38,6 +38,12 @@ export function suggestCategoryCode(slug: string, taken: ReadonlySet<string>): s
     const candidate = `CT${n}`.slice(0, 4)
     if (!taken.has(candidate)) return candidate
   }
+  // استُنفد CT2…CT99 (أكثر من نحو مئة قسم بأسماء غير لاتينية): ثلاثة أحرف AAA…ZZZ (17576 رمزاً) بدل فشل حفظ القسم
+  const A = "A".charCodeAt(0)
+  for (let i = 0; i < 26 ** 3; i++) {
+    const candidate = String.fromCharCode(A + Math.floor(i / 676), A + (Math.floor(i / 26) % 26), A + (i % 26))
+    if (!taken.has(candidate)) return candidate
+  }
   throw new Error("تعذّر توليد رمز قسم فريد")
 }
 
